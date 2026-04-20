@@ -58,7 +58,7 @@ def get_available_baseruns():
     list_of_files = glob.glob(search_pattern)
     
     # Urutkan file berdasarkan waktu pembuatan, yang terbaru di atas
-    list_of_files.sort(key=os.path.getctime, reverse=True)
+    list_of_files = sorted(list_of_files, reverse=True)
     return list_of_files
 
 @st.cache_data(ttl=3600) 
