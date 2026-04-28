@@ -144,11 +144,39 @@ with col1:
     st.subheader("🗺️ Peta Prediksi Kecepatan Arus Penyeberangan Ketapang - Gilimanuk")
     
     # Pilih jam untuk ditampilkan di peta
-    selected_time_str = st.select_slider(
-        "⏱️ Geser untuk melihat perubahan arus per jam:", 
-        options=waktu_unik,
-        value=waktu_unik[0] # Set default penunjuk di jam paling awal
-    )
+    # --- AWAL KODE TOMBOL NAVIGASI WAKTU ---
+    # 1. Inisialisasi memori (session_state) untuk menyimpan urutan waktu saat ini
+    if 'time_index' not in st.session_state:
+        st.session_state.time_index = 0
+
+    # Jika file data diganti dari dropdown, kita harus reset index waktu ke 0
+    if 'last_file' not in st.session_state or st.session_state.last_file != selected_filename:
+        st.session_state.time_index = 0
+        st.session_state.last_file = selected_filename
+
+    # 2. Layout Tombol (Kiri, Tengah untuk Teks, Kanan)
+    st.markdown("**⏱️ Waktu Prediksi:**")
+    col_b1, col_b2, col_b3 = st.columns([1, 2, 1])
+
+    with col_b1:
+        # Tombol mundur (disable kalau sudah di jam paling awal)
+        if st.button("⬅️ Sebelumnya", use_container_width=True, disabled=(st.session_state.time_index == 0)):
+            st.session_state.time_index -= 1
+            st.rerun()
+
+    with col_b3:
+        # Tombol maju (disable kalau sudah di jam paling akhir)
+        if st.button("Selanjutnya ➡️", use_container_width=True, disabled=(st.session_state.time_index == len(waktu_unik) - 1)):
+            st.session_state.time_index += 1
+            st.rerun()
+
+    # 3. Ambil teks waktu berdasarkan index yang tersimpan
+    selected_time_str = waktu_unik[st.session_state.time_index]
+
+    with col_b2:
+        # Tampilkan jam yang sedang aktif di tengah dengan teks lebih besar
+        st.markdown(f"<h4 style='text-align: center; margin-top: 0px;'>{selected_time_str} WIB</h4>", unsafe_allow_html=True)
+    # --- AKHIR KODE TOMBOL NAVIGASI WAKTU ---
     
     # Filter data sesuai jam yang dipilih
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
@@ -364,7 +392,7 @@ def create_bmkg_report(df_source, title_text):
     x_max_asli = df_plot['datetime_utc'].max()
     x_min_buffer = x_min_asli - pd.Timedelta(hours=1)
     x_max_buffer = x_max_asli + pd.Timedelta(hours=1)
-    extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq='H')
+    extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq='h')
 
     # Inisialisasi Kanvas Gambar 
     fig_bmkg, ax0 = plt.subplots(figsize=(14, 7), dpi=100)
