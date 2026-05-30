@@ -1,0 +1,21 @@
+# Mengabaikan Data dan Dataset
+*.nc
+*.csv
+*.xlsx
+*.npy
+
+# Mengabaikan File Model dan Scaler
+*.h5
+*.joblib
+*.pkl
+
+# Mengabaikan Output Gambar dan Log
+outputs/
+*.png
+*.jpg
+*.log
+
+# Mengabaikan Cache Python dan Environment
+__pycache__/
+*.pyc
+.env
