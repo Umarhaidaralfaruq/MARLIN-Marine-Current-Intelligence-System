@@ -241,7 +241,7 @@ ANCHOR_LON = 114.4111511
 
 # Sesuaikan dengan lokasi folder penyimpanan CSV dari config Anda
 # Ubah path ini jika folder output Anda berbeda
-FOLDER_OUTPUT = Path(r"D:\Haidar\Dashboard_Arus\Arsip_Prediksi")
+FOLDER_OUTPUT = Path("Arsip_Prediksi")
 
 # ==========================================
 # 2. FUNGSI PENCARI & PEMUAT DATA (SISTEM BASERUN)
