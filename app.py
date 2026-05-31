@@ -12,6 +12,7 @@ import numpy as np
 import folium
 from folium import plugins
 import branca
+import base64
 from branca.element import Template, MacroElement
 from streamlit_folium import st_folium
 import plotly.graph_objects as go
@@ -19,6 +20,199 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from datetime import datetime
+from pathlib import Path
+from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.tri as tri
+import json
+import streamlit.components.v1 as components
+from scipy.ndimage import gaussian_filter
+from PIL import Image, ImageFilter
+from plotly.subplots import make_subplots
+
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Peta Arus WebGL + Canvas</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100vw; height: 100vh; }
+        .custom-div-icon { background: transparent; border: none; }
+        /* Animasi Denyut untuk Lokasi Maksimum */
+        .pulse-marker {
+            background: #ff0000;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 rgba(255, 0, 0, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // 1. Inisialisasi Peta (Tema Terang/Positron)
+        var map = L.map('map').setView([__LAT_CENTER__, __LON_CENTER__], 12.5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+
+        // 3. Render Kanvas Warna Background (Image Overlay)
+        var imageUrl = 'data:image/png;base64,__IMAGE_BASE64__';
+        var imageBounds = [[__LAT_MIN__, __LON_MIN__], [__LAT_MAX__, __LON_MAX__]];
+        L.imageOverlay(imageUrl, imageBounds, {opacity: 0.75}).addTo(map);
+
+        // 4. Render Label Angka Spasial
+        var labelsData = __LABELS_JSON__;
+        labelsData.forEach(function(lbl) {
+            var icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="font-size: 11px; color: black; font-weight: bold; text-shadow: 2px 2px 3px white, -2px -2px 3px white;">' + lbl.val + '</div>',
+                iconSize: [30, 15],
+                iconAnchor: [15, 7]
+            });
+            L.marker([lbl.lat, lbl.lon], {icon: icon, interactive: false}).addTo(map);
+        });
+
+        // 5. Render WebGL Particle (Garis Arus Putih Mulus)
+        var velocityLayer = L.velocityLayer({
+            displayValues: true,
+            displayOptions: {
+                velocityType: 'Kecepatan Arus',
+                displayPosition: 'bottomleft',
+                displayEmptyString: 'Tidak ada data'
+            },
+            data: __DATA_JSON__,
+            maxVelocity: 8.0,              // SEKARANG MAKSIMAL 8.0
+            velocityScale: 0.05,           
+            particleAge: 200,
+            particleMultiplier: 0.002,     
+            colorScale: ['#ffffff']        
+        });
+        velocityLayer.addTo(map);
+
+        // ========================================================
+        // 6. MENAMBAHKAN LEGENDA KUSTOM ALA MARITIM
+        // ========================================================
+        var legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'info legend');
+            // Kotak luar legenda
+            div.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+            div.style.padding = '10px 15px';
+            div.style.borderRadius = '8px';
+            div.style.border = '1px solid #ccc';
+            div.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.2)';
+            div.style.fontFamily = 'Arial, sans-serif';
+            
+            // Elemen di dalam legenda (Bentuk kapsul warna)
+            div.innerHTML = 
+                '<div style="margin-bottom: 8px; font-weight: bold; font-size: 12px; color: black; text-align: center;">Kecepatan Arus (m/s)</div>' +
+                '<div style="background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082); ' +
+                'width: 250px; height: 15px; border-radius: 10px; box-shadow: inset 0 0 2px rgba(0,0,0,0.5);"></div>' +
+                '<div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; color: black; font-weight: bold; padding: 0 5px;">' +
+                    '<span>0</span>' +
+                    '<span>1.0</span>' +
+                    '<span>2.0</span>' +
+                    '<span>3.0</span>' +
+                    '<span>4.0</span>' +
+                '</div>';
+            return div;
+        };
+        legend.addTo(map);
+        
+        // ========================================================
+        // 7. RENDER ZONA BAHAYA (POLYGON DARI MATPLOTLIB)
+        // ========================================================
+        var warningPolygons = __WARNING_POLYGONS_JSON__;
+        var warningLayer = L.layerGroup().addTo(map);
+
+        warningPolygons.forEach(function(polyCoords) {
+            // Ubah format [{lat: x, lon: y}] menjadi array of arrays [[lat, lon]] untuk Leaflet
+            var latLngs = polyCoords.map(function(pt) { return [pt.lat, pt.lon]; });
+            
+            L.polygon(latLngs, {
+                color: '#ff0000',      // Warna garis batas (Merah)
+                weight: 2,             // Ketebalan garis
+                dashArray: '8, 6',     // Efek garis putus-putus
+                fillColor: '#ff0000',  // Warna isian area
+                fillOpacity: 0.35,     // Transparansi
+                lineJoin: 'round'      // Membuat sudut garis batas sedikit lebih halus
+            }).bindTooltip(
+                "⚠️ <b>ZONA WASPADA</b><br>Arus > 2.0 m/s", 
+                {sticky: true, direction: 'center', opacity: 0.9}
+            ).addTo(warningLayer);
+        });
+    </script>
+</body>
+</html>
+"""
+
+def konversi_ke_velocity_json(df_hour):
+    """
+    Mengubah DataFrame Pandas menjadi format JSON standar Windy.com / Leaflet-Velocity.
+    """
+    # Membulatkan koordinat untuk menghindari bug desimal (floating point)
+    df_hour = df_hour.copy()
+    df_hour['lon'] = df_hour['lon'].round(4)
+    df_hour['lat'] = df_hour['lat'].round(4)
+    
+    # Mengambil nilai unik grid (Lat harus diurutkan dari Utara ke Selatan / Descending)
+    lons = np.sort(df_hour['lon'].unique())
+    lats = np.sort(df_hour['lat'].unique())[::-1] 
+    
+    nx, ny = len(lons), len(lats)
+    lo1, lo2 = float(lons[0]), float(lons[-1])
+    la1, la2 = float(lats[0]), float(lats[-1])
+    
+    dx = (lo2 - lo1) / (nx - 1) if nx > 1 else 0
+    dy = (la1 - la2) / (ny - 1) if ny > 1 else 0
+    
+    # Buat dictionary untuk pencarian cepat
+    data_dict = df_hour.set_index(['lat', 'lon'])[['predicted_u', 'predicted_v']].to_dict('index')
+    
+    u_data, v_data = [], []
+    
+    # Isi array data (Jika di titik itu daratan/NaN, isi dengan 0.0)
+    for lat in lats:
+        for lon in lons:
+            if (lat, lon) in data_dict and not pd.isna(data_dict[(lat, lon)]['predicted_u']):
+                u_data.append(float(data_dict[(lat, lon)]['predicted_u']))
+                v_data.append(float(data_dict[(lat, lon)]['predicted_v']))
+            else:
+                u_data.append(0.0)
+                v_data.append(0.0)
+                
+    # Bungkus dalam format standar
+    velocity_json = [
+        {
+            "header": {
+                "parameterCategory": 2, "parameterNumber": 2, # Parameter U (Timur-Barat)
+                "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy
+            },
+            "data": u_data
+        },
+        {
+            "header": {
+                "parameterCategory": 2, "parameterNumber": 3, # Parameter V (Utara-Selatan)
+                "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy
+            },
+            "data": v_data
+        }
+    ]
+    return json.dumps(velocity_json)
 
 # ==========================================
 # 0. KONFIGURASI TEMA MATPLOTLIB (GAYA BMKG)
@@ -47,7 +241,7 @@ ANCHOR_LON = 114.4111511
 
 # Sesuaikan dengan lokasi folder penyimpanan CSV dari config Anda
 # Ubah path ini jika folder output Anda berbeda
-FOLDER_OUTPUT = "Arsip_Prediksi"
+FOLDER_OUTPUT = Path(r"D:\Haidar\Dashboard_Arus\Arsip_Prediksi")
 
 # ==========================================
 # 2. FUNGSI PENCARI & PEMUAT DATA (SISTEM BASERUN)
@@ -64,6 +258,19 @@ def get_available_baseruns():
 @st.cache_data(ttl=3600) 
 def load_data(file_path):
     df = pd.read_csv(file_path)
+    
+    # --- TRANSLATOR KOLOM DARI PREDICT.PY KE APP.PY ---
+    df = df.rename(columns={
+        'datetime_prediction': 'datetime',
+        'latitude': 'lat',
+        'longitude': 'lon',
+        'current_speed_ms': 'predicted_v_max',
+        'v_velocity_ms': 'predicted_v',
+        'u_velocity_ms': 'predicted_u',
+        'current_direction_deg': 'arah_derajat'
+    })
+    # --------------------------------------------------
+    
     # Konversi waktu ke datetime dan ubah ke WIB (+7)
     df['datetime'] = pd.to_datetime(df['datetime'])
     df['datetime_wib'] = df['datetime'] + pd.Timedelta(hours=7)
@@ -135,139 +342,212 @@ col_m3.metric(label="⏱️ Total Waktu Prediksi", value=f"{len(waktu_unik)} Jam
 
 st.divider()
 
+def hitung_vorticity(df_hour):
+    """
+    Menghitung pusaran (vorticity) dari komponen arus U dan V.
+    """
+    # 1. Bentuk ulang data menjadi matriks 2D (Grid Lintang x Bujur)
+    grid_u = df_hour.pivot_table(index='lat', columns='lon', values='predicted_u')
+    grid_v = df_hour.pivot_table(index='lat', columns='lon', values='predicted_v')
+    
+    # 2. Faktor konversi derajat lintang/bujur ke meter (Perkiraan di Selat Bali)
+    # 1 derajat lintang ~ 111.32 km. 1 derajat bujur di -8.2 ~ 110.18 km.
+    dx_meter = 110180
+    dy_meter = 111320
+    
+    # 3. Hitung selisih kecepatan antar titik (Gradien spasial)
+    # Gunakan np.gradient untuk menghitung turunan parsial
+    du_dy, du_dx = np.gradient(grid_u.values)
+    dv_dy, dv_dx = np.gradient(grid_v.values)
+    
+    # Bagi dengan jarak aslinya dalam meter
+    du_dy = du_dy / dy_meter
+    dv_dx = dv_dx / dx_meter
+    
+    # 4. Hitung Vorticity (Rotasi Z)
+    vorticity_grid = dv_dx - du_dy
+    
+    # Kembalikan formatnya menjadi list/tabel seperti aslinya
+    df_vort = pd.DataFrame(vorticity_grid, index=grid_u.index, columns=grid_u.columns)
+    df_vort = df_vort.reset_index().melt(id_vars='lat', value_name='vorticity')
+    
+    # Gabungkan ke dataframe asal, dan ambil nilai absolutnya
+    # (Karena kita hanya peduli kekuatan pusarannya, bukan arah putarannya)
+    df_result = pd.merge(df_hour, df_vort, on=['lat', 'lon'], how='left')
+    df_result['vort_abs'] = df_result['vorticity'].abs()
+    
+    return df_result
+
 # ==========================================
 # 5. LAYOUT UTAMA (PETA & GRAFIK)
 # ==========================================
 col1, col2 = st.columns([1.1, 1]) 
 
+# ========================================================
+# FUNGSI CACHE UNTUK BACKGROUND PETA (MATPLOTLIB + PIL)
+# ========================================================
+@st.cache_data(show_spinner=False, ttl=3600)
+def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data):
+    # Kita menggunakan JSON/Dict untuk parameter cache agar hashing Streamlit lebih cepat
+    df_hour = pd.DataFrame(df_hour_json)
+    
+    triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
+    batas_resolusi = 0.010 
+    
+    x_tri = triang.x[triang.triangles]
+    y_tri = triang.y[triang.triangles]
+    sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
+    sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
+    sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
+    
+    mask = np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0)
+    triang.set_mask(mask)
+
+    custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['blue', 'green', 'yellow', 'orange', 'red'])
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.axis('off')
+    ax.set_xlim(lon_min_data, lon_max_data) 
+    ax.set_ylim(lat_min_data, lat_max_data)
+    fig.patch.set_alpha(0.0)
+    ax.patch.set_alpha(0.0)
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    plt.margins(0,0)
+    
+    # OPTIMASI: Turunkan levels dari 10000 ke 1000. 
+    # Secara visual tidak ada bedanya, tapi rendering 10x lebih cepat!
+    ax.tricontourf(
+        triang, df_hour['predicted_v_max'], 
+        levels=np.linspace(0.0, 3.0, 1000), 
+        cmap=custom_cmap, vmin=0.0, vmax=3.0, extend='max', alpha=0.9
+    )
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, transparent=True)
+    buf.seek(0)
+    plt.close(fig)
+
+    # Membulatkan sudut dengan PIL
+    img = Image.open(buf)
+    r, g, b, a = img.split()
+    a_blur = a.filter(ImageFilter.GaussianBlur(radius=10))
+    a_thresh = a_blur.point(lambda p: 255 if p > 120 else 0)
+    a_final = a_thresh.filter(ImageFilter.GaussianBlur(radius=1))
+    img_rounded = Image.merge('RGBA', (r, g, b, a_final))
+
+    buf_final = io.BytesIO()
+    img_rounded.save(buf_final, format='PNG')
+    return base64.b64encode(buf_final.getvalue()).decode('utf-8')
+
 with col1:
-    st.subheader("🗺️ Peta Prediksi Kecepatan Arus Penyeberangan Ketapang - Gilimanuk")
+    st.subheader("🗺️ Peta Spasial Arus")
     
-    # Pilih jam untuk ditampilkan di peta
-    # --- AWAL KODE TOMBOL NAVIGASI WAKTU ---
-    # 1. Inisialisasi memori (session_state) untuk menyimpan urutan waktu saat ini
-    if 'time_index' not in st.session_state:
-        st.session_state.time_index = 0
-
-    # Jika file data diganti dari dropdown, kita harus reset index waktu ke 0
-    if 'last_file' not in st.session_state or st.session_state.last_file != selected_filename:
-        st.session_state.time_index = 0
-        st.session_state.last_file = selected_filename
-
-    # 2. Layout Tombol (Kiri, Tengah untuk Teks, Kanan)
-    st.markdown("**⏱️ Waktu Prediksi:**")
-    col_b1, col_b2, col_b3 = st.columns([1, 2, 1])
-
-    with col_b1:
-        # Tombol mundur (disable kalau sudah di jam paling awal)
-        if st.button("⬅️ Sebelumnya", use_container_width=True, disabled=(st.session_state.time_index == 0)):
-            st.session_state.time_index -= 1
-            st.rerun()
-
-    with col_b3:
-        # Tombol maju (disable kalau sudah di jam paling akhir)
-        if st.button("Selanjutnya ➡️", use_container_width=True, disabled=(st.session_state.time_index == len(waktu_unik) - 1)):
-            st.session_state.time_index += 1
-            st.rerun()
-
-    # 3. Ambil teks waktu berdasarkan index yang tersimpan
-    selected_time_str = waktu_unik[st.session_state.time_index]
-
-    with col_b2:
-        # Tampilkan jam yang sedang aktif di tengah dengan teks lebih besar
-        st.markdown(f"<h4 style='text-align: center; margin-top: 0px;'>{selected_time_str} WIB</h4>", unsafe_allow_html=True)
-    # --- AKHIR KODE TOMBOL NAVIGASI WAKTU ---
+    # --------------------------------------------------------
+    # 1. Slider Navigasi Waktu (Pengganti Tombol)
+    # --------------------------------------------------------
+    st.markdown("**⏱️ Pilih Waktu Prediksi:**")
+    selected_time_str = st.select_slider(
+        "Geser untuk mengubah waktu", 
+        options=waktu_unik,
+        label_visibility="collapsed"
+    )
     
-    # Filter data sesuai jam yang dipilih
+    st.markdown(f"<h4 style='text-align: center; margin-top: -10px; color: white;'>{selected_time_str} WIB</h4>", unsafe_allow_html=True)
+    
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     
-    # Inisialisasi Peta Folium
-    m = folium.Map(location=[-8.17, 114.41], zoom_start=12, tiles="CartoDB positron")
-    
-    # Titik Anchor
-    folium.Marker(
-        location=[ANCHOR_LAT, ANCHOR_LON],
-        popup="<b>Titik Referensi (Anchor)</b>",
-        icon=folium.Icon(color="green", icon="anchor", prefix='fa')
-    ).add_to(m)
-    
-    # ==========================================
-    # Membuat Colormap Kecepatan (Tanpa merendernya ke peta)
-    # ==========================================
-    v_min, v_max = df_spatial['predicted_v_max'].min(), df_spatial['predicted_v_max'].max()
-    colormap = branca.colormap.LinearColormap(colors=['blue', 'green', 'yellow', 'orange', 'red'], vmin=v_min, vmax=v_max)
-    
-    # Plot titik grid spasial
-    for idx, row in df_hour.reset_index(drop=True).iterrows():
-        # Dapatkan warna dari colormap berdasarkan kecepatan
-        speed_color = colormap(row['predicted_v_max'])
+    lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
+    lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
+
+    # --------------------------------------------------------
+    # 2. Panggil Fungsi Caching Gambar (Cepat & Ringan)
+    # --------------------------------------------------------
+    df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
+    image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data)
+
+    # --------------------------------------------------------
+    # 3. Label Spasial Merata (Menggunakan Logika Asli Anda)
+    # --------------------------------------------------------
+    placed_labels = []
+    labels_list = []
+    MIN_LABEL_DIST = 0.01 # Ubah angka ini untuk mengatur kerapatan jarak angka
+
+    for idx, row in df_hour.iterrows():
+        kec = row['predicted_v_max']
+        if pd.isna(kec): continue
+        lat, lon = float(row['lat']), float(row['lon'])
         
-        # Ukuran lingkaran berdasarkan kecepatan (makin kencang makin besar)
-        radius_size = max(3, row['predicted_v_max'] * 5)
-        
-        current_direction = "Utara" if row['predicted_v'] >= 0 else "Selatan"
-        folium.CircleMarker(
-            location=[row['lat'], row['lon']],
-            radius=radius_size,
-            color=speed_color, 
-            fill=True,
-            fill_color=speed_color, 
-            fill_opacity=0.8,
-            tooltip=f"Kecepatan Arus: <b>{row['predicted_v_max']:.2f} m/s</b><br>Arah Arus: <b>{current_direction}</b>"
-        ).add_to(m)
-        
-        # Gambarlah panah animasi di setiap titik ke-N agar peta tidak terlalu padat
-        arrow_step = 1 
-        if idx % arrow_step == 0:
-            dash_val = max(1, 10 / max(0.1, row['predicted_v_max'])) 
-            
-            arrow_len = 0.003
-            if row['predicted_v'] > 0: # Utara
-                locations = [[row['lat'], row['lon']], [row['lat'] + arrow_len, row['lon']]]
-            else: # Selatan
-                locations = [[row['lat'], row['lon']], [row['lat'] - arrow_len, row['lon']]]
+        too_close = False
+        for (plat, plon) in placed_labels:
+            if np.sqrt((lat - plat)**2 + (lon - plon)**2) < MIN_LABEL_DIST:
+                too_close = True
+                break
                 
-            folium.plugins.AntPath(locations, delay=1000, dash_array=[dash_val, dash_val], color='gray', weight=2, opacity=0.6).add_to(m)
+        if not too_close:
+            labels_list.append({"lat": lat, "lon": lon, "val": f"{kec:.2f}"})
+            placed_labels.append((lat, lon))
+
+    # ... (Kode sebelumnya dari selected_time_str sampai labels_list tetap sama) ...
+
+    # ========================================================
+    # BARU: EKSTRAK POLYGON ZONA BAHAYA (METODE TRIANGULASI)
+    # ========================================================
+    AMBANG_BATAS = 1.2
+    warning_polygons = []
     
-    # ==========================================
-    # LEGENDA KUSTOM DI KIRI BAWAH
-    # ==========================================
-    # Menghitung nilai tengah untuk tampilan legenda
-    v_mid = (v_min + v_max) / 2
-    
-    legend_html = f'''
-    {{% macro html(this, kwargs) %}}
-    <div style="
-        position: absolute; 
-        bottom: 30px; left: 30px; 
-        width: 250px; 
-        background-color: rgba(255, 255, 255, 0.9); 
-        z-index: 9999; 
-        border-radius: 8px; 
-        padding: 10px; 
-        border: 1px solid grey;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-        font-family: Arial, sans-serif;
-        ">
-        <div style="margin-bottom: 5px; font-weight: bold; font-size: 13px; color: black;">Kecepatan Arus (m/s)</div>
-        <div style="background: linear-gradient(to right, blue, green, yellow, orange, red); 
-                    width: 100%; height: 15px; border: 1px solid #333; border-radius: 3px;"></div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; color: black; font-weight: bold;">
-            <span>0.0</span>
-            <span>1.2</span>
-            <span>2.0</span>
-            <span>>2.5</span>
-        </div>
-    </div>
-    {{% endmacro %}}
-    '''
-    macro = MacroElement()
-    macro._template = Template(legend_html)
-    m.get_root().add_child(macro)
+    # Render poligon HANYA jika ada kecepatan arus yang melampaui batas
+    if df_hour['predicted_v_max'].max() > AMBANG_BATAS:
+        # 1. Buat Triangulasi persis seperti background kanvas
+        triang_warn = tri.Triangulation(df_hour['lon'], df_hour['lat'])
         
-    st_folium(m, use_container_width=True, height=650)
+        xw = triang_warn.x[triang_warn.triangles]
+        yw = triang_warn.y[triang_warn.triangles]
+        sa = np.sqrt((xw[:, 0] - xw[:, 1])**2 + (yw[:, 0] - yw[:, 1])**2)
+        sb = np.sqrt((xw[:, 1] - xw[:, 2])**2 + (yw[:, 1] - yw[:, 2])**2)
+        sc = np.sqrt((xw[:, 2] - xw[:, 0])**2 + (yw[:, 2] - yw[:, 0])**2)
+        
+        # Terapkan batas resolusi yang sama
+        mask_warn = np.any([sa > 0.010, sb > 0.010, sc > 0.010], axis=0)
+        triang_warn.set_mask(mask_warn)
+        
+        fig_warn, ax_warn = plt.subplots()
+        
+        # 2. Gambar area contour HANYA untuk rentang di atas batas
+        cs_warn = ax_warn.tricontourf(triang_warn, df_hour['predicted_v_max'], levels=[AMBANG_BATAS, 999.0])
+        
+        # 3. Ekstrak jalur geometris (paths) menjadi koordinat JSON
+        for collection in cs_warn.collections:
+            for path in collection.get_paths():
+                # to_polygons() otomatis menutup ujung garis menjadi bangun datar utuh
+                for poly in path.to_polygons():
+                    # Matplotlib x,y = lon,lat. Kita balik jadi lat,lon untuk Leaflet
+                    coords = [{"lat": float(p[1]), "lon": float(p[0])} for p in poly]
+                    warning_polygons.append(coords)
+                    
+        plt.close(fig_warn) # Tutup figure dari memori
+
+    # ========================================================
+    # 4. RENDER PETA HTML
+    # ========================================================
+    lat_tengah = (lat_min_data + lat_max_data) / 2
+    lon_tengah = (lon_min_data + lon_max_data) / 2
     
-    st.caption("Warna titik menunjukkan Kecepatan Arus (m/s) sesuai Colormap. Panah abu-abu menunjukkan Arah Vektor Arus dengan animasi kecepatan.")
+    html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour))
+    html_siap_render = html_siap_render.replace("__LABELS_JSON__", json.dumps(labels_list))
+    html_siap_render = html_siap_render.replace("__IMAGE_BASE64__", image_base64)
+    html_siap_render = html_siap_render.replace("__LAT_MIN__", str(lat_min_data))
+    html_siap_render = html_siap_render.replace("__LON_MIN__", str(lon_min_data))
+    html_siap_render = html_siap_render.replace("__LAT_MAX__", str(lat_max_data))
+    html_siap_render = html_siap_render.replace("__LON_MAX__", str(lon_max_data))
+    html_siap_render = html_siap_render.replace("__LAT_CENTER__", str(lat_tengah))
+    html_siap_render = html_siap_render.replace("__LON_CENTER__", str(lon_tengah))
+    
+    # Masukkan data Geo-Polygon ke HTML
+    html_siap_render = html_siap_render.replace("__WARNING_POLYGONS_JSON__", json.dumps(warning_polygons))
+    
+    components.html(html_siap_render, height=650)
+    
+    st.caption("🗺️ **Panduan:** Warna background menunjukkan kecepatan (m/s). **Area poligon bergaris putus-putus merah** adalah zona bahaya dengan kecepatan arus di atas 2.0 m/s.")
 
 with col2:
     st.subheader("📈 Kecepatan Arus Maksimum 24 Jam Ke depan")
