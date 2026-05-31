@@ -132,29 +132,6 @@ HTML_TEMPLATE = """
             return div;
         };
         legend.addTo(map);
-        
-        // ========================================================
-        // 7. RENDER ZONA BAHAYA (POLYGON DARI MATPLOTLIB)
-        // ========================================================
-        var warningPolygons = __WARNING_POLYGONS_JSON__;
-        var warningLayer = L.layerGroup().addTo(map);
-
-        warningPolygons.forEach(function(polyCoords) {
-            // Ubah format [{lat: x, lon: y}] menjadi array of arrays [[lat, lon]] untuk Leaflet
-            var latLngs = polyCoords.map(function(pt) { return [pt.lat, pt.lon]; });
-            
-            L.polygon(latLngs, {
-                color: '#ff0000',      // Warna garis batas (Merah)
-                weight: 2,             // Ketebalan garis
-                dashArray: '8, 6',     // Efek garis putus-putus
-                fillColor: '#ff0000',  // Warna isian area
-                fillOpacity: 0.35,     // Transparansi
-                lineJoin: 'round'      // Membuat sudut garis batas sedikit lebih halus
-            }).bindTooltip(
-                "⚠️ <b>ZONA WASPADA</b><br>Arus > 2.0 m/s", 
-                {sticky: true, direction: 'center', opacity: 0.9}
-            ).addTo(warningLayer);
-        });
     </script>
 </body>
 </html>
@@ -443,7 +420,7 @@ with col1:
     st.subheader("🗺️ Peta Spasial Arus")
     
     # --------------------------------------------------------
-    # 1. Slider Navigasi Waktu (Pengganti Tombol)
+    # 1. Slider Navigasi Waktu 
     # --------------------------------------------------------
     st.markdown("**⏱️ Pilih Waktu Prediksi:**")
     selected_time_str = st.select_slider(
@@ -460,17 +437,17 @@ with col1:
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
 
     # --------------------------------------------------------
-    # 2. Panggil Fungsi Caching Gambar (Cepat & Ringan)
+    # 2. Panggil Fungsi Caching Gambar Background
     # --------------------------------------------------------
     df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
     image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data)
 
     # --------------------------------------------------------
-    # 3. Label Spasial Merata (Menggunakan Logika Asli Anda)
+    # 3. Label Spasial Merata
     # --------------------------------------------------------
     placed_labels = []
     labels_list = []
-    MIN_LABEL_DIST = 0.01 # Ubah angka ini untuk mengatur kerapatan jarak angka
+    MIN_LABEL_DIST = 0.01
 
     for idx, row in df_hour.iterrows():
         kec = row['predicted_v_max']
@@ -487,47 +464,8 @@ with col1:
             labels_list.append({"lat": lat, "lon": lon, "val": f"{kec:.2f}"})
             placed_labels.append((lat, lon))
 
-    # ... (Kode sebelumnya dari selected_time_str sampai labels_list tetap sama) ...
-
     # ========================================================
-    # BARU: EKSTRAK POLYGON ZONA BAHAYA (METODE TRIANGULASI)
-    # ========================================================
-    AMBANG_BATAS = 1.2
-    warning_polygons = []
-    
-    # Render poligon HANYA jika ada kecepatan arus yang melampaui batas
-    if df_hour['predicted_v_max'].max() > AMBANG_BATAS:
-        # 1. Buat Triangulasi persis seperti background kanvas
-        triang_warn = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-        
-        xw = triang_warn.x[triang_warn.triangles]
-        yw = triang_warn.y[triang_warn.triangles]
-        sa = np.sqrt((xw[:, 0] - xw[:, 1])**2 + (yw[:, 0] - yw[:, 1])**2)
-        sb = np.sqrt((xw[:, 1] - xw[:, 2])**2 + (yw[:, 1] - yw[:, 2])**2)
-        sc = np.sqrt((xw[:, 2] - xw[:, 0])**2 + (yw[:, 2] - yw[:, 0])**2)
-        
-        # Terapkan batas resolusi yang sama
-        mask_warn = np.any([sa > 0.010, sb > 0.010, sc > 0.010], axis=0)
-        triang_warn.set_mask(mask_warn)
-        
-        fig_warn, ax_warn = plt.subplots()
-        
-        # 2. Gambar area contour HANYA untuk rentang di atas batas
-        cs_warn = ax_warn.tricontourf(triang_warn, df_hour['predicted_v_max'], levels=[AMBANG_BATAS, 999.0])
-        
-        # 3. Ekstrak jalur geometris (paths) menjadi koordinat JSON
-        for collection in cs_warn.collections:
-            for path in collection.get_paths():
-                # to_polygons() otomatis menutup ujung garis menjadi bangun datar utuh
-                for poly in path.to_polygons():
-                    # Matplotlib x,y = lon,lat. Kita balik jadi lat,lon untuk Leaflet
-                    coords = [{"lat": float(p[1]), "lon": float(p[0])} for p in poly]
-                    warning_polygons.append(coords)
-                    
-        plt.close(fig_warn) # Tutup figure dari memori
-
-    # ========================================================
-    # 4. RENDER PETA HTML
+    # 4. RENDER PETA HTML (VERSI BERSIH & STABIL)
     # ========================================================
     lat_tengah = (lat_min_data + lat_max_data) / 2
     lon_tengah = (lon_min_data + lon_max_data) / 2
@@ -542,28 +480,53 @@ with col1:
     html_siap_render = html_siap_render.replace("__LAT_CENTER__", str(lat_tengah))
     html_siap_render = html_siap_render.replace("__LON_CENTER__", str(lon_tengah))
     
-    # Masukkan data Geo-Polygon ke HTML
-    html_siap_render = html_siap_render.replace("__WARNING_POLYGONS_JSON__", json.dumps(warning_polygons))
-    
     components.html(html_siap_render, height=650)
     
-    st.caption("🗺️ **Panduan:** Warna background menunjukkan kecepatan (m/s). **Area poligon bergaris putus-putus merah** adalah zona bahaya dengan kecepatan arus di atas 2.0 m/s.")
+    st.caption("🗺️ **Panduan:** Warna background menunjukkan kecepatan (m/s). Animasi garis putih menunjukkan arah arus.")
 
 with col2:
-    st.subheader("📈 Kecepatan Arus Maksimum 24 Jam Ke depan")
     
-    # Mengelompokkan data per jam untuk mencari nilai tertinggi di seluruh grid
-    df_trend = df_filtered_area.groupby('datetime_wib')['predicted_v_max'].max().reset_index()
+    def derajat_ke_panah(deg):
+        if pd.isna(deg): 
+            return ""
+        # Mengonversi derajat (0-360) menjadi simbol panah mata angin instan
+        panah = ['↑ U', '↗ TL', '→ T', '↘ TG', '↓ S', '↙ BD', '← B', '↖ BL']
+        idx = int((deg + 22.5) % 360 // 45)
+        return panah[idx]
+        
+    def derajat_ke_arah_lengkap(deg):
+        if pd.isna(deg): 
+            return ""
+        # Menerjemahkan derajat menjadi nama arah mata angin lengkap dalam bahasa Indonesia
+        arah = ['Utara', 'Timur Laut', 'Timur', 'Tenggara', 'Selatan', 'Barat Daya', 'Barat', 'Barat Laut']
+        idx = int((deg + 22.5) % 360 // 45)
+        return arah[idx]
     
-    # Plotly Line Chart Utama (24 Jam)
+    st.subheader("📈 Kecepatan & Arah Arus Maksimum 24 Jam")
+    
+    # OPTIMASI: Cari index baris dengan kecepatan maksimum untuk tiap jamnya
+    idx_max_trend = df_filtered_area.groupby('datetime_wib')['predicted_v_max'].idxmax()
+    df_trend = df_filtered_area.loc[idx_max_trend].reset_index(drop=True)
+    
+    # Tambahkan kolom panah arah mata angin berdasarkan derajatnya
+    df_trend['arah_panah'] = df_trend['arah_derajat'].apply(derajat_ke_panah)
+    
+    # Plotly Line Chart Utama (24 Jam) dengan Modul Teks Panah
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=df_trend['datetime_wib'], 
         y=df_trend['predicted_v_max'],
-        mode='lines+markers',
-        name='Max Speed Grid',
+        mode='lines+markers+text',          # Aktifkan fitur teks di kurva
+        name='Arus Maksimum',
         line=dict(color='black', width=2),
-        marker=dict(size=8, color='crimson')
+        marker=dict(size=8, color='crimson'),
+        text=df_trend['arah_panah'],        # Set panah sebagai teks tampil
+        textposition="top center",          # Posisikan persis di atas lingkaran merah
+        hovertemplate=(
+            "<b>Waktu:</b> %{x}<br>"
+            "<b>Kecepatan:</b> %{y:.2f} m/s<br>"
+            "<b>Arah Dominan:</b> %{text}<extra></extra>"
+        )
     ))
     
     # Garis Batas Waspada
@@ -579,58 +542,86 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
     # ==========================================
-    # BARU: FOKUS OPERASIONAL SHIFT JAGA (LOGIKA UTC)
+    # FOKUS OPERASIONAL SHIFT JAGA (12 JAM)
     # ==========================================
     # Fungsi penentu shift menggunakan waktu UTC asli Anda
     def get_shift_range_now(df_prediksi_24jam):
-        last_time = df_prediksi_24jam['datetime'].max() # Kembali menggunakan UTC
+        last_time = df_prediksi_24jam['datetime'].max()
         last_hour = last_time.hour 
         if last_hour < 12: 
-            return 12, 24, "Shift Malam" # UTC 12-24 setara WIB 19:00 - 07:00
+            return 12, 24, "Shift Malam"
         else: 
-            return 0, 12, "Shift Pagi"   # UTC 00-12 setara WIB 07:00 - 19:00
+            return 0, 12, "Shift Pagi"
 
-    # Dapatkan rentang jam UTC dan nama shift dari data asli (df_spatial)
     start_hour_utc, end_hour_utc, shift_name = get_shift_range_now(df_spatial)
     
-    # Filter data HANYA untuk jam shift tersebut MENGGUNAKAN JAM UTC
     mask_shift = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
     df_shift_raw = df_spatial.loc[mask_shift & 
                                   (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
                                   (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)]
 
-    st.divider() # Garis pembatas estetik
-    st.subheader(f"🎯 Kecepatan Arus Maksimum 12 Jam Ke depan ({shift_name})")
+    st.divider()
+    st.subheader(f"🎯 Kecepatan & Arah Arus Maksimum 12 Jam ({shift_name})")
 
     if not df_shift_raw.empty:
-        # Kelompokkan data shift yang sudah difilter untuk mencari max per jamnya
-        df_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].max().reset_index()
+        # 1. Ambil data spasial maksimum per jam untuk tren shift
+        idx_max_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].idxmax()
+        df_shift = df_shift_raw.loc[idx_max_shift].reset_index(drop=True)
+        
+        # Mapping arah panah untuk grafik dan arah lengkap untuk teks narasi
+        df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
+        df_shift['arah_lengkap'] = df_shift['arah_derajat'].apply(derajat_ke_arah_lengkap)
 
-        # 1. Cari baris dengan kecepatan maksimal KHUSUS di shift ini
+        # ========================================================
+        # BARU: HITUNG ARAH DOMINAN (MODE) SEPANJANG SHIFT
+        # ========================================================
+        if not df_shift['arah_lengkap'].empty:
+            # .mode()[0] akan mengambil nama arah yang paling sering muncul dalam 12 jam tersebut
+            arah_dominan_shift = df_shift['arah_lengkap'].mode()[0].lower()
+        else:
+            arah_dominan_shift = "tidak diketahui"
+
+        # 2. Cari data waktu dan nilai kecepatan absolut tertinggi di shift ini
         baris_max_shift = df_shift.loc[df_shift['predicted_v_max'].idxmax()]
         max_speed_shift = baris_max_shift['predicted_v_max']
         waktu_max_shift = baris_max_shift['datetime_wib'].strftime('%H:%M WIB')
         
-        # 2. Peringatan Kecepatan (Warna Dinamis)
+        # ========================================================
+        # 3. NARASI PERINGATAN DINAMIS (SESUAI REQUEST)
+        # ========================================================
         if max_speed_shift > 1.2:
-            st.error(f"🚨 **PERINGATAN DINI**  \nKecepatan Arus Maksimal **{max_speed_shift:.2f} m/s** diprediksi terjadi pada pukul **{waktu_max_shift}**.")
+            st.error(
+                f"🚨 **PERINGATAN DINI** \n"
+                f"Kecepatan Arus Maksimal **{max_speed_shift:.2f} m/s** diprediksi terjadi pada pukul **{waktu_max_shift}** "
+                f"dengan arah arus dominan bergerak ke **{arah_dominan_shift}**."
+            )
         else:
-            st.success(f"✅ **ARUS AMAN**  \nKecepatan Arus Maksimal hanya **{max_speed_shift:.2f} m/s** pada pukul **{waktu_max_shift}**.")
+            st.success(
+                f"✅ **ARUS AMAN** \n"
+                f"Kecepatan Arus Maksimal hanya **{max_speed_shift:.2f} m/s** pada pukul **{waktu_max_shift}** "
+                f"dengan arah arus dominan bergerak ke **{arah_dominan_shift}**."
+            )
             
-        # 3. Grafik Zoom Khusus Shift (Tetap ditampilkan dalam WIB agar ramah pengguna)
+        # Grafik Zoom Khusus Shift dengan Teks Panah
         fig_shift = go.Figure()
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], 
             y=df_shift['predicted_v_max'],
-            mode='lines+markers',
+            mode='lines+markers+text',
             name=f'Arus {shift_name}',
             line=dict(color='blue', width=2),
-            marker=dict(size=8, color='crimson', line=dict(color='black', width=1))
+            marker=dict(size=8, color='crimson', line=dict(color='black', width=1)),
+            text=df_shift['arah_panah'],
+            textposition="top center",
+            hovertemplate=(
+                "<b>Jam Operasional:</b> %{x}<br>"
+                "<b>Kecepatan:</b> %{y:.2f} m/s<br>"
+                "<b>Arah:</b> %{text}<extra></extra>"
+            )
         ))
         
         fig_shift.add_hline(y=1.2, line_dash="dash", line_color="orange", annotation_text="Batas Waspada (1.2 m/s)")
         
-        # Menambahkan titik penanda (anotasi) pada jam puncak di grafik
         fig_shift.add_annotation(
             x=baris_max_shift['datetime_wib'],
             y=max_speed_shift,
@@ -640,7 +631,7 @@ with col2:
             arrowsize=1.5,
             arrowcolor="red",
             ax=0,
-            ay=-30,
+            ay=-40,
             font=dict(color="red", weight="bold")
         )
         
