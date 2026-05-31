@@ -6,3 +6,5 @@ branca
 streamlit-folium
 plotly
 matplotlib
+scipy
+Pillow
