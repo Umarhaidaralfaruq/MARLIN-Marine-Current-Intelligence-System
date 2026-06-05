@@ -423,9 +423,27 @@ with col1:
     # 1. Slider Navigasi Waktu 
     # --------------------------------------------------------
     st.markdown("**⏱️ Pilih Waktu Prediksi:**")
+    
+    # --- PERBAIKAN KODE: KONDISIONAL JAM TERAKHIR ---
+    # 1. Ambil waktu saat ini, jadikan tz-naive, tambah 7 jam (WIB), dan bulatkan ke jam (floor)
+    waktu_sekarang_wib = (pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)).floor('h')
+    
+    # 2. Ubah formatnya menjadi string agar sama persis dengan format di waktu_unik
+    waktu_sekarang_str = waktu_sekarang_wib.strftime('%Y-%m-%d %H:%M')
+    
+    # 3. Logika penentuan jam default
+    if waktu_sekarang_str in waktu_unik:
+        # Jika jam saat ini tersedia di data, gunakan jam tersebut
+        waktu_default = waktu_sekarang_str
+    else:
+        # Jika jam saat ini tidak tersedia (misal baserun lama), ambil waktu paling akhir di daftar
+        waktu_default = waktu_unik[-1]
+    # ------------------------------------------------------------
+
     selected_time_str = st.select_slider(
         "Geser untuk mengubah waktu", 
         options=waktu_unik,
+        value=waktu_default,
         label_visibility="collapsed"
     )
     
@@ -575,9 +593,21 @@ with col2:
         # ========================================================
         # BARU: HITUNG ARAH DOMINAN (MODE) SEPANJANG SHIFT
         # ========================================================
-        if not df_shift['arah_lengkap'].empty:
-            # .mode()[0] akan mengambil nama arah yang paling sering muncul dalam 12 jam tersebut
-            arah_dominan_shift = df_shift['arah_lengkap'].mode()[0].lower()
+        def penentu_utara_selatan(deg):
+            if pd.isna(deg): 
+                return None
+            # Mengelompokkan derajat: 270° - 89.9° (Utara) dan 90° - 269.9° (Selatan)
+            if deg >= 270 or deg < 90:
+                return "utara"
+            else:
+                return "selatan"
+
+        # Membuat kolom sementara untuk mendeteksi utara/selatan
+        df_shift['arah_bipolar'] = df_shift['arah_derajat'].apply(penentu_utara_selatan)
+
+        if not df_shift['arah_bipolar'].empty:
+            # .mode()[0] akan mengambil arah (utara/selatan) yang paling sering muncul
+            arah_dominan_shift = df_shift['arah_bipolar'].mode()[0]
         else:
             arah_dominan_shift = "tidak diketahui"
 
@@ -652,7 +682,6 @@ with col2:
 st.divider()
 st.subheader("🖨️ Download Grafik")
 
-# Fungsi ini berisi 100% setingan grafik final Anda tanpa ada yang diubah
 def create_bmkg_report(df_source, title_text):
     df_plot = df_source.copy()
     if 'datetime_utc' not in df_plot.columns:
@@ -699,18 +728,40 @@ def create_bmkg_report(df_source, title_text):
     extended_ticks_wib = extended_ticks_utc + pd.Timedelta(hours=7)
     ax0_twin.set_xticklabels([t.strftime('%H:%M') for t in extended_ticks_wib], rotation=0, ha='center', fontsize=11, weight='bold')
 
-    # 6. Menambahkan Label Angka di Setiap Titik 
+    # 6. Menambahkan Label Angka dan Panah Arah di Setiap Titik 
     for idx, row in df_plot.iterrows():
-        label_text = f"{row['predicted_v_max']:.2f}"
-        ax0.annotate(label_text, (row['datetime_utc'], row['predicted_v_max']), textcoords="offset points", xytext=(0,10), ha='center', fontsize=10, weight='bold')
+        # KHUSUS LAPORAN BMKG: Cek derajatnya dan ubah jadi Utara/Selatan saja
+        deg = row.get('arah_derajat', pd.NA)
+        if pd.isna(deg):
+            panah_bmkg = ""
+        elif deg >= 270 or deg < 90:
+            panah_bmkg = "↑ U"
+        else:
+            panah_bmkg = "↓ S"
+            
+        label_text = f"{panah_bmkg}\n{row['predicted_v_max']:.2f}"
+        
+        # xytext digeser ke (0, 15) agar teks dua baris tidak menabrak garis plot
+        ax0.annotate(label_text, (row['datetime_utc'], row['predicted_v_max']), textcoords="offset points", xytext=(0,15), ha='center', fontsize=10, weight='bold')
 
     # 7. Metadata Header BMKG
     header_text_left = "Kantor Layanan Informasi Meteorologi\nMaritim Ketapang, BMKG\nBMKG"
     fig_bmkg.text(0.11, 0.95, header_text_left, fontsize=12, weight='bold', color='black', ha='left', va='top', linespacing=1.4)
     
+    # --- PERUBAHAN: Translasi Manual Bulan ke Bahasa Indonesia ---
+    bulan_indo = {
+        1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+        7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'
+    }
+    
     issue_time_wib = datetime.now() 
-    issue_date_str = issue_time_wib.strftime('%d %B %Y')
+    hari = issue_time_wib.strftime('%d')
+    bulan = bulan_indo[issue_time_wib.month]
+    tahun = issue_time_wib.strftime('%Y')
+    
+    issue_date_str = f"{hari} {bulan} {tahun}"
     issue_time_str = issue_time_wib.strftime('%H:%M WIB')
+    
     fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_str}, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
 
     # 8. Logo BMKG 
