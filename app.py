@@ -299,7 +299,21 @@ df_filtered_area = df_spatial[
     (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
 ]
 
-baris_max = df_filtered_area.loc[df_filtered_area['predicted_v_max'].idxmax()]
+# --- FUNGSI PENCARI P95 ---
+def get_p95_idx(group):
+    # Hitung nilai persentil 95
+    p95 = group['predicted_v_max'].quantile(0.95)
+    # Jika data kosong (NaN), kembalikan index pertama
+    if pd.isna(p95): return group.index[0]
+    # Cari index baris dengan nilai kecepatan yang paling mendekati nilai P95
+    return (group['predicted_v_max'] - p95).abs().idxmin()
+
+# Hitung tren P95 untuk seluruh jam di area operasional
+idx_p95_trend = df_filtered_area.groupby('datetime_wib').apply(get_p95_idx)
+df_trend_p95 = df_filtered_area.loc[idx_p95_trend].reset_index(drop=True)
+
+# Ambil nilai puncak (tertinggi) dari kumpulan data P95 tersebut
+baris_max = df_trend_p95.loc[df_trend_p95['predicted_v_max'].idxmax()]
 max_speed_global = baris_max['predicted_v_max']
 waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
 
@@ -308,7 +322,7 @@ keterangan_delta = f"Pukul {waktu_ekstrem} ({status_teks})"
 
 # Menaruh Kartu Kecepatan di Kolom 1 (Kiri)
 col_m1.metric(
-    label="🌪️ Kecepatan Maksimum (24J ke Depan)", 
+    label="🌪️ Kecepatan Puncak P95 (24J ke Depan)", 
     value=f"{max_speed_global:.2f} m/s", 
     delta=keterangan_delta,
     delta_color="inverse" if max_speed_global > 1.2 else "normal"
@@ -520,11 +534,10 @@ with col2:
         idx = int((deg + 22.5) % 360 // 45)
         return arah[idx]
     
-    st.subheader("📈 Kecepatan & Arah Arus Maksimum 24 Jam")
+    st.subheader("📈 Kecepatan & Arah Arus 24 Jam Ke Depan")
     
-    # OPTIMASI: Cari index baris dengan kecepatan maksimum untuk tiap jamnya
-    idx_max_trend = df_filtered_area.groupby('datetime_wib')['predicted_v_max'].idxmax()
-    df_trend = df_filtered_area.loc[idx_max_trend].reset_index(drop=True)
+    # Mengambil dari data P95 yang sudah dikalkulasi di atas
+    df_trend = df_trend_p95.copy()
     
     # Tambahkan kolom panah arah mata angin berdasarkan derajatnya
     df_trend['arah_panah'] = df_trend['arah_derajat'].apply(derajat_ke_panah)
@@ -579,12 +592,12 @@ with col2:
                                   (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)]
 
     st.divider()
-    st.subheader(f"🎯 Kecepatan & Arah Arus Maksimum 12 Jam ({shift_name})")
+    st.subheader(f"🎯 Kecepatan & Arah Arus 12 Jam Ke Depan ({shift_name})")
 
     if not df_shift_raw.empty:
-        # 1. Ambil data spasial maksimum per jam untuk tren shift
-        idx_max_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].idxmax()
-        df_shift = df_shift_raw.loc[idx_max_shift].reset_index(drop=True)
+        # 1. Ambil data spasial P95 per jam untuk tren shift
+        idx_p95_shift = df_shift_raw.groupby('datetime_wib').apply(get_p95_idx)
+        df_shift = df_shift_raw.loc[idx_p95_shift].reset_index(drop=True)
         
         # Mapping arah panah untuk grafik dan arah lengkap untuk teks narasi
         df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
