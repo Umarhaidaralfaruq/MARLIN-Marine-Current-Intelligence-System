@@ -95,7 +95,7 @@ HTML_TEMPLATE = """
                 displayEmptyString: 'Tidak ada data'
             },
             data: __DATA_JSON__,
-            maxVelocity: 8.0,              // SEKARANG MAKSIMAL 8.0
+            maxVelocity: __MAX_VELOCITY__, // UBAH INI
             velocityScale: 0.05,           
             particleAge: 200,
             particleMultiplier: 0.002,     
@@ -119,15 +119,15 @@ HTML_TEMPLATE = """
             
             // Elemen di dalam legenda (Bentuk kapsul warna)
             div.innerHTML = 
-                '<div style="margin-bottom: 8px; font-weight: bold; font-size: 12px; color: black; text-align: center;">Kecepatan Arus (m/s)</div>' +
+                '<div style="margin-bottom: 8px; font-weight: bold; font-size: 12px; color: black; text-align: center;">Kecepatan Arus (__SATUAN__)</div>' +
                 '<div style="background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082); ' +
                 'width: 250px; height: 15px; border-radius: 10px; box-shadow: inset 0 0 2px rgba(0,0,0,0.5);"></div>' +
                 '<div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; color: black; font-weight: bold; padding: 0 5px;">' +
                     '<span>0</span>' +
-                    '<span>1.0</span>' +
-                    '<span>2.0</span>' +
-                    '<span>3.0</span>' +
-                    '<span>4.0</span>' +
+                    '<span>__LEG_1__</span>' +
+                    '<span>__LEG_2__</span>' +
+                    '<span>__LEG_3__</span>' +
+                    '<span>__LEG_4__</span>' +
                 '</div>';
             return div;
         };
@@ -271,12 +271,15 @@ st.divider()
 col_m1, col_m2, col_m3 = st.columns(3)
 
 # ---------------------------------------------------------
-# LANGKAH A: Tampilkan Dropdown di Kolom 2 (Tengah)
+# LANGKAH A: Tampilkan Dropdown & Pemilih Satuan
 # ---------------------------------------------------------
 selected_filename = col_m2.selectbox(
     "🗂️ Pilih Baserun Data Prediksi:",
     options=list(file_options.keys())
 )
+
+# --- PINDAHKAN PEMILIH SATUAN KE KOLOM 3 (KANAN) ---
+satuan_pilihan = col_m3.radio("📏 Pilih Satuan Kecepatan:", ["m/s", "Knot"], horizontal=True)
 
 # Tombol refresh mungil di bawah dropdown (di Kolom 2)
 if col_m2.button("🔄 Perbarui Daftar File", use_container_width=True):
@@ -289,10 +292,20 @@ if col_m2.button("🔄 Perbarui Daftar File", use_container_width=True):
 selected_filepath = file_options[selected_filename]
 df_spatial = load_data(selected_filepath)
 
+# --- Logika Konversi ---
+faktor_konversi = 1.94384 if satuan_pilihan == "Knot" else 1.0
+satuan_teks = satuan_pilihan
+batas_waspada = 1.2 * faktor_konversi 
+
+# Terapkan konversi ke dataframe
+df_spatial['predicted_v_max'] = df_spatial['predicted_v_max'] * faktor_konversi
+df_spatial['predicted_u'] = df_spatial['predicted_u'] * faktor_konversi
+df_spatial['predicted_v'] = df_spatial['predicted_v'] * faktor_konversi
+
 waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
 
 # ---------------------------------------------------------
-# LANGKAH C: Menghitung & Menampilkan Metrik di Kolom 1 dan 3
+# LANGKAH C: Menghitung & Menampilkan Metrik di Kolom 1
 # ---------------------------------------------------------
 df_filtered_area = df_spatial[
     (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
@@ -301,35 +314,30 @@ df_filtered_area = df_spatial[
 
 # --- FUNGSI PENCARI P95 ---
 def get_p95_idx(group):
-    # Hitung nilai persentil 95
     p95 = group['predicted_v_max'].quantile(0.95)
-    # Jika data kosong (NaN), kembalikan index pertama
     if pd.isna(p95): return group.index[0]
-    # Cari index baris dengan nilai kecepatan yang paling mendekati nilai P95
     return (group['predicted_v_max'] - p95).abs().idxmin()
 
-# Hitung tren P95 untuk seluruh jam di area operasional
 idx_p95_trend = df_filtered_area.groupby('datetime_wib').apply(get_p95_idx)
 df_trend_p95 = df_filtered_area.loc[idx_p95_trend].reset_index(drop=True)
 
-# Ambil nilai puncak (tertinggi) dari kumpulan data P95 tersebut
 baris_max = df_trend_p95.loc[df_trend_p95['predicted_v_max'].idxmax()]
 max_speed_global = baris_max['predicted_v_max']
 waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
 
-status_teks = "Waspada" if max_speed_global > 1.2 else "Aman"
+status_teks = "Waspada" if max_speed_global > batas_waspada else "Aman"
 keterangan_delta = f"Pukul {waktu_ekstrem} ({status_teks})"
 
 # Menaruh Kartu Kecepatan di Kolom 1 (Kiri)
 col_m1.metric(
     label="🌪️ Kecepatan Puncak P95 (24J ke Depan)", 
-    value=f"{max_speed_global:.2f} m/s", 
+    value=f"{max_speed_global:.2f} {satuan_teks}", 
     delta=keterangan_delta,
-    delta_color="inverse" if max_speed_global > 1.2 else "normal"
+    delta_color="inverse" if max_speed_global > batas_waspada else "normal"
 )
 
-# Menaruh Total Waktu Prediksi di Kolom 3 (Kanan)
-col_m3.metric(label="⏱️ Total Waktu Prediksi", value=f"{len(waktu_unik)} Jam")
+# HAPUS BARIS INI (Keterangan Total Waktu Prediksi yang lama):
+# col_m3.metric(label="⏱️ Total Waktu Prediksi", value=f"{len(waktu_unik)} Jam")
 
 st.divider()
 
@@ -378,7 +386,7 @@ col1, col2 = st.columns([1.1, 1])
 # FUNGSI CACHE UNTUK BACKGROUND PETA (MATPLOTLIB + PIL)
 # ========================================================
 @st.cache_data(show_spinner=False, ttl=3600)
-def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data):
+def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
     # Kita menggunakan JSON/Dict untuk parameter cache agar hashing Streamlit lebih cepat
     df_hour = pd.DataFrame(df_hour_json)
     
@@ -409,8 +417,8 @@ def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_da
     # Secara visual tidak ada bedanya, tapi rendering 10x lebih cepat!
     ax.tricontourf(
         triang, df_hour['predicted_v_max'], 
-        levels=np.linspace(0.0, 3.0, 1000), 
-        cmap=custom_cmap, vmin=0.0, vmax=3.0, extend='max', alpha=0.9
+        levels=np.linspace(0.0, vmax_plot, 1000), 
+        cmap=custom_cmap, vmin=0.0, vmax=vmax_plot, extend='max', alpha=0.9
     )
 
     buf = io.BytesIO()
@@ -472,7 +480,8 @@ with col1:
     # 2. Panggil Fungsi Caching Gambar Background
     # --------------------------------------------------------
     df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
-    image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data)
+    vmax_dinamis = 3.0 * faktor_konversi
+    image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_dinamis)
 
     # --------------------------------------------------------
     # 3. Label Spasial Merata
@@ -511,10 +520,16 @@ with col1:
     html_siap_render = html_siap_render.replace("__LON_MAX__", str(lon_max_data))
     html_siap_render = html_siap_render.replace("__LAT_CENTER__", str(lat_tengah))
     html_siap_render = html_siap_render.replace("__LON_CENTER__", str(lon_tengah))
+    html_siap_render = html_siap_render.replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi))
+    html_siap_render = html_siap_render.replace("__SATUAN__", satuan_teks)
+    html_siap_render = html_siap_render.replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}")
+    html_siap_render = html_siap_render.replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}")
+    html_siap_render = html_siap_render.replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}")
+    html_siap_render = html_siap_render.replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
     
     components.html(html_siap_render, height=650)
     
-    st.caption("🗺️ **Panduan:** Warna background menunjukkan kecepatan (m/s). Animasi garis putih menunjukkan arah arus.")
+    st.caption(f"🗺️ **Panduan:** Warna background menunjukkan kecepatan ({satuan_teks}). Animasi garis putih menunjukkan arah arus.")
 
 with col2:
     
@@ -555,17 +570,18 @@ with col2:
         textposition="top center",          # Posisikan persis di atas lingkaran merah
         hovertemplate=(
             "<b>Waktu:</b> %{x}<br>"
-            "<b>Kecepatan:</b> %{y:.2f} m/s<br>"
+            "<b>Kecepatan:</b> %{y:.2f} " + satuan_teks + "<br>"
             "<b>Arah Dominan:</b> %{text}<extra></extra>"
         )
     ))
     
     # Garis Batas Waspada
-    fig.add_hline(y=1.2, line_dash="dash", line_color="orange", annotation_text="Batas Waspada (1.2 m/s)")
+    fig.add_hline(y=batas_waspada, line_dash="dash", line_color="orange", annotation_text=f"Batas Waspada ({batas_waspada:.2f} {satuan_teks})")
+    
     
     fig.update_layout(
         xaxis_title="Waktu (WIB)",
-        yaxis_title="Kecepatan Maksimum (m/s)",
+        yaxis_title=f"Kecepatan Maksimum ({satuan_teks})",
         hovermode="x unified",
         margin=dict(l=0, r=0, t=30, b=0)
     )
@@ -635,13 +651,13 @@ with col2:
         if max_speed_shift > 1.2:
             st.error(
                 f"🚨 **PERINGATAN DINI** \n"
-                f"Kecepatan Arus Maksimal **{max_speed_shift:.2f} m/s** diprediksi terjadi pada pukul **{waktu_max_shift}** "
+                f"Kecepatan Arus Maksimal **{max_speed_shift:.2f} {satuan_teks}** diprediksi terjadi pada pukul **{waktu_max_shift}** "
                 f"dengan arah arus dominan bergerak ke **{arah_dominan_shift}**."
             )
         else:
             st.success(
                 f"✅ **ARUS AMAN** \n"
-                f"Kecepatan Arus Maksimal hanya **{max_speed_shift:.2f} m/s** pada pukul **{waktu_max_shift}** "
+                f"Kecepatan Arus Maksimal hanya **{max_speed_shift:.2f} {satuan_teks}** pada pukul **{waktu_max_shift}** "
                 f"dengan arah arus dominan bergerak ke **{arah_dominan_shift}**."
             )
             
@@ -658,12 +674,12 @@ with col2:
             textposition="top center",
             hovertemplate=(
                 "<b>Jam Operasional:</b> %{x}<br>"
-                "<b>Kecepatan:</b> %{y:.2f} m/s<br>"
+                "<b>Kecepatan:</b> %{y:.2f} " + satuan_teks + "<br>"
                 "<b>Arah:</b> %{text}<extra></extra>"
             )
         ))
         
-        fig_shift.add_hline(y=1.2, line_dash="dash", line_color="orange", annotation_text="Batas Waspada (1.2 m/s)")
+        fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="orange", annotation_text=f"Batas Waspada ({batas_waspada:.2f} {satuan_teks})")
         
         fig_shift.add_annotation(
             x=baris_max_shift['datetime_wib'],
@@ -680,7 +696,7 @@ with col2:
         
         fig_shift.update_layout(
             xaxis_title="Jam Operasional (WIB)",
-            yaxis_title="Kecepatan (m/s)",
+            yaxis_title=f"Kecepatan Maksimum ({satuan_teks})",
             hovermode="x unified",
             margin=dict(l=0, r=0, t=30, b=0),
         )
@@ -721,8 +737,8 @@ def create_bmkg_report(df_source, title_text):
     ax0.plot(df_plot['datetime_utc'], df_plot['predicted_v_max'], color=line_color, linewidth=2, marker='o', markersize=6, markerfacecolor=line_color, markeredgecolor='white')
 
     # 3. Kustomisasi Sumbu Y (Level Kecepatan)
-    ax0.set_ylabel("Kecepatan Arus (m/s)", fontsize=13, weight='bold')
-    y_max = max(2.0, df_plot['predicted_v_max'].max() + 0.5)
+    ax0.set_ylabel(f"Kecepatan Arus ({satuan_teks})", fontsize=13, weight='bold')
+    y_max = max(2.0 * faktor_konversi, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi))
     ax0.set_ylim(0, y_max)
     ax0.grid(color=grid_color, linestyle='--', linewidth=0.8)
 
