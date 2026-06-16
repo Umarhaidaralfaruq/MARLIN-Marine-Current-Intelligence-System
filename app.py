@@ -209,14 +209,23 @@ LON_MIN, LON_MAX = 114.387, 114.435
 # ==========================================
 ikon_bmkg = Image.open("logo_BMKG.png")
 
-# Kode pelindung: Cek dulu apakah filenya benar-benar ada di server
+import os
+from PIL import Image
+
+# 1. Cek kemungkinan nama file pertama
 if os.path.exists("logo_BMKG.png"):
-    ikon_bmkg = Image.open("logo_BMKG.png")
-    st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon=ikon_bmkg, layout="wide")
+    ikon = Image.open("logo_BMKG.png")
+# 2. Cek kemungkinan jebakan ekstensi ganda Windows
+elif os.path.exists("logo_BMKG.png.png"):
+    ikon = Image.open("logo_BMKG.png.png")
+# 3. Cek kemungkinan huruf kecil semua
+elif os.path.exists("logo_bmkg.png"):
+    ikon = Image.open("logo_bmkg.png")
+# 4. Kalau semua gagal, pakai emotikon agar web tidak crash!
 else:
-    # Kalau file gagal ditemukan (entah karena salah ketik/beda folder), 
-    # pakai emotikon saja sementara biar web tetap nyala dan nggak error!
-    st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon="🌊", layout="wide")
+    ikon = "🌊"
+
+st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon=ikon, layout="wide")
 
 # --- TRIK NINJA: HILANGKAN WATERMARK & MENU STREAMLIT ---
 hide_st_style = """
