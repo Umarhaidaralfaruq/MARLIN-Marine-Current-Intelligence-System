@@ -210,7 +210,7 @@ LON_MIN, LON_MAX = 114.387, 114.435
 ikon_bmkg = Image.open("logo_bmkg.png")
 
 # Kode pelindung: Cek dulu apakah filenya benar-benar ada di server
-if os.path.exists("logo_bmkg.png"):
+if os.path.exists("logo_BMKG.png"):
     ikon_bmkg = Image.open("logo_bmkg.png")
     st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon=ikon_bmkg, layout="wide")
 else:
@@ -814,7 +814,7 @@ def create_bmkg_report(df_source, title_text):
     fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_str}, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
 
     # 8. Logo BMKG 
-    LOGO_PATH = "logo_bmkg.png"
+    LOGO_PATH = "logo_BMKG.png"
     if os.path.exists(LOGO_PATH):
         try:
             arr_logo = plt.imread(LOGO_PATH)
