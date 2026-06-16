@@ -207,21 +207,15 @@ LON_MIN, LON_MAX = 114.387, 114.435
 # ==========================================
 # 1. SETUP HALAMAN WEBSITE
 # ==========================================
-ikon_bmkg = Image.open("logo_BMKG.png")
 
-import os
-from PIL import Image
+# --- PERBAIKAN: GUNAKAN HURUF KECIL UNTUK SEMUA NAMA LOGO ---
+logo_filename = "logo_bmkg.png"
 
-# 1. Cek kemungkinan nama file pertama
-if os.path.exists("logo_BMKG.png"):
+# Pengecekan file secara aman
+if os.path.exists(logo_filename):
+    ikon = Image.open(logo_filename)
+elif os.path.exists("logo_BMKG.png"):
     ikon = Image.open("logo_BMKG.png")
-# 2. Cek kemungkinan jebakan ekstensi ganda Windows
-elif os.path.exists("logo_BMKG.png.png"):
-    ikon = Image.open("logo_BMKG.png.png")
-# 3. Cek kemungkinan huruf kecil semua
-elif os.path.exists("logo_bmkg.png"):
-    ikon = Image.open("logo_bmkg.png")
-# 4. Kalau semua gagal, pakai emotikon agar web tidak crash!
 else:
     ikon = "🌊"
 
@@ -364,9 +358,6 @@ col_m1.metric(
     delta=keterangan_delta,
     delta_color="inverse" if max_speed_global > batas_waspada else "normal"
 )
-
-# HAPUS BARIS INI (Keterangan Total Waktu Prediksi yang lama):
-# col_m3.metric(label="⏱️ Total Waktu Prediksi", value=f"{len(waktu_unik)} Jam")
 
 st.divider()
 
@@ -822,16 +813,15 @@ def create_bmkg_report(df_source, title_text):
     
     fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_str}, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
 
-    # 8. Logo BMKG 
-    LOGO_PATH = "logo_BMKG.png"
-    if os.path.exists(LOGO_PATH):
+    # --- PERBAIKAN PENTING: PENGGUNAAN LOGO YANG AMAN DI MATPLOTLIB ---
+    if os.path.exists(logo_filename): # logo_filename sekarang sudah diset seragam di atas menjadi "logo_bmkg.png"
         try:
-            arr_logo = plt.imread(LOGO_PATH)
+            arr_logo = plt.imread(logo_filename)
             imagebox = OffsetImage(arr_logo, zoom=0.08) 
             logo_loc = AnnotationBbox(imagebox, (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1))
             ax0.add_artist(logo_loc)
-        except:
-            pass
+        except Exception as e:
+            print(f"Gagal memuat logo untuk Matplotlib: {e}")
 
     return fig_bmkg
 
