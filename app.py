@@ -208,11 +208,14 @@ LON_MIN, LON_MAX = 114.387, 114.435
 # 1. SETUP HALAMAN WEBSITE
 # ==========================================
 ikon_bmkg = Image.open("logo_bmkg.png")
+
+# Kode pelindung: Cek dulu apakah filenya benar-benar ada di server
 if os.path.exists("logo_bmkg.png"):
     ikon_bmkg = Image.open("logo_bmkg.png")
     st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon=ikon_bmkg, layout="wide")
 else:
-    # Kalau file gagal ditemukan, pakai emotikon saja biar web tetap bisa jalan
+    # Kalau file gagal ditemukan (entah karena salah ketik/beda folder), 
+    # pakai emotikon saja sementara biar web tetap nyala dan nggak error!
     st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon="🌊", layout="wide")
 
 # --- TRIK NINJA: HILANGKAN WATERMARK & MENU STREAMLIT ---
