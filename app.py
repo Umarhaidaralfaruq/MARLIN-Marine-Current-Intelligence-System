@@ -207,7 +207,23 @@ LON_MIN, LON_MAX = 114.387, 114.435
 # ==========================================
 # 1. SETUP HALAMAN WEBSITE
 # ==========================================
-st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon="🌊", layout="wide")
+ikon_bmkg = Image.open("logo_bmkg.png")
+st.set_page_config(
+    page_title="Dashboard Arus Selat Bali", 
+    page_icon=ikon_bmkg, 
+    layout="wide"
+)
+
+# --- TRIK NINJA: HILANGKAN WATERMARK & MENU STREAMLIT ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+# --------------------------------------------------------
 
 st.title("🌊 Dashboard Prediksi Arus Laut Selat Bali")
 st.markdown("Prediksi spasial dan deret waktu 24 jam ke depan berbasis Machine Learning (LSTM).")
