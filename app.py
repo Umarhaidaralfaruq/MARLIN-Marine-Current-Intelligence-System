@@ -210,16 +210,17 @@ LON_MIN, LON_MAX = 114.387, 114.435
 
 # --- PERBAIKAN: GUNAKAN HURUF KECIL UNTUK SEMUA NAMA LOGO ---
 logo_filename = "Logo_BMKG.png"
+logo_seacast = "logo_bmkg2.png"
 
 # Pengecekan file secara aman
-if os.path.exists(logo_filename):
-    ikon = Image.open(logo_filename)
+if os.path.exists(logo_seacast):
+    ikon = Image.open(logo_seacast)
 elif os.path.exists("logo_BMKG.png"):
     ikon = Image.open("logo_BMKG.png")
 else:
     ikon = "🌊"
 
-st.set_page_config(page_title="Dashboard Arus Selat Bali", page_icon=ikon, layout="wide")
+st.set_page_config(page_title="MARLIN", page_icon=ikon, layout="wide")
 
 # --- TRIK NINJA: HILANGKAN WATERMARK, MENU, DAN BADGE HOSTING STREAMLIT ---
 hide_st_style = """
@@ -234,8 +235,30 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 # --------------------------------------------------------
 
-st.title("🌊 Dashboard Prediksi Arus Laut Selat Bali")
-st.markdown("Prediksi spasial dan deret waktu 24 jam ke depan berbasis Machine Learning (LSTM).")
+def get_base64_logo(img_path):
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode()
+    return None
+
+logo_base64 = get_base64_logo(logo_seacast)
+
+if logo_base64:
+    # Render HTML: RATA KIRI SEPENUHNYA agar tidak dibaca sebagai blok kode
+    html_header = f"""<div style="display: flex; flex-direction: row; align-items: center; margin-bottom: 25px;">
+<img src="data:image/png;base64,{logo_base64}" style="height: 110px; width: auto; margin-right: 25px;">
+<div style="display: flex; flex-direction: column; justify-content: center;">
+<h1 style="margin: 0; padding: 0; font-size: 2.8rem; font-weight: bold; line-height: 1.1;">MARLIN</h1>
+<h3 style="margin: 5px 0 0 0; padding: 0; font-size: 1.4rem; font-weight: 500; opacity: 0.9;">Marine Current Intelligence System</h3>
+<p style="margin: 10px 0 0 0; font-size: 1.1rem; opacity: 0.8; width: 100%;">Sistem Prediksi Arus Laut Berbasis Machine Learning di Perairan Selat Bali.</p>
+</div>
+</div>"""
+    
+    st.markdown(html_header, unsafe_allow_html=True)
+else:
+    st.markdown("<h1 style='margin-bottom: 0;'>MARLIN</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-top: 0; opacity: 0.9;'>Marine Current Intelligence System</h3>", unsafe_allow_html=True)
+    st.markdown("Sistem Prediksi Arus Laut Berbasis Machine Learning di Perairan Selat Bali.")
 
 # Koordinat Anchor (Sesuai script Anda)
 ANCHOR_LAT = -8.20880659
@@ -317,6 +340,34 @@ if col_m2.button("🔄 Perbarui Daftar File", use_container_width=True):
 selected_filepath = file_options[selected_filename]
 df_spatial = load_data(selected_filepath)
 
+# ========================================================
+# KODE BARU: STATUS UPDATE BERDASARKAN ISI DATA (BASERUN)
+# Ditaruh di sini agar df_spatial sudah terbaca oleh sistem
+# ========================================================
+waktu_baserun_wib = df_spatial['datetime_wib'].min() - pd.Timedelta(hours=1)
+waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
+
+selisih_jam = (waktu_sekarang_wib - waktu_baserun_wib).total_seconds() / 3600
+
+if selisih_jam <= 24: 
+    status_icon = "🟢"
+    status_teks = "Terupdate"
+    teks_warna = "#28a745" # Hijau
+else:
+    status_icon = "🔴"
+    status_teks = "Tidak Update"
+    teks_warna = "#dc3545" # Merah
+
+# Kita tetap melempar render UI-nya ke Kolom 3 (col_m3)
+col_m3.markdown(
+    f"<div style='margin-top: 10px; font-size: 14px; font-weight: bold; color: {teks_warna};'>"
+    f"{status_icon} Status: {status_teks}</div>", 
+    unsafe_allow_html=True
+)
+col_m3.caption(f"📅 Data Terakhir Tersedia: {waktu_baserun_wib.strftime('%d-%m-%Y %H:%M')} WIB")
+# ========================================================
+
+
 # --- Logika Konversi ---
 faktor_konversi = 1.94384 if satuan_pilihan == "Knot" else 1.0
 satuan_teks = satuan_pilihan
@@ -355,7 +406,7 @@ keterangan_delta = f"Pukul {waktu_ekstrem} ({status_teks})"
 
 # Menaruh Kartu Kecepatan di Kolom 1 (Kiri)
 col_m1.metric(
-    label="🌪️ Kecepatan Puncak P95 (24J ke Depan)", 
+    label="🌪️ Kecepatan Arus Maksimal 24 Jam ke Depan", 
     value=f"{max_speed_global:.2f} {satuan_teks}", 
     delta=keterangan_delta,
     delta_color="inverse" if max_speed_global > batas_waspada else "normal"
@@ -551,7 +602,7 @@ with col1:
     
     components.html(html_siap_render, height=650)
     
-    st.caption(f"🗺️ **Panduan:** Warna background menunjukkan kecepatan ({satuan_teks}). Animasi garis putih menunjukkan arah arus.")
+    st.caption(f"🗺️ **Panduan:** Arahkan kursor ke area yang diinginkan untuk melihat kecepatan dan arah arus di area tersebut.")
 
 with col2:
     
