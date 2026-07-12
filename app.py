@@ -922,3 +922,186 @@ with col_rep2:
                 )
             
             plt.close(fig_24j)
+            
+# =============================================================================
+# 6. TABEL VERIFIKASI HISTORIS MODEL VS DATA REAL (ALL BASERUNS - 12 JAM)
+# =============================================================================
+st.divider()
+st.subheader("🔬 Sejarah Verifikasi Model vs HF Radar (Semua Baserun) 🔗")
+
+with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
+    rekap_prediksi = []
+    
+    # 1. Fungsi penentu shift yang persis sama dengan logika grafik 12 Jam lu!
+    def cek_shift_target(df_prediksi_24jam):
+        last_time = df_prediksi_24jam['datetime'].max()
+        if last_time.hour < 12: 
+            return 12, 24, "Malam"
+        else: 
+            return 0, 12, "Pagi"
+
+    # 2. Looping ke semua file baserun yang tersedia di folder
+    for filepath in list_of_files:
+        df_temp = load_data(filepath)
+        
+        # Dapatkan target operasional 12 jam dari file ini
+        start_hour_utc, end_hour_utc, shift_nama = cek_shift_target(df_temp)
+        
+        # FILTER 1: Waktu & Area Spasial (Biar sejajar sama grafik 12 Jam!)
+        mask_shift = (
+            (df_temp['datetime'].dt.hour >= start_hour_utc) & 
+            (df_temp['datetime'].dt.hour < end_hour_utc) &
+            (df_temp['lat'] >= LAT_MIN) & (df_temp['lat'] <= LAT_MAX) &
+            (df_temp['lon'] >= LON_MIN) & (df_temp['lon'] <= LON_MAX)
+        )
+        df_temp_shift = df_temp.loc[mask_shift]
+        
+        if df_temp_shift.empty:
+            continue
+            
+        # FILTER 2: Cari P95 per Jam (Biar metodenya apple-to-apple)
+        def get_p95_idx_local(group):
+            p95 = group['predicted_v_max'].quantile(0.95)
+            if pd.isna(p95): return group.index[0]
+            return (group['predicted_v_max'] - p95).abs().idxmin()
+            
+        idx_p95 = df_temp_shift.groupby('datetime_wib').apply(get_p95_idx_local)
+        df_p95_shift = df_temp_shift.loc[idx_p95]
+        
+        # Ambil tanggal UTC dominan dari shift tersebut
+        tanggal_str = df_temp_shift['datetime'].dt.strftime('%Y-%m-%d').mode()[0]
+        
+        # Cari nilai maksimum HANYA dari data P95 di area Ketapang-Gilimanuk
+        max_pred_shift = df_p95_shift['predicted_v_max'].max() * faktor_konversi
+        
+        rekap_prediksi.append({
+            'Tanggal': tanggal_str,
+            'Shift': shift_nama,
+            f'Prediksi Model ({satuan_teks})': max_pred_shift,
+            'Baserun': os.path.basename(filepath)
+        })
+        
+    df_rekap_pred = pd.DataFrame(rekap_prediksi)
+
+    # 3. Muat Data Real dari CSV Validasi
+    from pathlib import Path
+    BASE_DIR = Path(__file__).parent.resolve()
+    path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
+    
+    if path_verif_csv.exists():
+        df_real = pd.read_csv(path_verif_csv)
+        
+        # ADAPTASI SINKRONISASI WAKTU KE UTC
+        if 'Waktu_UTC' in df_real.columns:
+            df_real['waktu_utc'] = pd.to_datetime(df_real['Waktu_UTC'])
+            df_real['Tanggal'] = df_real['waktu_utc'].dt.strftime('%Y-%m-%d')
+            
+            # 00:00 - 11:59 UTC adalah Shift Pagi, 12:00 - 23:59 UTC adalah Shift Malam
+            df_real['Shift'] = df_real['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
+            
+            # =========================================================
+            # REVISI KUALITAS DATA: HAPUS JIKA < 50%
+            # =========================================================
+            # 1. Agregasi Max dan Hitung "Jumlah Jam" yang datanya masuk
+            df_real = df_real.groupby(['Tanggal', 'Shift']).agg(
+                Real_Max_Speed_ms=('Real_Max_Speed_ms', 'max'),
+                Jumlah_Jam=('Real_Max_Speed_ms', 'count') 
+            ).reset_index()
+            
+            # 2. FILTERING: Hapus data yang kurang dari 50% (kurang dari 6 jam)
+            df_real = df_real[df_real['Jumlah_Jam'] >= 6].copy()
+            
+            # 3. Terapkan Quality Control untuk data yang lolos filter
+            def qc_shift(jml):
+                if jml >= 9:       # 9 - 12 Jam (Lebih dari 75%)
+                    return ">75% (Sangat Baik)"
+                else:              # 6 - 8 Jam (50% sampai 75%)
+                    return "50% - 75% (Cukup)"
+                    
+            df_real['Kualitas_Data'] = df_real['Jumlah_Jam'].apply(qc_shift)
+            
+        elif 'Jendela_Waktu' in df_real.columns:
+            # Format CSV lama (udah 12 jaman dari sananya)
+            df_real['Shift'] = df_real['Jendela_Waktu'].apply(lambda x: "Pagi" if "00:00" in str(x) else "Malam")
+            
+        # 4. Gabungkan (Merge) berdasarkan Tanggal dan Shift
+        df_verif = pd.merge(
+            df_rekap_pred, 
+            df_real[['Tanggal', 'Shift', 'Real_Max_Speed_ms', 'Kualitas_Data']], 
+            on=['Tanggal', 'Shift'], 
+            how='left' 
+        )
+    else:
+        df_verif = df_rekap_pred.copy()
+        df_verif['Real_Max_Speed_ms'] = np.nan
+        df_verif['Kualitas_Data'] = "Tidak Ada Data CSV"
+
+    # 5. Rapikan Nama Kolom & Konversi Data Real (Jika milih Knot)
+    df_verif.rename(columns={
+        'Real_Max_Speed_ms': f'Data Real ({satuan_teks})',
+        'Kualitas_Data': 'Ketersediaan Data'
+    }, inplace=True)
+    
+    if satuan_teks == "Knot":
+        df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] * 1.94384
+
+    df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Menunggu Data")
+
+    # 6. Kalkulasi Selisih & Metrik
+    df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] - df_verif[f'Prediksi Model ({satuan_teks})']
+
+    valid_data = df_verif.dropna(subset=[f'Selisih ({satuan_teks})'])
+    
+    if len(valid_data) > 0:
+        mae_score = valid_data[f'Selisih ({satuan_teks})'].abs().mean()
+        rmse_score = np.sqrt((valid_data[f'Selisih ({satuan_teks})']**2).mean())
+        delta_teks = "Performa Histori"
+    else:
+        mae_score = 0.0
+        rmse_score = 0.0
+        delta_teks = "Menunggu Observasi"
+
+    # 7. Formatting Angka
+    df_verif[f'Prediksi Model ({satuan_teks})'] = df_verif[f'Prediksi Model ({satuan_teks})'].map('{:.2f}'.format)
+    df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+    df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Selisih ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+
+    # Urutkan dari yang terbaru
+    df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
+
+    kolom_fix = [
+        'Tanggal', 
+        'Shift',
+        'Baserun',
+        f'Prediksi Model ({satuan_teks})', 
+        f'Data Real ({satuan_teks})', 
+        f'Selisih ({satuan_teks})', 
+        'Ketersediaan Data'
+    ]
+    df_verif = df_verif[kolom_fix]
+
+    # 8. Render Metrik
+    col_v1, col_v2, col_v3 = st.columns(3)
+
+    with col_v1:
+        st.metric(label="📌 Rekap Validasi Tersedia", value=f"{len(df_verif)} Baserun", delta=f"{len(valid_data)} Tervalidasi Data Real", delta_color="normal")
+
+    with col_v2:
+        st.metric(label="📏 Mean Absolute Error (MAE)", value=f"{mae_score:.2f} {satuan_teks}", delta=delta_teks, delta_color="normal" if not valid_data.empty else "off")
+
+    with col_v3:
+        st.metric(label="📉 Root Mean Square Error (RMSE)", value=f"{rmse_score:.2f} {satuan_teks}", delta=delta_teks, delta_color="normal" if not valid_data.empty else "off")
+
+    # 9. Render Tabel dengan Styling
+    def warnai_ketersediaan(val):
+        if isinstance(val, str):
+            if 'Sangat Baik' in val:
+                return 'color: #28a745;'
+            elif 'Cukup' in val:
+                return 'color: #ffc107;'
+            elif 'Menunggu' in val or 'Tidak' in val:
+                return 'color: #dc3545;'
+        return ''
+
+    styled_df = df_verif.style.map(warnai_ketersediaan, subset=['Ketersediaan Data'])
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
