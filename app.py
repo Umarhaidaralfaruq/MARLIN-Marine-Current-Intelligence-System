@@ -1045,29 +1045,62 @@ with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
     if satuan_teks == "Knot":
         df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] * 1.94384
 
-    df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Menunggu Data")
+    df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
 
-    # 6. Kalkulasi Selisih & Metrik
+    # =========================================================
+    # 6. Kalkulasi Selisih & Metrik (UPDATE: RMSE & MBE)
+    # =========================================================
+    # Selisih = Real - Prediksi
+    # Jika Positif (+) -> Real > Prediksi (Underpredict / Bahaya)
+    # Jika Negatif (-) -> Real < Prediksi (Overpredict / Aman)
     df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] - df_verif[f'Prediksi Model ({satuan_teks})']
 
+    # Urutkan data dari yang terbaru agar mudah mengambil 6 terakhir
+    df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
+
+    # Ambil data yang memiliki observasi real
     valid_data = df_verif.dropna(subset=[f'Selisih ({satuan_teks})'])
     
-    if len(valid_data) > 0:
-        mae_score = valid_data[f'Selisih ({satuan_teks})'].abs().mean()
-        rmse_score = np.sqrt((valid_data[f'Selisih ({satuan_teks})']**2).mean())
-        delta_teks = "Performa Histori"
+    # Ambil MAKSIMAL 6 data terakhir yang valid untuk perhitungan metrik
+    valid_data_6_terakhir = valid_data.head(6)
+    
+    if len(valid_data_6_terakhir) > 0:
+        # GANTI: MAE dihapus, ganti MBE (tanpa .abs())
+        mbe_score = valid_data_6_terakhir[f'Selisih ({satuan_teks})'].mean() 
+        rmse_score = np.sqrt((valid_data_6_terakhir[f'Selisih ({satuan_teks})']**2).mean())
+        
+        # --- LOGIKA TEKS METRIK RMSE ---
+        if rmse_score <= 0.4:
+            delta_teks_rmse = "Akurasi Baik & Aman"
+            color_rmse = "normal"
+        else:
+            delta_teks_rmse = "Waspada Error Ekstrem"
+            color_rmse = "inverse" # Merah di Streamlit
+            
+        # --- LOGIKA TEKS METRIK MBE (BIAS) ---
+        if mbe_score > 0.1: # Threshold underpredict
+            delta_teks_mbe = "Model Cenderung Underestimate"
+            color_mbe = "inverse" # Akan jadi warna Merah (Bahaya)
+        elif mbe_score < -0.1: # Threshold overpredict
+            delta_teks_mbe = "Model Cenderung Overestimate"
+            color_mbe = "normal" # Akan jadi warna Hijau 
+        else:
+            delta_teks_mbe = "Bias Seimbang / Sangat Presisi"
+            color_mbe = "off" # Warna Abu-abu
     else:
-        mae_score = 0.0
+        mbe_score = 0.0
         rmse_score = 0.0
-        delta_teks = "Menunggu Observasi"
+        delta_teks_rmse = "Menunggu Observasi"
+        delta_teks_mbe = "Menunggu Observasi"
+        color_rmse = "off"
+        color_mbe = "off"
 
+    # =========================================================
     # 7. Formatting Angka
+    # =========================================================
     df_verif[f'Prediksi Model ({satuan_teks})'] = df_verif[f'Prediksi Model ({satuan_teks})'].map('{:.2f}'.format)
     df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
     df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Selisih ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
-
-    # Urutkan dari yang terbaru
-    df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
 
     kolom_fix = [
         'Tanggal', 
@@ -1080,17 +1113,34 @@ with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
     ]
     df_verif = df_verif[kolom_fix]
 
-    # 8. Render Metrik
+    # =========================================================
+    # 8. Render Metrik di UI Streamlit
+    # =========================================================
     col_v1, col_v2, col_v3 = st.columns(3)
 
     with col_v1:
-        st.metric(label="📌 Rekap Validasi Tersedia", value=f"{len(df_verif)} Baserun", delta=f"{len(valid_data)} Tervalidasi Data Real", delta_color="normal")
+        st.metric(
+            label="📌 Rekap Validasi Tersedia", 
+            value=f"{len(df_verif)} Baserun", 
+            delta=f"{len(valid_data)} Tervalidasi Data Real", 
+            delta_color="normal"
+        )
 
     with col_v2:
-        st.metric(label="📏 Mean Absolute Error (MAE)", value=f"{mae_score:.2f} {satuan_teks}", delta=delta_teks, delta_color="normal" if not valid_data.empty else "off")
+        st.metric(
+            label="🧭 MBE (6 Baserun Terakhir)", 
+            value=f"{mbe_score:.2f} {satuan_teks}", 
+            delta=delta_teks_mbe, 
+            delta_color=color_mbe if not valid_data_6_terakhir.empty else "off"
+        )
 
     with col_v3:
-        st.metric(label="📉 Root Mean Square Error (RMSE)", value=f"{rmse_score:.2f} {satuan_teks}", delta=delta_teks, delta_color="normal" if not valid_data.empty else "off")
+        st.metric(
+            label="📉 RMSE (6 Baserun Terakhir)", 
+            value=f"{rmse_score:.2f} {satuan_teks}", 
+            delta=delta_teks_rmse, 
+            delta_color=color_rmse if not valid_data_6_terakhir.empty else "off"
+        )
 
     # 9. Render Tabel dengan Styling
     def warnai_ketersediaan(val):
