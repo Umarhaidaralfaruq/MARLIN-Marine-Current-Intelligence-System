@@ -927,7 +927,7 @@ with col_rep2:
 # 6. TABEL VERIFIKASI HISTORIS MODEL VS DATA REAL (ALL BASERUNS - 12 JAM)
 # =============================================================================
 st.divider()
-st.subheader("🔬 Sejarah Verifikasi Model vs HF Radar (Semua Baserun) 🔗")
+st.subheader("🔬 Verifikasi Model vs HF Radar 🔗")
 
 with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
     rekap_prediksi = []
