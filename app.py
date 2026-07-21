@@ -201,8 +201,8 @@ plt.rcParams['axes.labelweight'] = 'bold'
 plt.rcParams['axes.titleweight'] = 'bold'
 
 # Batasan Area Operasional (Ketapang - Gilimanuk)
-LAT_MIN, LAT_MAX = -8.209, -8.160
-LON_MIN, LON_MAX = 114.387, 114.435
+LAT_MIN, LAT_MAX = -8.209, -8.160084
+LON_MIN, LON_MAX = 114.387089, 114.435215
 
 # ==========================================
 # 1. SETUP HALAMAN WEBSITE
@@ -609,7 +609,6 @@ with col2:
     def derajat_ke_panah(deg):
         if pd.isna(deg): 
             return ""
-        # Mengonversi derajat (0-360) menjadi simbol panah mata angin instan
         panah = ['↑ U', '↗ TL', '→ T', '↘ TG', '↓ S', '↙ BD', '← B', '↖ BL']
         idx = int((deg + 22.5) % 360 // 45)
         return panah[idx]
@@ -617,54 +616,19 @@ with col2:
     def derajat_ke_arah_lengkap(deg):
         if pd.isna(deg): 
             return ""
-        # Menerjemahkan derajat menjadi nama arah mata angin lengkap dalam bahasa Indonesia
         arah = ['Utara', 'Timur Laut', 'Timur', 'Tenggara', 'Selatan', 'Barat Daya', 'Barat', 'Barat Laut']
         idx = int((deg + 22.5) % 360 // 45)
         return arah[idx]
     
-    st.subheader("📈 Kecepatan & Arah Arus 24 Jam Ke Depan")
-    
-    # Mengambil dari data P95 yang sudah dikalkulasi di atas
+    # =========================================================================
+    # DATA 24 JAM TETAP DISIMPAN (TIDAK DITAMPILKAN) UNTUK TOMBOL DOWNLOAD
+    # =========================================================================
     df_trend = df_trend_p95.copy()
-    
-    # Tambahkan kolom panah arah mata angin berdasarkan derajatnya
     df_trend['arah_panah'] = df_trend['arah_derajat'].apply(derajat_ke_panah)
     
-    # Plotly Line Chart Utama (24 Jam) dengan Modul Teks Panah
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df_trend['datetime_wib'], 
-        y=df_trend['predicted_v_max'],
-        mode='lines+markers+text',          # Aktifkan fitur teks di kurva
-        name='Arus Maksimum',
-        line=dict(color='black', width=2),
-        marker=dict(size=8, color='crimson'),
-        text=df_trend['arah_panah'],        # Set panah sebagai teks tampil
-        textposition="top center",          # Posisikan persis di atas lingkaran merah
-        hovertemplate=(
-            "<b>Waktu:</b> %{x}<br>"
-            "<b>Kecepatan:</b> %{y:.2f} " + satuan_teks + "<br>"
-            "<b>Arah Dominan:</b> %{text}<extra></extra>"
-        )
-    ))
-    
-    # Garis Batas Waspada
-    fig.add_hline(y=batas_waspada, line_dash="dash", line_color="orange", annotation_text=f"Batas Waspada ({batas_waspada:.2f} {satuan_teks})")
-    
-    
-    fig.update_layout(
-        xaxis_title="Waktu (WIB)",
-        yaxis_title=f"Kecepatan Maksimum ({satuan_teks})",
-        hovermode="x unified",
-        margin=dict(l=0, r=0, t=30, b=0)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
     # ==========================================
-    # FOKUS OPERASIONAL SHIFT JAGA (12 JAM)
+    # 1. GRAFIK FOKUS OPERASIONAL SHIFT JAGA (12 JAM) - NAIK KE ATAS
     # ==========================================
-    # Fungsi penentu shift menggunakan waktu UTC asli Anda
     def get_shift_range_now(df_prediksi_24jam):
         last_time = df_prediksi_24jam['datetime'].max()
         last_hour = last_time.hour 
@@ -680,47 +644,31 @@ with col2:
                                   (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
                                   (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)]
 
-    st.divider()
-    st.subheader(f"🎯 Kecepatan & Arah Arus 12 Jam Ke Depan ({shift_name})")
+    st.subheader(f"📈 Kecepatan & Arah Arus 12 Jam Ke Depan ({shift_name})")
 
     if not df_shift_raw.empty:
-        # 1. Ambil data spasial P95 per jam untuk tren shift
         idx_p95_shift = df_shift_raw.groupby('datetime_wib').apply(get_p95_idx)
         df_shift = df_shift_raw.loc[idx_p95_shift].reset_index(drop=True)
         
-        # Mapping arah panah untuk grafik dan arah lengkap untuk teks narasi
         df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
         df_shift['arah_lengkap'] = df_shift['arah_derajat'].apply(derajat_ke_arah_lengkap)
 
-        # ========================================================
-        # BARU: HITUNG ARAH DOMINAN (MODE) SEPANJANG SHIFT
-        # ========================================================
         def penentu_utara_selatan(deg):
-            if pd.isna(deg): 
-                return None
-            # Mengelompokkan derajat: 270° - 89.9° (Utara) dan 90° - 269.9° (Selatan)
-            if deg >= 270 or deg < 90:
-                return "utara"
-            else:
-                return "selatan"
+            if pd.isna(deg): return None
+            if deg >= 270 or deg < 90: return "utara"
+            else: return "selatan"
 
-        # Membuat kolom sementara untuk mendeteksi utara/selatan
         df_shift['arah_bipolar'] = df_shift['arah_derajat'].apply(penentu_utara_selatan)
 
         if not df_shift['arah_bipolar'].empty:
-            # .mode()[0] akan mengambil arah (utara/selatan) yang paling sering muncul
             arah_dominan_shift = df_shift['arah_bipolar'].mode()[0]
         else:
             arah_dominan_shift = "tidak diketahui"
 
-        # 2. Cari data waktu dan nilai kecepatan absolut tertinggi di shift ini
         baris_max_shift = df_shift.loc[df_shift['predicted_v_max'].idxmax()]
         max_speed_shift = baris_max_shift['predicted_v_max']
         waktu_max_shift = baris_max_shift['datetime_wib'].strftime('%H:%M WIB')
         
-        # ========================================================
-        # 3. NARASI PERINGATAN DINAMIS (SESUAI REQUEST)
-        # ========================================================
         if max_speed_shift > 1.2:
             st.error(
                 f"🚨 **PERINGATAN DINI** \n"
@@ -734,7 +682,6 @@ with col2:
                 f"dengan arah arus dominan bergerak ke **{arah_dominan_shift}**."
             )
             
-        # Grafik Zoom Khusus Shift dengan Teks Panah
         fig_shift = go.Figure()
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], 
@@ -775,8 +722,79 @@ with col2:
         )
         
         st.plotly_chart(fig_shift, use_container_width=True)
+
+        # ==========================================
+        # 2. TABEL ARUS KETAPANG & GILIMANUK (MENGISI POSISI LAMA)
+        # ==========================================
+        st.divider()
+        st.subheader(f"📊 Kecepatan Arus ({shift_name}) Per Pelabuhan")
+
+        LAT_MIN_KET, LAT_MAX_KET = -8.209161, -8.151693
+        LON_MIN_KET, LON_MAX_KET = 114.38673, 114.414975
+
+        LAT_MIN_GIL, LAT_MAX_GIL = -8.21003, -8.16198
+        LON_MIN_GIL, LON_MAX_GIL = 114.41354, 114.43416
+
+        # FUNGSI BARU: Pembulatan murni ke Utara / Selatan
+        def derajat_ke_utara_selatan(deg):
+            if pd.isna(deg): return ""
+            if deg >= 270 or deg < 90:
+                return "Utara"
+            else:
+                return "Selatan"
+
+        def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
+            df_area = df_raw[
+                (df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) &
+                (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)
+            ]
+            if df_area.empty: return pd.DataFrame()
+                
+            idx_p95_area = df_area.groupby('datetime_wib').apply(get_p95_idx)
+            df_trend_area = df_area.loc[idx_p95_area].reset_index(drop=True)
+            
+            tabel = pd.DataFrame({
+                'Waktu (WIB)': df_trend_area['datetime_wib'].dt.strftime('%H:%M'),
+                # Biarkan berbentuk float di sini agar logika warna peringatan tidak error
+                f'Kecepatan ({satuan_teks})': df_trend_area['predicted_v_max'], 
+                'Arah Dominan': df_trend_area['arah_derajat'].apply(derajat_ke_utara_selatan) # Panggil fungsi baru
+            })
+            return tabel
+
+        df_shift_full = df_spatial.loc[mask_shift]
+        tabel_ketapang = buat_tabel_area(df_shift_full, LAT_MIN_KET, LAT_MAX_KET, LON_MIN_KET, LON_MAX_KET)
+        tabel_gilimanuk = buat_tabel_area(df_shift_full, LAT_MIN_GIL, LAT_MAX_GIL, LON_MIN_GIL, LON_MAX_GIL)
+
+        col_ket, col_gil = st.columns(2)
+        
+        # Logika warna merah untuk waspada
+        def style_kecepatan(val):
+            return 'color: red; font-weight: bold;' if val > batas_waspada else ''
+
+        with col_ket:
+            st.markdown("**🚢 Area Pelabuhan Ketapang**")
+            if not tabel_ketapang.empty:
+                # Format 2 angka di belakang koma dilakukan di level Styler UI
+                styled_ket = tabel_ketapang.style.format({f'Kecepatan ({satuan_teks})': "{:.2f}"}).map(
+                    style_kecepatan, subset=[f'Kecepatan ({satuan_teks})']
+                )
+                st.dataframe(styled_ket, hide_index=True, use_container_width=True)
+            else:
+                st.info("Data tidak tersedia.")
+
+        with col_gil:
+            st.markdown("**🚢 Area Pelabuhan Gilimanuk**")
+            if not tabel_gilimanuk.empty:
+                styled_gil = tabel_gilimanuk.style.format({f'Kecepatan ({satuan_teks})': "{:.2f}"}).map(
+                    style_kecepatan, subset=[f'Kecepatan ({satuan_teks})']
+                )
+                st.dataframe(styled_gil, hide_index=True, use_container_width=True)
+            else:
+                st.info("Data tidak tersedia.")
+
     else:
         st.info(f"Data prediksi untuk {shift_name} belum tersedia di jendela waktu saat ini.")
+
         
 # ==========================================
 # 5. GENERATOR LAPORAN BMKG (SIAP DOWNLOAD)
@@ -930,24 +948,66 @@ st.divider()
 st.subheader("🔬 Verifikasi Model vs HF Radar 🔗")
 
 with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
+    
+    # ---------------------------------------------------------
+    # LANGKAH 1: PRE-LOAD DATA REAL (AGAR BISA MATCHING 12 TITIK)
+    # ---------------------------------------------------------
+    from pathlib import Path
+    BASE_DIR = Path(__file__).parent.resolve()
+    path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
+    
+    df_real_hourly = pd.DataFrame()
+    df_real_agg = pd.DataFrame()
+    
+    if path_verif_csv.exists():
+        df_real_raw = pd.read_csv(path_verif_csv)
+        
+        if 'Waktu_UTC' in df_real_raw.columns:
+            df_real_raw['waktu_utc'] = pd.to_datetime(df_real_raw['Waktu_UTC'])
+            df_real_raw['Tanggal'] = df_real_raw['waktu_utc'].dt.strftime('%Y-%m-%d')
+            df_real_raw['Shift'] = df_real_raw['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
+            
+            # Konversi satuan Data Real sejak awal (m/s atau Knot)
+            if satuan_teks == "Knot":
+                df_real_raw['Real_Max_Speed_ms'] = df_real_raw['Real_Max_Speed_ms'] * 1.94384
+            
+            # Simpan data mentah per-jam untuk kalkulasi RMSE/MBE 12 Titik
+            df_real_hourly = df_real_raw[['waktu_utc', 'Real_Max_Speed_ms']].copy()
+            
+            # Buat data agregasi untuk mencari nilai Maksimal & Ketersediaan Data
+            df_real_agg = df_real_raw.groupby(['Tanggal', 'Shift']).agg(
+                Real_Max_Speed_Max=('Real_Max_Speed_ms', 'max'),
+                Jumlah_Jam=('Real_Max_Speed_ms', 'count') 
+            ).reset_index()
+            
+            # Filter minimal 6 jam data
+            df_real_agg = df_real_agg[df_real_agg['Jumlah_Jam'] >= 6].copy()
+            
+            def qc_shift(jml):
+                if jml >= 9: return ">75% (Sangat Baik)"
+                else: return "50% - 75% (Cukup)"
+                    
+            df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(qc_shift)
+
+    # ---------------------------------------------------------
+    # LANGKAH 2: LOOPING DATA PREDIKSI (BASERUNS)
+    # ---------------------------------------------------------
     rekap_prediksi = []
     
-    # 1. Fungsi penentu shift yang persis sama dengan logika grafik 12 Jam lu!
     def cek_shift_target(df_prediksi_24jam):
         last_time = df_prediksi_24jam['datetime'].max()
-        if last_time.hour < 12: 
-            return 12, 24, "Malam"
-        else: 
-            return 0, 12, "Pagi"
+        if last_time.hour < 12: return 12, 24, "Malam"
+        else: return 0, 12, "Pagi"
 
-    # 2. Looping ke semua file baserun yang tersedia di folder
+    def get_p95_idx_local(group):
+        p95 = group['predicted_v_max'].quantile(0.95)
+        if pd.isna(p95): return group.index[0]
+        return (group['predicted_v_max'] - p95).abs().idxmin()
+
     for filepath in list_of_files:
         df_temp = load_data(filepath)
-        
-        # Dapatkan target operasional 12 jam dari file ini
         start_hour_utc, end_hour_utc, shift_nama = cek_shift_target(df_temp)
         
-        # FILTER 1: Waktu & Area Spasial (Biar sejajar sama grafik 12 Jam!)
         mask_shift = (
             (df_temp['datetime'].dt.hour >= start_hour_utc) & 
             (df_temp['datetime'].dt.hour < end_hour_utc) &
@@ -959,199 +1019,192 @@ with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
         if df_temp_shift.empty:
             continue
             
-        # FILTER 2: Cari P95 per Jam (Biar metodenya apple-to-apple)
-        def get_p95_idx_local(group):
-            p95 = group['predicted_v_max'].quantile(0.95)
-            if pd.isna(p95): return group.index[0]
-            return (group['predicted_v_max'] - p95).abs().idxmin()
-            
+        # Ambil 12 titik (P95 tiap jamnya)
         idx_p95 = df_temp_shift.groupby('datetime_wib').apply(get_p95_idx_local)
-        df_p95_shift = df_temp_shift.loc[idx_p95]
+        df_p95_shift = df_temp_shift.loc[idx_p95].copy()
         
-        # Ambil tanggal UTC dominan dari shift tersebut
         tanggal_str = df_temp_shift['datetime'].dt.strftime('%Y-%m-%d').mode()[0]
         
-        # Cari nilai maksimum HANYA dari data P95 di area Ketapang-Gilimanuk
-        max_pred_shift = df_p95_shift['predicted_v_max'].max() * faktor_konversi
+        # Cari nilai prediksi maksimum di shift tersebut
+        df_p95_shift['pred_speed'] = df_p95_shift['predicted_v_max'] * faktor_konversi
+        max_pred_shift = df_p95_shift['pred_speed'].max()
+        
+        shift_mbe = np.nan
+        shift_rmse = np.nan
+        
+        # --- PERHITUNGAN RMSE & MBE DARI 12 TITIK (PER JAM) ---
+        raw_errors_shift = [] # KODE BARU: Inisialisasi wadah error per jam
+        
+        if not df_real_hourly.empty:
+            # Gabungkan prediksi 12 jam dengan data real 12 jam berdasarkan waktu (Inner Join)
+            df_merged = pd.merge(
+                df_p95_shift[['datetime', 'pred_speed']], 
+                df_real_hourly, 
+                left_on='datetime', 
+                right_on='waktu_utc', 
+                how='inner'
+            )
+            
+            # Hapus baris jika data observasi real atau prediksinya kosong (NaN)
+            df_merged = df_merged.dropna(subset=['Real_Max_Speed_ms', 'pred_speed'])
+            
+            # Jika ada data yang valid (keduanya ada nilainya)
+            if not df_merged.empty:
+                errors = df_merged['Real_Max_Speed_ms'] - df_merged['pred_speed']
+                # MBE & RMSE Level Shift (Tetap dihitung untuk tabel)
+                shift_mbe = errors.mean()
+                shift_rmse = np.sqrt((errors**2).mean())
+                
+                # KODE BARU: Simpan list error mentah untuk perhitungan keseluruhan
+                raw_errors_shift = errors.tolist() 
         
         rekap_prediksi.append({
             'Tanggal': tanggal_str,
             'Shift': shift_nama,
-            f'Prediksi Model ({satuan_teks})': max_pred_shift,
-            'Baserun': os.path.basename(filepath)
+            f'Prediksi Arus Maks ({satuan_teks})': max_pred_shift,
+            f'MBE ({satuan_teks})': shift_mbe,
+            f'RMSE ({satuan_teks})': shift_rmse,
+            'Baserun': os.path.basename(filepath),
+            'raw_errors': raw_errors_shift # KODE BARU: Bawa list error ke dataframe
         })
         
     df_rekap_pred = pd.DataFrame(rekap_prediksi)
 
-    # 3. Muat Data Real dari CSV Validasi
-    from pathlib import Path
-    BASE_DIR = Path(__file__).parent.resolve()
-    path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
-    
-    if path_verif_csv.exists():
-        df_real = pd.read_csv(path_verif_csv)
-        
-        # ADAPTASI SINKRONISASI WAKTU KE UTC
-        if 'Waktu_UTC' in df_real.columns:
-            df_real['waktu_utc'] = pd.to_datetime(df_real['Waktu_UTC'])
-            df_real['Tanggal'] = df_real['waktu_utc'].dt.strftime('%Y-%m-%d')
-            
-            # 00:00 - 11:59 UTC adalah Shift Pagi, 12:00 - 23:59 UTC adalah Shift Malam
-            df_real['Shift'] = df_real['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
-            
-            # =========================================================
-            # REVISI KUALITAS DATA: HAPUS JIKA < 50%
-            # =========================================================
-            # 1. Agregasi Max dan Hitung "Jumlah Jam" yang datanya masuk
-            df_real = df_real.groupby(['Tanggal', 'Shift']).agg(
-                Real_Max_Speed_ms=('Real_Max_Speed_ms', 'max'),
-                Jumlah_Jam=('Real_Max_Speed_ms', 'count') 
-            ).reset_index()
-            
-            # 2. FILTERING: Hapus data yang kurang dari 50% (kurang dari 6 jam)
-            df_real = df_real[df_real['Jumlah_Jam'] >= 6].copy()
-            
-            # 3. Terapkan Quality Control untuk data yang lolos filter
-            def qc_shift(jml):
-                if jml >= 9:       # 9 - 12 Jam (Lebih dari 75%)
-                    return ">75% (Sangat Baik)"
-                else:              # 6 - 8 Jam (50% sampai 75%)
-                    return "50% - 75% (Cukup)"
-                    
-            df_real['Kualitas_Data'] = df_real['Jumlah_Jam'].apply(qc_shift)
-            
-        elif 'Jendela_Waktu' in df_real.columns:
-            # Format CSV lama (udah 12 jaman dari sananya)
-            df_real['Shift'] = df_real['Jendela_Waktu'].apply(lambda x: "Pagi" if "00:00" in str(x) else "Malam")
-            
-        # 4. Gabungkan (Merge) berdasarkan Tanggal dan Shift
+    # ---------------------------------------------------------
+    # LANGKAH 3: GABUNGKAN DENGAN NILAI MAX REAL & RAPIKAN TABEL
+    # ---------------------------------------------------------
+    if not df_rekap_pred.empty and not df_real_agg.empty:
         df_verif = pd.merge(
             df_rekap_pred, 
-            df_real[['Tanggal', 'Shift', 'Real_Max_Speed_ms', 'Kualitas_Data']], 
+            df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Kualitas_Data']], 
             on=['Tanggal', 'Shift'], 
             how='left' 
         )
-    else:
-        df_verif = df_rekap_pred.copy()
-        df_verif['Real_Max_Speed_ms'] = np.nan
-        df_verif['Kualitas_Data'] = "Tidak Ada Data CSV"
-
-    # 5. Rapikan Nama Kolom & Konversi Data Real (Jika milih Knot)
-    df_verif.rename(columns={
-        'Real_Max_Speed_ms': f'Data Real ({satuan_teks})',
-        'Kualitas_Data': 'Ketersediaan Data'
-    }, inplace=True)
-    
-    if satuan_teks == "Knot":
-        df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] * 1.94384
-
-    df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
-
-    # =========================================================
-    # 6. Kalkulasi Selisih & Metrik (UPDATE: RMSE & MBE)
-    # =========================================================
-    # Selisih = Real - Prediksi
-    # Jika Positif (+) -> Real > Prediksi (Underpredict / Bahaya)
-    # Jika Negatif (-) -> Real < Prediksi (Overpredict / Aman)
-    df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'] - df_verif[f'Prediksi Model ({satuan_teks})']
-
-    # Urutkan data dari yang terbaru agar mudah mengambil 6 terakhir
-    df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
-
-    # Ambil data yang memiliki observasi real
-    valid_data = df_verif.dropna(subset=[f'Selisih ({satuan_teks})'])
-    
-    # Ambil MAKSIMAL 6 data terakhir yang valid untuk perhitungan metrik
-    valid_data_6_terakhir = valid_data.head(6)
-    
-    if len(valid_data_6_terakhir) > 0:
-        # GANTI: MAE dihapus, ganti MBE (tanpa .abs())
-        mbe_score = valid_data_6_terakhir[f'Selisih ({satuan_teks})'].mean() 
-        rmse_score = np.sqrt((valid_data_6_terakhir[f'Selisih ({satuan_teks})']**2).mean())
         
-        # --- LOGIKA TEKS METRIK RMSE ---
-        if rmse_score <= 0.4:
-            delta_teks_rmse = "Akurasi Baik & Aman"
-            color_rmse = "normal"
-        else:
-            delta_teks_rmse = "Waspada Error Ekstrem"
-            color_rmse = "inverse" # Merah di Streamlit
-            
-        # --- LOGIKA TEKS METRIK MBE (BIAS) ---
-        if mbe_score > 0.1: # Threshold underpredict
-            delta_teks_mbe = "Model Cenderung Underestimate"
-            color_mbe = "inverse" # Akan jadi warna Merah (Bahaya)
-        elif mbe_score < -0.1: # Threshold overpredict
-            delta_teks_mbe = "Model Cenderung Overestimate"
-            color_mbe = "normal" # Akan jadi warna Hijau 
-        else:
-            delta_teks_mbe = "Bias Seimbang / Sangat Presisi"
-            color_mbe = "off" # Warna Abu-abu
+        # --- KODE TAMBAHAN UNTUK FIX MBE/RMSE MUNCUL SAAT REAL KOSONG ---
+        # Hapus nilai MBE dan RMSE jika Data Real (Real_Max_Speed_Max) kosong / tidak memenuhi syarat 6 jam
+        mask_kosong = df_verif['Real_Max_Speed_Max'].isna()
+        df_verif.loc[mask_kosong, f'MBE ({satuan_teks})'] = np.nan
+        df_verif.loc[mask_kosong, f'RMSE ({satuan_teks})'] = np.nan
+        # -----------------------------------------------------------------
     else:
-        mbe_score = 0.0
-        rmse_score = 0.0
-        delta_teks_rmse = "Menunggu Observasi"
-        delta_teks_mbe = "Menunggu Observasi"
-        color_rmse = "off"
-        color_mbe = "off"
+        df_verif = df_rekap_pred.copy() if not df_rekap_pred.empty else pd.DataFrame()
+        if not df_verif.empty:
+            df_verif['Real_Max_Speed_Max'] = np.nan
+            df_verif['Kualitas_Data'] = "Tidak Ada Data CSV"
 
-    # =========================================================
-    # 7. Formatting Angka
-    # =========================================================
-    df_verif[f'Prediksi Model ({satuan_teks})'] = df_verif[f'Prediksi Model ({satuan_teks})'].map('{:.2f}'.format)
-    df_verif[f'Data Real ({satuan_teks})'] = df_verif[f'Data Real ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
-    df_verif[f'Selisih ({satuan_teks})'] = df_verif[f'Selisih ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+    if not df_verif.empty:
+        df_verif.rename(columns={
+            'Real_Max_Speed_Max': f'Observasi Arus Maks ({satuan_teks})',
+            'Kualitas_Data': 'Ketersediaan Data'
+        }, inplace=True)
+        
+        df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
 
-    kolom_fix = [
-        'Tanggal', 
-        'Shift',
-        'Baserun',
-        f'Prediksi Model ({satuan_teks})', 
-        f'Data Real ({satuan_teks})', 
-        f'Selisih ({satuan_teks})', 
-        'Ketersediaan Data'
-    ]
-    df_verif = df_verif[kolom_fix]
+        # Urutkan dari yang terbaru
+        df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
 
-    # =========================================================
-    # 8. Render Metrik di UI Streamlit
-    # =========================================================
-    col_v1, col_v2, col_v3 = st.columns(3)
+        # Ambil maksimal 6 baris terakhir di mana data Prediksi, Real, dan RMSE sepenuhnya tersedia
+        valid_data = df_verif.dropna(subset=[
+            f'RMSE ({satuan_teks})', 
+            f'Observasi Arus Maks ({satuan_teks})'
+        ])
+        valid_data_6_terakhir = valid_data.head(6)
+        
+        if len(valid_data_6_terakhir) > 0:
+            # --- KODE BARU: MENGHITUNG METRIK KESELURUHAN (GLOBAL) ---
+            # Lebur semua error per jam dari 6 shift terakhir menjadi satu array besar
+            all_errors = []
+            for err_list in valid_data_6_terakhir['raw_errors']:
+                if isinstance(err_list, list) and len(err_list) > 0:
+                    all_errors.extend(err_list)
+                    
+            all_errors = np.array(all_errors)
+            
+            # Hitung Global MBE dan Global RMSE dari sekumpulan titik jam tersebut
+            mbe_score = all_errors.mean() if len(all_errors) > 0 else 0.0
+            rmse_score = np.sqrt((all_errors**2).mean()) if len(all_errors) > 0 else 0.0
+            # ---------------------------------------------------------
+            
+            if rmse_score <= 0.4:
+                delta_teks_rmse = "Akurasi Baik & Aman"
+                color_rmse = "normal"
+            else:
+                delta_teks_rmse = "Waspada Error Ekstrem"
+                color_rmse = "inverse"
+                
+            if mbe_score > 0.1: 
+                delta_teks_mbe = "Model Cenderung Underestimate"
+                color_mbe = "off" 
+            elif mbe_score < -0.1: 
+                delta_teks_mbe = "Model Cenderung Overestimate"
+                color_mbe = "off" 
+            else:
+                delta_teks_mbe = "Bias Seimbang / Sangat Presisi"
+                color_mbe = "normal" 
+        else:
+            mbe_score = 0.0
+            rmse_score = 0.0
+            delta_teks_rmse = "Menunggu Observasi"
+            delta_teks_mbe = "Menunggu Observasi"
+            color_rmse = "off"
+            color_mbe = "off"
 
-    with col_v1:
-        st.metric(
-            label="📌 Rekap Validasi Tersedia", 
-            value=f"{len(df_verif)} Baserun", 
-            delta=f"{len(valid_data)} Tervalidasi Data Real", 
-            delta_color="normal"
-        )
+        # Format Angka
+        df_verif[f'Prediksi Arus Maks ({satuan_teks})'] = df_verif[f'Prediksi Arus Maks ({satuan_teks})'].map('{:.2f}'.format)
+        df_verif[f'Observasi Arus Maks ({satuan_teks})'] = df_verif[f'Observasi Arus Maks ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+        df_verif[f'MBE ({satuan_teks})'] = df_verif[f'MBE ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+        df_verif[f'RMSE ({satuan_teks})'] = df_verif[f'RMSE ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-    with col_v2:
-        st.metric(
-            label="🧭 MBE (6 Baserun Terakhir)", 
-            value=f"{mbe_score:.2f} {satuan_teks}", 
-            delta=delta_teks_mbe, 
-            delta_color=color_mbe if not valid_data_6_terakhir.empty else "off"
-        )
+        # Susun Kolom (Menghilangkan Baserun)
+        kolom_fix = [
+            'Tanggal', 
+            'Shift',
+            f'Prediksi Arus Maks ({satuan_teks})', 
+            f'Observasi Arus Maks ({satuan_teks})', 
+            f'MBE ({satuan_teks})',
+            f'RMSE ({satuan_teks})',
+            'Ketersediaan Data'
+        ]
+        df_verif_tampil = df_verif[kolom_fix]
 
-    with col_v3:
-        st.metric(
-            label="📉 RMSE (6 Baserun Terakhir)", 
-            value=f"{rmse_score:.2f} {satuan_teks}", 
-            delta=delta_teks_rmse, 
-            delta_color=color_rmse if not valid_data_6_terakhir.empty else "off"
-        )
+        # ---------------------------------------------------------
+        # LANGKAH 4: RENDER UI KARTU METRIK & TABEL 
+        # ---------------------------------------------------------
+        col_v1, col_v2, col_v3 = st.columns(3)
 
-    # 9. Render Tabel dengan Styling
-    def warnai_ketersediaan(val):
-        if isinstance(val, str):
-            if 'Sangat Baik' in val:
-                return 'color: #28a745;'
-            elif 'Cukup' in val:
-                return 'color: #ffc107;'
-            elif 'Menunggu' in val or 'Tidak' in val:
-                return 'color: #dc3545;'
-        return ''
+        with col_v1:
+            st.metric(
+                label="📌 Rekap Shift Tersedia", 
+                value=f"{len(df_verif)} Shift", 
+                delta=f"{len(valid_data)} Tervalidasi Data Real", 
+                delta_color="normal"
+            )
 
-    styled_df = df_verif.style.map(warnai_ketersediaan, subset=['Ketersediaan Data'])
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        with col_v2:
+            st.metric(
+                label="🧭 MBE Keseluruhan (6 Shift Terakhir)",  # Ubah label
+                value=f"{mbe_score:.2f} {satuan_teks}", 
+                delta=delta_teks_mbe, 
+                delta_color=color_mbe if not valid_data_6_terakhir.empty else "off"
+            )
+
+        with col_v3:
+            st.metric(
+                label="📉 RMSE Keseluruhan (6 Shift Terakhir)", # Ubah label
+                value=f"{rmse_score:.2f} {satuan_teks}", 
+                delta=delta_teks_rmse, 
+                delta_color=color_rmse if not valid_data_6_terakhir.empty else "off"
+            )
+
+        def warnai_ketersediaan(val):
+            if isinstance(val, str):
+                if 'Sangat Baik' in val: return 'color: #28a745;'
+                elif 'Cukup' in val: return 'color: #ffc107;'
+                elif 'Menunggu' in val or 'Tidak' in val: return 'color: #dc3545;'
+            return ''
+
+        styled_df = df_verif_tampil.style.map(warnai_ketersediaan, subset=['Ketersediaan Data'])
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("Belum ada data rekap prediksi yang dapat ditampilkan.")
