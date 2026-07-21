@@ -1183,7 +1183,7 @@ with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
 
         with col_v2:
             st.metric(
-                label="🧭 MBE Keseluruhan (6 Shift Terakhir)",  # Ubah label
+                label="🧭 MBE 6 Shift Terakhir",  # Ubah label
                 value=f"{mbe_score:.2f} {satuan_teks}", 
                 delta=delta_teks_mbe, 
                 delta_color=color_mbe if not valid_data_6_terakhir.empty else "off"
@@ -1191,7 +1191,7 @@ with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
 
         with col_v3:
             st.metric(
-                label="📉 RMSE Keseluruhan (6 Shift Terakhir)", # Ubah label
+                label="📉 RMSE 6 Shift Terakhir", # Ubah label
                 value=f"{rmse_score:.2f} {satuan_teks}", 
                 delta=delta_teks_rmse, 
                 delta_color=color_rmse if not valid_data_6_terakhir.empty else "off"
