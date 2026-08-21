@@ -54,5 +54,6 @@ jobs:
           git config --local user.name "GitHub Action Bot"
           git add -f Arsip_Prediksi/*.csv
           git add -f Hasil_Validasi/*.csv
+          git add -f Dashboard_Arus/Arsip_Prediksi/*.csv 2>/dev/null || true
           git commit -m "Auto-update: Hasil prediksi dan validasi terbaru [skip ci]" || exit 0
           git push origin main
