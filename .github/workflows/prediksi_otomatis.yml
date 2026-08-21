@@ -28,7 +28,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy xarray scipy scikit-learn joblib requests tensorflow matplotlib python-dotenv netCDF4 openpyxl
+          pip install pandas numpy xarray scipy scikit-learn joblib requests tensorflow matplotlib python-dotenv netCDF4 openpyxl bottleneck
 
       - name: Run 1 - Data Collector (HF Radar)
         env:
