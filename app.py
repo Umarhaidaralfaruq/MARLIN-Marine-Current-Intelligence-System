@@ -266,7 +266,9 @@ ANCHOR_LON = 114.4111511
 
 # Sesuaikan dengan lokasi folder penyimpanan CSV dari config Anda
 # Ubah path ini jika folder output Anda berbeda
-FOLDER_OUTPUT = Path("Arsip_Prediksi")
+# Gunakan BASE_DIR agar jalur folder selalu akurat di mana pun server dijalankan
+BASE_DIR = Path(__file__).parent.resolve()
+FOLDER_OUTPUT = BASE_DIR / "Arsip_Prediksi"
 
 # ==========================================
 # 2. FUNGSI PENCARI & PEMUAT DATA (SISTEM BASERUN)

@@ -50,17 +50,9 @@ jobs:
 
       - name: Auto-Commit & Push Hasil Prediksi
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          # Mendaftarkan folder target ke Git
-          git add Dashboard_Arus/Arsip_Prediksi/
-          git add Dashboard_Arus/Hasil_Validasi/
-          
-          # Menyimpan histori data (|| true mencegah error jika file belum ada)
-          git add "00 Data/data_gabung.csv" || true
-          
-          TIMESTAMP=$(date +'%Y-%m-%d %H:%M')
-          git commit -m "Auto-update Prediksi Arus: $TIMESTAMP" || echo "Tidak ada perubahan data"
-          
-          git push
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add -f Arsip_Prediksi/*.csv
+          git add -f Hasil_Validasi/*.csv
+          git commit -m "Auto-update: Hasil prediksi dan validasi terbaru [skip ci]" || exit 0
+          git push origin main

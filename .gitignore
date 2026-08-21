@@ -20,3 +20,7 @@ outputs/
 __pycache__/
 *.pyc
 *.env
+
+# Jangan abaikan file CSV hasil prediksi dan validasi
+!Arsip_Prediksi/*.csv
+!Hasil_Validasi/*.csv
