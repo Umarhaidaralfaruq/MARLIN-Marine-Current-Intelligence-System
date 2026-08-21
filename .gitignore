@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Mengabaikan Data dan Dataset
 *.nc
 *.csv
@@ -18,4 +19,4 @@ outputs/
 # Mengabaikan Cache Python dan Environment
 __pycache__/
 *.pyc
-.env
+*.env
