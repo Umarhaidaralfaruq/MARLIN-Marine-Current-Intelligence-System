@@ -187,6 +187,7 @@ def ekstrak_max_1_jam():
         df_final = df_baru
 
     # Simpan
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
     df_final.to_csv(output_csv, index=False)
     
     print("\n📊 PREVIEW HASIL DATABASE 1-JAMAN (10 Terakhir):")
