@@ -52,7 +52,7 @@ PATHS = {
     "model_path": ARTEFAK_DIR / "Aset" / "lstm_model_ketapang.h5",
     
     # Hasil Prediksi
-    "OUTPUT_PRED": BASE_DIR / "Dashboard_Arus" / "Arsip_Prediksi",
+    "OUTPUT_PRED": BASE_DIR / "Arsip_Prediksi",
     
     # Verifikasi
     "Verif_12jam" : DASHBOARD_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv",
