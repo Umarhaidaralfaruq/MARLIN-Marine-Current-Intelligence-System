@@ -1,0 +1,66 @@
+name: Prediksi Operasional Arus Selat Bali
+
+on:
+  schedule:
+    # Berjalan otomatis 2 kali sehari (Pukul 06.02 dan 18.02 WIB)
+    - cron: '2 23 * * *' # Jam 06.02 WIB (23:02 UTC)
+    - cron: '2 11 * * *' # Jam 18.02 WIB (11:02 UTC)
+    
+  # Tombol manual untuk testing
+  workflow_dispatch: 
+
+permissions:
+  contents: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy xarray scipy scikit-learn joblib requests tensorflow matplotlib python-dotenv netCDF4 openpyxl
+
+      - name: Run 1 - Data Collector (HF Radar)
+        env:
+          # Memanggil Secret dari GitHub
+          HFRADAR_URL: ${{ secrets.HFRADAR_URL }}
+        run: python extractdata.py
+
+      - name: Run 2 - Spatial Pre-processing
+        run: python "Spatial Pre-processing.py"
+
+      - name: Run 3 - Data Preparation (EOF)
+        run: python "Data Prep.py"
+        
+      - name: Run 4 - Auto Validation
+        run: python verification.py
+
+      - name: Run 5 - Operational Prediction
+        run: python Predict.py
+
+      - name: Auto-Commit & Push Hasil Prediksi
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Mendaftarkan folder target ke Git
+          git add Dashboard_Arus/Arsip_Prediksi/
+          git add Dashboard_Arus/Hasil_Validasi/
+          
+          # Menyimpan histori data (|| true mencegah error jika file belum ada)
+          git add "00 Data/data_gabung.csv" || true
+          
+          TIMESTAMP=$(date +'%Y-%m-%d %H:%M')
+          git commit -m "Auto-update Prediksi Arus: $TIMESTAMP" || echo "Tidak ada perubahan data"
+          
+          git push
