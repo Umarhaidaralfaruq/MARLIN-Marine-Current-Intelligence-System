@@ -42,4 +42,4 @@ echo =================================================
 echo 🎉 SEMUA PROSES SELESAI!
 echo =================================================
 :: Pause sangat penting agar jendela tidak langsung menutup jika ada error!
-::pause
+pause

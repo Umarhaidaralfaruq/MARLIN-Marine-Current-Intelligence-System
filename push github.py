@@ -24,28 +24,7 @@ try:
     subprocess.run(["git", "add", "Hasil_Validasi/Validasi_Real_Max_12H.csv"], cwd=repo_dir, check=True)
     
     # 1C. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "app.py"], cwd=repo_dir, check=True)
-    
-    # 1D. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "config.py"], cwd=repo_dir, check=True)
-    
-    # 1D. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "extractdata.py"], cwd=repo_dir, check=True)
-    
-    # 1F. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "Spatial Pre-processing.py"], cwd=repo_dir, check=True)
-    
-    # 1G. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "Data Prep.py"], cwd=repo_dir, check=True)
-    
-    # 1H. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "Predict.py"], cwd=repo_dir, check=True)
-    
-    # 1I. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "verification.py"], cwd=repo_dir, check=True)
-    
-    # 1J. Numpang push app.py (HAPUS BARIS INI SETELAH SUKSES PUSH)
-    subprocess.run(["git", "add", "feature_engineering.py"], cwd=repo_dir, check=True)
+    #subprocess.run(["git", "add", "app.py"], cwd=repo_dir, check=True)
     
     # 2. Membuat catatan/commit
     subprocess.run(["git", "commit", "-m", pesan_commit], cwd=repo_dir, check=True)
