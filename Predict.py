@@ -14,7 +14,7 @@ import xarray as xr
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from config import PATHS, MODEL_CONFIG
+from config import PATHS, MODEL_CONFIG, FEATURE_TOGGLES
 from feature_engineering import build_features, TARGET_COLS
 
 LOOKBACK = MODEL_CONFIG['input_window']
@@ -42,11 +42,22 @@ def get_latest_data_for_comp(comp):
     pc_cols_asal = [f"{comp.upper()}_PC{i+1}" for i in range(N_PC_FEATURES)]
     pc_cols_tujuan = [f"PC{i+1}" for i in range(N_PC_FEATURES)]
     
-    cols_to_keep = ['datetime', 'Segment_ID', 'waterlevel'] + pc_cols_asal
+    cols_to_keep = ['datetime', 'Segment_ID']
+
+    if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
+        cols_to_keep.append('waterlevel')
+
+    cols_to_keep += pc_cols_asal
     df_comp = df_buffer[cols_to_keep].copy()
     
     rename_dict = dict(zip(pc_cols_asal, pc_cols_tujuan))
     df_comp = df_comp.rename(columns=rename_dict)
+    
+    print(f"\n===== DEBUG get_latest_data_for_comp {comp.upper()} =====")
+    print("df_full max  :", df_full['datetime'].max())
+    print("df_buffer max:", df_buffer['datetime'].max())
+    print("10 timestamp terakhir:")
+    print(df_buffer['datetime'].tail(10))
     return df_comp
 
 def inverse_scale_operational(y_pred_batch, scaler_obj, total_cols, n_pcs):
@@ -165,7 +176,7 @@ def main_operational_forecast():
     os.makedirs(output_dir, exist_ok=True)
     
     file_timestamp = future_timestamps[0].strftime('%Y%m%d_%H%M')
-    csv_save_path = os.path.join(output_dir, f"prediksi_arus_{file_timestamp}.csv")
+    csv_save_path = os.path.join(PATHS['OUTPUT_PRED'], f"prediksi_spasial_{file_timestamp}.csv")
     df_final_forecast.to_csv(csv_save_path, index=False)
     print(f"\n💾 CSV Ramalan Laut tersimpan di:\n   -> {csv_save_path}")
 
@@ -217,7 +228,6 @@ def main_operational_forecast():
     # Simpan Gambar Peta
     map_save_path = os.path.join(output_dir, f"peta_prakiraan_{file_timestamp}_WIB.png")
     plt.savefig(map_save_path, dpi=300, bbox_inches='tight')
-    plt.show()
     print(f"✅ Peta Spasial berhasil dibuat!\n   -> {map_save_path}")
 
 if __name__ == "__main__":

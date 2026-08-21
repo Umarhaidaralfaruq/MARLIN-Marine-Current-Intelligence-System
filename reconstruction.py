@@ -329,6 +329,7 @@ def run_visual_test():
 
 # =========================================================================
 # 🚀 FITUR BARU: SIMULASI METRIK KOMPREHENSIF (RMSE, MAE, ARAH)
+#    (DIUPDATE DENGAN PERIODIC PERSISTENCE 24-JAM)
 # =========================================================================
 def run_period_simulation(start_date, end_date):
     print("\n" + "="*70)
@@ -338,16 +339,17 @@ def run_period_simulation(start_date, end_date):
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
     
-    # Ekstrak informasi spasial yang paling up-to-date langsung dari NetCDF
+    # Ekstrak informasi spasial
     ds_mean_u_info = xr.open_dataset(PATHS['spatial_mean_u'])
     lats = ds_mean_u_info.lat.values
     lons = ds_mean_u_info.lon.values
     n_lat, n_lon = len(lats), len(lons)
     valid_mask = ds_mean_u_info['u'].notnull().values.flatten()
 
-    # Dictionary penampung tebakan anomali absolut
+    # Dictionary penampung hasil
     pred_pc_dict = {}
     true_pc_dict = {}
+    persist_pc_dict = {} # 🌟 BARU: Untuk menyimpan target 24 jam ke belakang
 
     for comp in ['u', 'v']:
         pca, scaler, model = load_artifacts(comp)
@@ -356,29 +358,32 @@ def run_period_simulation(start_date, end_date):
         df_scaled = df_test.copy()
         df_scaled[scale_cols] = scaler.transform(df_scaled[scale_cols])
         
-        X_list, Y_true_list = [], []
+        X_list, Y_true_list, Y_persist_list = [], [], [] # 🌟 BARU: Inisialisasi list persistensi
         
-        # ⚡ OPTIMASI: Vektorisasi pencarian jendela waktu (Jauh lebih cepat dari iterasi baris Pandas)
         for seg_id, group in df_scaled.groupby('Segment_ID'):
             group = group.reset_index(drop=True)
             n_rows = len(group)
             if n_rows < LOOKBACK + HORIZON: continue
             
-            # Ekstrak data sebagai NumPy untuk kecepatan penuh
             X_data = group[input_cols].values
             Y_data = group[TARGET_COLS].values
             times = group['datetime'].values
             
-            # Ambil semua waktu mulai dari tiap jendela (window start time)
             target_start_times = pd.to_datetime(times[LOOKBACK : n_rows - HORIZON + 1])
-            
-            # Buat filter array (mask)
             valid_mask_times = (target_start_times >= start_dt) & (target_start_times <= end_dt)
             valid_indices = np.where(valid_mask_times)[0]
             
             for i in valid_indices:
+                # 🌟 BARU: Ambil nilai target (Y) tepat 24 jam mundur dari masa depan
+                idx_start_persist = i + LOOKBACK - 24
+                
+                # Pastikan indeks tidak negatif (harus ada cukup histori di sequence)
+                if idx_start_persist < 0:
+                    continue
+                    
                 X_list.append(X_data[i : i+LOOKBACK])
                 Y_true_list.append(Y_data[i+LOOKBACK : i+LOOKBACK+HORIZON])
+                Y_persist_list.append(Y_data[idx_start_persist : idx_start_persist+HORIZON])
                     
         if not X_list:
             print(f"❌ Tidak ada data Test komponen {comp.upper()} di rentang tanggal tersebut!")
@@ -386,12 +391,14 @@ def run_period_simulation(start_date, end_date):
             
         X_batch = np.array(X_list)
         Y_true_batch = np.array(Y_true_list)
-        print(f"🤖 Memprediksi {len(X_batch)} skenario (x 24 jam) untuk komponen {comp.upper()}...")
+        Y_persist_batch = np.array(Y_persist_list) # 🌟 BARU
         
+        print(f"🤖 Memprediksi {len(X_batch)} skenario (x 24 jam) untuk komponen {comp.upper()}...")
         y_pred_batch = model.predict(X_batch, verbose=0)
         
         pred_pc_dict[comp] = inverse_scale_dynamic(y_pred_batch, scaler, len(scale_cols), N_PC_FEATURES)
         true_pc_dict[comp] = inverse_scale_dynamic(Y_true_batch, scaler, len(scale_cols), N_PC_FEATURES)
+        persist_pc_dict[comp] = inverse_scale_dynamic(Y_persist_batch, scaler, len(scale_cols), N_PC_FEATURES) # 🌟 BARU
 
     print("\n🌐 Merekonsiliasi ke Peta Spasial dan Menghitung Fisika Kecepatan & Arah...")
     
@@ -400,79 +407,70 @@ def run_period_simulation(start_date, end_date):
     
     n_samples = pred_pc_dict['u'].shape[0]
     
-    # ==========================================================
-    # SIMPAN DATA 3D UNTUK ANALISIS PER HORIZON
-    # Shape = (sample, horizon, pc)
-    # ==========================================================
-
-    pred_u_3d = pred_pc_dict['u']
-    true_u_3d = true_pc_dict['u']
-
-    pred_v_3d = pred_pc_dict['v']
-    true_v_3d = true_pc_dict['v']
-    
-    # Flatten jam dan skenario -> Bentuk: (Total_Jam_Prediksi, Jumlah_Mode)
+    # Flatten array untuk Inverse PCA
     pc_u_pred_flat = pred_pc_dict['u'].reshape(-1, N_PC_FEATURES)
     pc_u_true_flat = true_pc_dict['u'].reshape(-1, N_PC_FEATURES)
+    pc_u_persist_flat = persist_pc_dict['u'].reshape(-1, N_PC_FEATURES) # 🌟 BARU
+    
     pc_v_pred_flat = pred_pc_dict['v'].reshape(-1, N_PC_FEATURES)
     pc_v_true_flat = true_pc_dict['v'].reshape(-1, N_PC_FEATURES)
+    pc_v_persist_flat = persist_pc_dict['v'].reshape(-1, N_PC_FEATURES) # 🌟 BARU
     
     # Transform ke Anomali Spasial 1D
     anom_u_pred = pca_u.inverse_transform(pc_u_pred_flat)
     anom_u_true = pca_u.inverse_transform(pc_u_true_flat)
+    anom_u_persist = pca_u.inverse_transform(pc_u_persist_flat) # 🌟 BARU
+    
     anom_v_pred = pca_v.inverse_transform(pc_v_pred_flat)
     anom_v_true = pca_v.inverse_transform(pc_v_true_flat)
+    anom_v_persist = pca_v.inverse_transform(pc_v_persist_flat) # 🌟 BARU
 
-    # =====================================================================
-    # 🌊 KONVERSI KECEPATAN (SPEED) DAN ARAH (DIRECTION)
-    # =====================================================================
-    # Karena kita menghitung Metrik absolut (Arah), anomali saja tidak cukup.
-    # Kita harus tambahkan Mean Historis ke seluruh grid prediksi dan asli
+    # Ambil Background Mean Historis
     ds_mean_u = xr.open_dataset(PATHS['spatial_mean_u'])
     ds_mean_v = xr.open_dataset(PATHS['spatial_mean_v'])
-    
-    # Ambil grid valid 1D dari mean absolut
     mean_u_1d = ds_mean_u['u'].values.flatten()[valid_mask]
     mean_v_1d = ds_mean_v['v'].values.flatten()[valid_mask]
     
-    # Arus Riil = Anomali + Mean Historis
+    # Arus Riil = Anomali + Mean
     u_pred_real = anom_u_pred + mean_u_1d
     v_pred_real = anom_v_pred + mean_v_1d
     u_true_real = anom_u_true + mean_u_1d
     v_true_real = anom_v_true + mean_v_1d
+    
+    u_persist_real = anom_u_persist + mean_u_1d # 🌟 BARU
+    v_persist_real = anom_v_persist + mean_v_1d # 🌟 BARU
 
     # Hitung Kecepatan (m/s)
     speed_pred = np.sqrt(u_pred_real**2 + v_pred_real**2)
     speed_true = np.sqrt(u_true_real**2 + v_true_real**2)
+    speed_persist = np.sqrt(u_persist_real**2 + v_persist_real**2) # 🌟 BARU
     
-    # Hitung Arah Arus Oseanografi (Derajat, 0-360)
+    # Hitung Arah (Derajat)
     dir_pred = np.degrees(np.arctan2(u_pred_real, v_pred_real)) % 360
     dir_true = np.degrees(np.arctan2(u_true_real, v_true_real)) % 360
-    
-    # ==========================================================
-    # ANALISIS ERROR PER HORIZON
-    # ==========================================================
 
-    print("\n📊 EVALUASI PER HORIZON (LSTM vs PERSISTENCE)")
+    # ==========================================================
+    # ANALISIS ERROR PER HORIZON (DENGAN PERIODIC PERSISTENCE)
+    # ==========================================================
+    print("\n📊 EVALUASI PER HORIZON (LSTM vs PERIODIC PERSISTENCE 24H)")
     print("-" * 75)
 
     speed_pred_3d = speed_pred.reshape(n_samples, HORIZON, -1)
     speed_true_3d = speed_true.reshape(n_samples, HORIZON, -1)
     
-    # Baseline Persistence: Kondisi jam ke-0 diulang untuk seluruh horizon
-    persistence_speed = np.repeat(speed_true_3d[:, 0:1, :], HORIZON, axis=1)
+    # 🌟 BARU: Baseline sekarang adalah peta aktual dari tepat 24 jam lalu
+    persistence_speed = speed_persist.reshape(n_samples, HORIZON, -1) 
 
     rmse_lstm_all = []
     rmse_persist_all = []
 
-    # 🧹 REFACTORING: Penggabungan loop evaluasi per horizon
     for h in range(HORIZON):
         # Error LSTM
         diff_lstm = speed_pred_3d[:, h, :] - speed_true_3d[:, h, :]
         rmse_lstm = np.sqrt(np.mean(diff_lstm ** 2))
         mae_lstm = np.mean(np.abs(diff_lstm))
 
-        # Error Persistence
+        # Error Periodic Persistence
         diff_persist = persistence_speed[:, h, :] - speed_true_3d[:, h, :]
         rmse_persist = np.sqrt(np.mean(diff_persist ** 2))
 
@@ -498,66 +496,56 @@ def run_period_simulation(start_date, end_date):
     skill_mean = 1 - (rmse_lstm_mean / rmse_persist_mean)
 
     print(f"RMSE LSTM Mean       : {rmse_lstm_mean:.4f} m/s")
-    print(f"RMSE Persistence Mean: {rmse_persist_mean:.4f} m/s")
+    print(f"RMSE Periodic Persist: {rmse_persist_mean:.4f} m/s")
     print(f"Skill Score Mean     : {skill_mean:.3f}")
     
     # =====================================================================
-    # 📈 FITUR BARU: PLOTTING GRAFIK EVALUASI PER HORIZON
+    # 📈 PLOTTING GRAFIK EVALUASI PER HORIZON
     # =====================================================================
     print("\n📈 Menggambar grafik Evaluasi per Horizon (RMSE & Skill Score)...")
     
-    # Siapkan data X (Jam ke-1 sampai 24) dan Y (Skill Score tiap jam)
     hours = np.arange(1, HORIZON + 1)
-    # Gunakan trik max() agar tidak terjadi error pembagian dengan nol seperti sebelumnya
     skill_scores_all = 1 - (np.array(rmse_lstm_all) / np.maximum(np.array(rmse_persist_all), 1e-8))
     
     fig_hz, axes_hz = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-    fig_hz.suptitle(f"Performa Model per Horizon Prediksi (1 - {HORIZON} Jam)", fontsize=16, fontweight='bold')
+    fig_hz.suptitle(f"Performa Model vs Periodic Persistence (1 - {HORIZON} Jam)", fontsize=16, fontweight='bold')
     
-    # 📊 Subplot 1: RMSE LSTM vs Persistence
     axes_hz[0].plot(hours, rmse_lstm_all, marker='o', color='blue', label='LSTM (AI)', linewidth=2.5)
-    axes_hz[0].plot(hours, rmse_persist_all, marker='x', color='gray', linestyle='--', label='Persistence (Baseline)', linewidth=2)
+    # Label diubah menjadi Periodic Persistence
+    axes_hz[0].plot(hours, rmse_persist_all, marker='x', color='gray', linestyle='--', label='Periodic Persistence', linewidth=2)
     axes_hz[0].set_ylabel("RMSE Kecepatan (m/s)", fontsize=12)
     axes_hz[0].set_title("Perbandingan Error (Semakin rendah semakin baik)", fontsize=13)
     axes_hz[0].grid(True, linestyle=':', alpha=0.7)
     axes_hz[0].legend(fontsize=11)
     
-    # 📊 Subplot 2: Skill Score
     axes_hz[1].plot(hours, skill_scores_all, marker='s', color='green', label='Skill Score', linewidth=2.5)
     axes_hz[1].axhline(y=0, color='red', linestyle='-', linewidth=1.5, label='Batas 0 (AI = Baseline)') 
     axes_hz[1].set_ylabel("Skill Score", fontsize=12)
     axes_hz[1].set_title("Skill Score Oseanografi (Semakin mendekati 1 semakin baik)", fontsize=13)
     axes_hz[1].set_xlabel("Horizon Prediksi Masa Depan (Jam ke-)", fontsize=12)
-    axes_hz[1].set_xticks(hours) # Paksa agar sumbu X menampilkan semua angka jam (1-24)
+    axes_hz[1].set_xticks(hours)
     axes_hz[1].set_ylim(-0.5, 1.0)
     axes_hz[1].grid(True, linestyle=':', alpha=0.7)
     axes_hz[1].legend(fontsize=11)
     
     plt.tight_layout()
     
-    # Save output gambar horizon
     output_dir = "outputs"
     os.makedirs(output_dir, exist_ok=True)
-    hz_save_path = os.path.join(output_dir, f"grafik_horizon_{start_dt.strftime('%Y%m%d')}.png")
+    hz_save_path = os.path.join(output_dir, f"grafik_horizon_periodic_{start_dt.strftime('%Y%m%d')}.png")
     
     print(f"💾 Menyimpan Grafik Horizon ke: {hz_save_path}")
     plt.savefig(hz_save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
     # =====================================================================
-    # 📏 PERHITUNGAN METRIK SPASIAL (Rata-rata di setiap titik laut)
+    # 📏 PERHITUNGAN METRIK SPASIAL (Sisa kode tidak berubah)
     # =====================================================================
-    # 1. MAE Kecepatan (m/s) -> Error mutlak
     mae_speed_1d = np.mean(np.abs(speed_pred - speed_true), axis=0)
-    
-    # 2. RMSE Kecepatan (m/s) -> Error kuadrat rata-rata
     rmse_speed_1d = np.sqrt(np.mean((speed_pred - speed_true)**2, axis=0))
     
-    # 3. RMSE Arah (Derajat)
-    # PENTING: Error arah adalah sirkular (359 derajat dan 1 derajat selisihnya cuma 2 derajat, bukan 358)
     def circular_error(pred, true):
         diff = np.abs(pred - true) % 360
-        # Jika selisih lebih dari 180, ambil jarak terdekat lewat sisi sebaliknya
         diff = np.where(diff > 180, 360 - diff, diff)
         return diff
         
@@ -575,9 +563,6 @@ def run_period_simulation(start_date, end_date):
     print(f"Worst Grid RMSE   : {np.nanmax(rmse_speed_1d):.4f} m/s")
     print(f"P90 Grid RMSE     : {np.nanpercentile(rmse_speed_1d, 90):.4f} m/s")
 
-    # =====================================================================
-    # 🗺️ MENGEMBALIKAN KE BENTUK PETA 2D
-    # =====================================================================
     def to_2d_map(data_1d):
         base_map = np.full(n_lat * n_lon, np.nan)
         base_map[valid_mask] = data_1d
@@ -587,15 +572,10 @@ def run_period_simulation(start_date, end_date):
     rmse_speed_map = to_2d_map(rmse_speed_1d)
     rmse_dir_map = to_2d_map(rmse_dir_1d)
 
-    # =====================================================================
-    # 🎨 PLOTTING MULTIPLE MAPS
-    # =====================================================================
     Lon, Lat = np.meshgrid(lons, lats)
     fig, axes = plt.subplots(1, 3, figsize=(20, 6), sharey=True)
     fig.suptitle(f"Evaluasi Model Spasial Menyeluruh\nPeriode: {start_date} s/d {end_date} | Total Skenario: {n_samples * 24} Jam", fontsize=16, fontweight='bold', y=1.05)
 
-    max_error_speed = max(np.nanmax(mae_speed_map), np.nanmax(rmse_speed_map))
-    
     fixed_max_mae = VISUAL_CONFIG['max_val_mae_speed']  
     fixed_max_rmse = VISUAL_CONFIG['max_val_rmse_speed']
     
@@ -608,17 +588,14 @@ def run_period_simulation(start_date, end_date):
     for ax, cfg in zip(axes, maps_to_plot):
         contour = ax.contourf(Lon, Lat, cfg['data'], cmap=cfg['cmap'], levels=np.linspace(0, cfg['max_val'], 20))
         
-        # 🎯 PENGATURAN THRESHOLD DINAMIS DARI CONFIG
         if 'MAE' in cfg['title']:
             thresh = VISUAL_CONFIG['threshold_mae_speed']
             batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='blue', linewidths=1.5, linestyles='dashed')
             ax.clabel(batas, inline=True, fontsize=10, fmt=f'Batas {thresh}', colors='blue')
-            
         elif 'RMSE Kecepatan' in cfg['title']:
             thresh = VISUAL_CONFIG['threshold_rmse_speed']
             batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='blue', linewidths=1.5, linestyles='dashed')
             ax.clabel(batas, inline=True, fontsize=10, fmt=f'Batas {thresh}', colors='blue')
-            
         elif 'RMSE Arah' in cfg['title']:
             thresh = VISUAL_CONFIG['threshold_rmse_dir']
             batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='cyan', linewidths=1.5, linestyles='dashed')
@@ -628,31 +605,242 @@ def run_period_simulation(start_date, end_date):
         ax.set_xlabel('Longitude')
         if ax == axes[0]: ax.set_ylabel('Latitude')
         
-        # ==========================================================
-        # 🎯 PERBAIKAN: COLORBAR YANG LEBIH RAPI & RENGGANG
-        # ==========================================================
         cbar = fig.colorbar(contour, ax=ax, orientation='horizontal', fraction=0.046, pad=0.1)
-        cbar.set_label(cfg['title'].split(' ')[0] + f" ({cfg['title'].split('(')[-1]}") # Label lebih jelas
+        cbar.set_label(cfg['title'].split(' ')[0] + f" ({cfg['title'].split('(')[-1]}")
         
-        # Bikin penggaris angka: Cuma ambil 6 titik dari 0 sampai nilai max
         batas_ticks = np.linspace(0, cfg['max_val'], 6)
         cbar.set_ticks(batas_ticks)
-        
-        # Bedakan format angka (Kecepatan = 2 desimal, Arah = Bilangan bulat)
         if 'Arah' in cfg['title']:
             cbar.ax.set_xticklabels([f"{int(t)}°" for t in batas_ticks])
         else:
             cbar.ax.set_xticklabels([f"{t:.2f}" for t in batas_ticks])
-        # ==========================================================
 
     plt.tight_layout()
-    
-    # Save output
-    output_dir = "outputs"
-    os.makedirs(output_dir, exist_ok=True)
     save_path = os.path.join(output_dir, f"simulasi_komprehensif_{start_dt.strftime('%Y%m%d')}_sd_{end_dt.strftime('%Y%m%d')}.png")
     
     print(f"💾 Menyimpan Peta Simulasi Komprehensif ke: {save_path}")
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+
+# =========================================================================
+# 🚀 FITUR BARU: SIMULASI CROSS-RESAMPLE (PREDICT MEAN vs TRUE MAX-AMP)
+# =========================================================================
+def run_cross_resample_simulation(start_date, end_date):
+    print("\n" + "="*75)
+    print(f"🌊 SIMULASI CROSS-RESAMPLE: Prediksi (Mean) vs Ground Truth (Max Amp)")
+    print(f"   Periode: {start_date} s/d {end_date}")
+    print("="*75)
+    
+    start_dt = pd.to_datetime(start_date)
+    end_dt = pd.to_datetime(end_date)
+    
+    # 1. Load Info Spasial
+    ds_mean_u_info = xr.open_dataset(PATHS['spatial_mean_u'])
+    lats = ds_mean_u_info.lat.values
+    lons = ds_mean_u_info.lon.values
+    n_lat, n_lon = len(lats), len(lons)
+    valid_mask = ds_mean_u_info['u'].notnull().values.flatten()
+
+    pred_pc_dict = {}
+    target_times_list = [] # Menyimpan waktu pasti untuk ditarik dari NetCDF True
+    
+    # =====================================================================
+    # 2. GENERATE PREDIKSI DARI MODEL (MEAN-BASED)
+    # =====================================================================
+    for comp in ['u', 'v']:
+        pca, scaler, model = load_artifacts(comp)
+        df_test, scale_cols, input_cols = prepare_test_data(comp)
+        
+        df_scaled = df_test.copy()
+        df_scaled[scale_cols] = scaler.transform(df_scaled[scale_cols])
+        
+        X_list = []
+        comp_times_list = []
+        
+        for seg_id, group in df_scaled.groupby('Segment_ID'):
+            group = group.reset_index(drop=True)
+            n_rows = len(group)
+            if n_rows < LOOKBACK + HORIZON: continue
+            
+            X_data = group[input_cols].values
+            times = group['datetime'].values
+            
+            target_start_times = pd.to_datetime(times[LOOKBACK : n_rows - HORIZON + 1])
+            valid_mask_times = (target_start_times >= start_dt) & (target_start_times <= end_dt)
+            valid_indices = np.where(valid_mask_times)[0]
+            
+            for i in valid_indices:
+                X_list.append(X_data[i : i+LOOKBACK])
+                # Simpan array waktu untuk 24 jam ke depan
+                if comp == 'u': 
+                    target_times_list.append(pd.to_datetime(times[i+LOOKBACK : i+LOOKBACK+HORIZON]))
+                    
+        if not X_list:
+            print(f"❌ Tidak ada data Test komponen {comp.upper()} di rentang tanggal tersebut!")
+            return
+            
+        X_batch = np.array(X_list)
+        print(f"🤖 Memprediksi {len(X_batch)} skenario (x 24 jam) untuk komponen {comp.upper()}...")
+        y_pred_batch = model.predict(X_batch, verbose=0)
+        pred_pc_dict[comp] = inverse_scale_dynamic(y_pred_batch, scaler, len(scale_cols), N_PC_FEATURES)
+
+    # Flatten prediksi
+    pca_u = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_u_model.joblib'))
+    pca_v = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_v_model.joblib'))
+    
+    pc_u_pred_flat = pred_pc_dict['u'].reshape(-1, N_PC_FEATURES)
+    pc_v_pred_flat = pred_pc_dict['v'].reshape(-1, N_PC_FEATURES)
+    
+    anom_u_pred = pca_u.inverse_transform(pc_u_pred_flat)
+    anom_v_pred = pca_v.inverse_transform(pc_v_pred_flat)
+
+    # Tambah mean historis ke prediksi (Mean Model)
+    ds_mean_u = xr.open_dataset(PATHS['spatial_mean_u'])
+    ds_mean_v = xr.open_dataset(PATHS['spatial_mean_v'])
+    mean_u_1d = ds_mean_u['u'].values.flatten()[valid_mask]
+    mean_v_1d = ds_mean_v['v'].values.flatten()[valid_mask]
+    
+    u_pred_real = anom_u_pred + mean_u_1d
+    v_pred_real = anom_v_pred + mean_v_1d
+    
+    speed_pred = np.sqrt(u_pred_real**2 + v_pred_real**2)
+    dir_pred = np.degrees(np.arctan2(u_pred_real, v_pred_real)) % 360
+
+    # =====================================================================
+    # 3. EKSTRAK TRUE DATA (MAX AMPLITUDE BASED) DARI NETCDF
+    # =====================================================================
+    print("\n🔍 Mengekstrak Ground Truth (Max Amplitude) dari file NetCDF sekunder...")
+    # Pastikan file ini sudah lu buat secara manual sebelumnya!
+    path_anom_max = str(PATHS['dataset_arus']).replace('.nc', '_MAX.nc')
+    path_mean_u_max = str(PATHS['spatial_mean_u']).replace('.nc', '_MAX.nc')
+    path_mean_v_max = str(PATHS['spatial_mean_v']).replace('.nc', '_MAX.nc')
+    
+    if not os.path.exists(path_anom_max):
+        print(f"❌ FATAL: File True Data tidak ditemukan di {path_anom_max}")
+        print("💡 Silakan jalankan Preprocessing dengan metode 'max_amplitude' dan rename filenya terlebih dahulu.")
+        return
+
+    # Gabungkan Anomali + Mean dari dataset Max Amplitude untuk dapat Nilai Riil
+    ds_anom_max = xr.open_dataset(path_anom_max)
+    ds_mu_max = xr.open_dataset(path_mean_u_max)['u']
+    ds_mv_max = xr.open_dataset(path_mean_v_max)['v']
+    
+    ds_true_u = ds_anom_max['u'] + ds_mu_max
+    ds_true_v = ds_anom_max['v'] + ds_mv_max
+    
+    flat_target_times = pd.DatetimeIndex(np.concatenate(target_times_list))
+    
+    # Ambil data spasial riil berdasarkan waktu prediksi
+    u_true_list, v_true_list = [], []
+    missing_times = 0
+    
+    for t in flat_target_times:
+        try:
+            # Gunakan nearest agar tidak error jika selisih detik/menit
+            val_u = ds_true_u.sel(time=t, method='nearest', tolerance=pd.Timedelta('30m')).values.flatten()[valid_mask]
+            val_v = ds_true_v.sel(time=t, method='nearest', tolerance=pd.Timedelta('30m')).values.flatten()[valid_mask]
+            u_true_list.append(val_u)
+            v_true_list.append(val_v)
+        except KeyError:
+            # Jika waktu benar-benar kosong di ground truth
+            u_true_list.append(np.full(valid_mask.sum(), np.nan))
+            v_true_list.append(np.full(valid_mask.sum(), np.nan))
+            missing_times += 1
+            
+    if missing_times > 0:
+        print(f"⚠️ Peringatan: Ada {missing_times} jam prediksi yang tidak memiliki ground truth di data Max Amplitude.")
+
+    u_true_real = np.array(u_true_list)
+    v_true_real = np.array(v_true_list)
+    
+    speed_true = np.sqrt(u_true_real**2 + v_true_real**2)
+    dir_true = np.degrees(np.arctan2(u_true_real, v_true_real)) % 360
+
+    # =====================================================================
+    # 4. PERHITUNGAN METRIK SPASIAL
+    # =====================================================================
+    # Menghitung Rata-rata dari sumbu waktu (axis=0)
+    # Gunakan np.nanmean / np.nanstd untuk mengabaikan NaN dari jam yang bolong
+    mae_speed_1d = np.nanmean(np.abs(speed_pred - speed_true), axis=0)
+    rmse_speed_1d = np.sqrt(np.nanmean((speed_pred - speed_true)**2, axis=0))
+    
+    def circular_error(pred, true):
+        diff = np.abs(pred - true) % 360
+        diff = np.where(diff > 180, 360 - diff, diff)
+        return diff
+        
+    dir_error = circular_error(dir_pred, dir_true)
+    rmse_dir_1d = np.sqrt(np.nanmean(dir_error**2, axis=0))
+    
+    print("\n🌐 RINGKASAN ERROR SPASIAL (CROSS-RESAMPLE)")
+    print("-" * 60)
+    print(f"MAE Speed Mean    : {np.nanmean(mae_speed_1d):.4f} m/s")
+    print(f"RMSE Speed Mean   : {np.nanmean(rmse_speed_1d):.4f} m/s")
+    print(f"RMSE Direction    : {np.nanmean(rmse_dir_1d):.2f}°")
+
+    # =====================================================================
+    # 5. MENGEMBALIKAN KE BENTUK PETA 2D & PLOT
+    # =====================================================================
+    def to_2d_map(data_1d):
+        base_map = np.full(n_lat * n_lon, np.nan)
+        base_map[valid_mask] = data_1d
+        return base_map.reshape(n_lat, n_lon)
+        
+    mae_speed_map = to_2d_map(mae_speed_1d)
+    rmse_speed_map = to_2d_map(rmse_speed_1d)
+    rmse_dir_map = to_2d_map(rmse_dir_1d)
+
+    Lon, Lat = np.meshgrid(lons, lats)
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6), sharey=True)
+    fig.suptitle(f"Evaluasi Cross-Resample: Prediksi (Mean) vs Ground Truth (Max Amp)\nPeriode: {start_date} s/d {end_date}", fontsize=16, fontweight='bold', y=1.05)
+
+    fixed_max_mae = VISUAL_CONFIG['max_val_mae_speed']  
+    fixed_max_rmse = VISUAL_CONFIG['max_val_rmse_speed']
+    
+    maps_to_plot = [
+        {'data': mae_speed_map, 'title': 'MAE Kecepatan (m/s)', 'cmap': 'hot_r', 'max_val': fixed_max_mae},
+        {'data': rmse_speed_map, 'title': 'RMSE Kecepatan (m/s)', 'cmap': 'hot_r', 'max_val': fixed_max_rmse},
+        {'data': rmse_dir_map, 'title': 'RMSE Arah Arus (Derajat)', 'cmap': 'plasma_r', 'max_val': VISUAL_CONFIG['max_val_rmse_dir']} 
+    ]
+
+    for ax, cfg in zip(axes, maps_to_plot):
+        contour = ax.contourf(Lon, Lat, cfg['data'], cmap=cfg['cmap'], levels=np.linspace(0, cfg['max_val'], 20))
+        
+        # Garis Batas Toleransi Dinamis
+        if 'MAE' in cfg['title']:
+            thresh = VISUAL_CONFIG['threshold_mae_speed']
+            batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='blue', linewidths=1.5, linestyles='dashed')
+            ax.clabel(batas, inline=True, fontsize=10, fmt=f'Batas {thresh}', colors='blue')
+        elif 'RMSE Kecepatan' in cfg['title']:
+            thresh = VISUAL_CONFIG['threshold_rmse_speed']
+            batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='blue', linewidths=1.5, linestyles='dashed')
+            ax.clabel(batas, inline=True, fontsize=10, fmt=f'Batas {thresh}', colors='blue')
+        elif 'RMSE Arah' in cfg['title']:
+            thresh = VISUAL_CONFIG['threshold_rmse_dir']
+            batas = ax.contour(Lon, Lat, cfg['data'], levels=[thresh], colors='cyan', linewidths=1.5, linestyles='dashed')
+            ax.clabel(batas, inline=True, fontsize=10, fmt=f'Batas {thresh}°', colors='cyan')
+
+        ax.set_title(cfg['title'], fontsize=14)
+        ax.set_xlabel('Longitude')
+        if ax == axes[0]: ax.set_ylabel('Latitude')
+        
+        cbar = fig.colorbar(contour, ax=ax, orientation='horizontal', fraction=0.046, pad=0.1)
+        cbar.set_label(cfg['title'].split(' ')[0] + f" ({cfg['title'].split('(')[-1]}")
+        
+        batas_ticks = np.linspace(0, cfg['max_val'], 6)
+        cbar.set_ticks(batas_ticks)
+        if 'Arah' in cfg['title']:
+            cbar.ax.set_xticklabels([f"{int(t)}°" for t in batas_ticks])
+        else:
+            cbar.ax.set_xticklabels([f"{t:.2f}" for t in batas_ticks])
+
+    plt.tight_layout()
+    
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, f"cross_resample_{start_dt.strftime('%Y%m%d')}_sd_{end_dt.strftime('%Y%m%d')}.png")
+    
+    print(f"💾 Menyimpan Peta Cross-Resample ke: {save_path}")
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
@@ -676,4 +864,6 @@ if __name__ == "__main__":
     # Jalankan simulasi secara otomatis pakai batas tanggal tersebut
     # (Kalau mau dipersingkat, bisa diganti manual misal start_date="2026-02-05", dst)
     run_period_simulation(start_date=tgl_awal, end_date=tgl_akhir)
+    
+    #run_cross_resample_simulation(start_date=tgl_awal, end_date=tgl_akhir)
 

@@ -12,7 +12,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "00 Data"
 ARTEFAK_DIR = BASE_DIR / "01 Artefak"
-PREDIKSI_DIR = Path(r"D:\Haidar\Dashboard_Arus")
+DASHBOARD_DIR = BASE_DIR / "Dashboard_Arus"
+PREDIKSI_DIR = BASE_DIR / "Arsip_Prediksi"
 VALIDASI_DIR = BASE_DIR / "02 Hasil Validasi"
 HF_RADAR_DIR = Path(r"D:\10 HF Radar NetCDF4")
 LOGBOOK_DIR = Path(r"D:\ProgramKantor\Penyeberangan_Ketapang-Gilimanuk\2_Logbook_HFRadar_Ketapang-Gilimanuk")
@@ -25,6 +26,8 @@ for folder in [DATA_DIR, ARTEFAK_DIR, PREDIKSI_DIR, VALIDASI_DIR, PREDIKSI_DIR /
 # 2. PENGATURAN PATH FILE SPESIFIK
 # =============================================================================
 PATHS = {
+    "Dashboard": DASHBOARD_DIR,
+    
     # Data Mentah
     "hf_radar_pattern": str(HF_RADAR_DIR / "*_Bali_Strait.nc"),
     "nc_file_arus": DATA_DIR / "1_Hasil_HFRadar_SelatBali_Ketapang.nc",
@@ -47,6 +50,12 @@ PATHS = {
     # Artefak Model LSTM
     "scaler_path": ARTEFAK_DIR / "Aset" / "scaler_ketapang.joblib",
     "model_path": ARTEFAK_DIR / "Aset" / "lstm_model_ketapang.h5",
+    
+    # Hasil Prediksi
+    "OUTPUT_PRED": BASE_DIR / "Dashboard_Arus" / "Arsip_Prediksi",
+    
+    # Verifikasi
+    "Verif_12jam" : DASHBOARD_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv",
 }
 
 # =============================================================================
@@ -71,7 +80,7 @@ MODEL_CONFIG = {
     'output_window': 24,  # Memprediksi 24 jam ke depan
     'min_seq_len': 96,    # Syarat panjang segmen minimal sebelum dipotong window
     'min_segmen_len': 48, # Syarat panjang minimal pembuatan segmen
-    'max_save_nan': 3,     # Syarat panjang maksimal untuk jam kosong
+    'max_save_nan': 5,     # Syarat panjang maksimal untuk jam kosong
     'ocean_threshold': 0.5,
     
     # Parameter Arsitektur Neural Network
@@ -98,12 +107,20 @@ MODEL_CONFIG = {
 FEATURE_TOGGLES = {
     'ENABLE_TIME_FEATURES': False,   # Waktu astronomis (Sin/Cos Jam)
     'ENABLE_TARGET_FEATURES': True,  # Menggunakan masa lalu PC1-PC5 sebagai input
-    'ENABLE_WATER_LEVEL': False,      # Data elevasi pasut
+    'ENABLE_WATER_LEVEL': False,     # Data elevasi pasut
     'ENABLE_WIND': False,            # Data angin komponen U & V
 }
 
 # =============================================================================
-# 7. KONFIGURASI VISUALISASI & EVALUASI SPASIAL
+# 7. PANEL KONTROL SPATIAL PREPROCESSING
+# =============================================================================
+SPATIAL_CONFIG = {
+    'RESAMPLE_METHOD': 'max_amplitude',  # Opsi yang tersedia: 'mean', 'max_amplitude', 'p95'
+    'RESAMPLE_FREQ': '1H',     # Resolusi waktu (contoh: '1H' untuk 1 jam)
+}
+
+# =============================================================================
+# 9. KONFIGURASI VISUALISASI & EVALUASI SPASIAL
 # =============================================================================
 VISUAL_CONFIG = {
     # Jam ke-berapa di masa depan yang mau di-plot di quiver plot (0 = jam ke-1)

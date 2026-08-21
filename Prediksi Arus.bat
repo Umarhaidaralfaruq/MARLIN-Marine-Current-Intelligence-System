@@ -17,17 +17,24 @@ echo.
 echo -------------------------------------------------
 echo [3/3] Mengeksekusi Script Python...
 echo -------------------------------------------------
+
 echo =^> Extract Data Arus dan Pasut
 python "extractdata.py"
 
-echo =^> Spatial Pre-processing
+echo =^> Extract Data Arus dan Pasut
 python "Spatial Pre-processing.py"
 
-echo =^> MEOF Analysis
+echo =^> Data Preparation
 python "Data Prep.py"
 
-echo =^> MEOF Analysis
+echo =^> Prediction
 python "Predict.py"
+
+echo =^> verification
+python "verification.py"
+
+echo =^> Prediction
+python "push github.py"
 
 
 echo.
@@ -35,4 +42,4 @@ echo =================================================
 echo 🎉 SEMUA PROSES SELESAI!
 echo =================================================
 :: Pause sangat penting agar jendela tidak langsung menutup jika ada error!
-pause
+::pause

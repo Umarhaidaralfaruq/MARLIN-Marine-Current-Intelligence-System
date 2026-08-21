@@ -75,7 +75,6 @@ def train_component(comp):
     INPUT_COLS = [col for col in ALL_GENERATED_COLS if col not in TARGET_COLS]
 
     # 3. SCALING DINAMIS (MinMax -1 to 1)
-    # Trik: Target PC diletakkan paling awal di list SCALE_COLS agar gampang di-inverse
     SCALE_COLS = TARGET_COLS + [col for col in INPUT_COLS if col not in TARGET_COLS]
     
     scaler = MinMaxScaler(feature_range=(-1, 1))
@@ -87,39 +86,43 @@ def train_component(comp):
 
     # 4. MEMBUAT SEQUENCE
     print(f"✂️ Memotong Sequence (Input: {len(INPUT_COLS)} Fitur)...")
-    X_train, Y_train = create_sequences_by_segment(df_train, LOOKBACK, HORIZON, MIN_SEQ_LEN, INPUT_COLS, TARGET_COLS)
+    
+    # Tampung seluruh data latih ke dalam variabel sementara (Full Train)
+    X_full_train, Y_full_train = create_sequences_by_segment(df_train, LOOKBACK, HORIZON, MIN_SEQ_LEN, INPUT_COLS, TARGET_COLS)
     X_test, Y_test = create_sequences_by_segment(df_test, LOOKBACK, HORIZON, MIN_SEQ_LEN, INPUT_COLS, TARGET_COLS)
     
-    print(f"   -> Tensor Train : {X_train.shape}")
-    print(f"   -> Tensor Test  : {X_test.shape}")
-    
-    if len(X_train) == 0:
-        print("❌ Gagal: Tidak ada sequence. Cek filter min_seq_len!")
+    if len(X_full_train) == 0:
+        print("❌ Gagal: Tidak ada sequence pada data latih. Cek filter min_seq_len!")
         return
 
+    # -------------------------------------------------------------------------
+    # 🚨 PERBAIKAN KRITIS: PEMISAHAN TRAIN & VALIDATION (CHRONOLOGICAL SPLIT)
+    # -------------------------------------------------------------------------
+    # Kita ambil 20% data terakhir dari sequence Full Train sebagai Validation
+    # Tidak menggunakan train_test_split agar urutan waktu tidak teracak (shuffle)
+    VAL_RATIO = 0.20
+    split_idx = int(len(X_full_train) * (1 - VAL_RATIO))
+    
+    X_train, Y_train = X_full_train[:split_idx], Y_full_train[:split_idx]
+    X_val, Y_val     = X_full_train[split_idx:], Y_full_train[split_idx:]
+    
+    print(f"   -> Tensor Train (Belajar) : {X_train.shape}")
+    print(f"   -> Tensor Val   (Validasi): {X_val.shape}")
+    print(f"   -> Tensor Test  (Uji Murni): {X_test.shape}")
+    
     N_INPUT_FEATURES = X_train.shape[2]
 
     # =========================================================================
     # 5. BUILD MODEL (ADAPTASI PARAMETER 91%)
     # =========================================================================
     model = Sequential([
-        # Otak utama dibesarkan sedikit agar leluasa menampung 41 fitur x 48 jam
         LSTM(MODEL_CONFIG['lstm_units'], activation='tanh', input_shape=(LOOKBACK, N_INPUT_FEATURES), return_sequences=False),
-        
         Dropout(MODEL_CONFIG['dropout_rate']),
-        
-        # 💡 INI KUNCI ARSITEKTUR: Layer Perantara (Decoder)
-        # Jangan biarkan LSTM langsung muntah ke Output. Kasih ruang buat dia mikir.
         Dense(MODEL_CONFIG['dense_units'], activation='relu'),
-        
-        # Layer Output (120 titik)
         Dense(HORIZON * N_PC_FEATURES), 
-        
-        # Merapikan output menjadi bentuk (24, 5)
         Reshape((HORIZON, N_PC_FEATURES))
     ])
 
-    # Menggunakan MAE sebagai Loss Function sesuai request
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=MODEL_CONFIG['learning_rate']), 
         loss=MODEL_CONFIG['loss_function']
@@ -131,7 +134,6 @@ def train_component(comp):
     print(f"🚀 Memulai Training Komponen {comp.upper()}...")
     model_path = str(PATHS['model_path']).replace('.h5', f'_{comp}.h5')
     
-    # Callbacks yang ditarik dari config
     early_stopping = EarlyStopping(
         monitor='val_loss', 
         patience=MODEL_CONFIG['early_stop_patience'], 
@@ -149,7 +151,7 @@ def train_component(comp):
     print("⏳ Sedang melatih (Training) model... (Ini mungkin memakan waktu)")
     model.fit(
         X_train, Y_train, 
-        validation_data=(X_test, Y_test),
+        validation_data=(X_val, Y_val), # Menggunakan X_val, bukan X_test!
         epochs=MODEL_CONFIG['epochs'],            
         batch_size=MODEL_CONFIG['batch_size'], 
         shuffle=True,          
@@ -157,19 +159,19 @@ def train_component(comp):
         verbose=1
     )
 
-    # 7. EVALUATION DENGAN INVERSE SCALING DINAMIS
-    print(f"\n📊 Mengevaluasi Model Komponen {comp.upper()}...")
+    # =========================================================================
+    # 7. EVALUATION DENGAN INVERSE SCALING DINAMIS (PADA DATA TEST MURNI)
+    # =========================================================================
+    print(f"\n📊 Mengevaluasi Model Komponen {comp.upper()} pada Data Test (Unseen)...")
+    
+    # Model sekarang menebak X_test yang tidak pernah dilihat sama sekali saat training
     y_pred_scaled = model.predict(X_test, verbose=0)
     
-    # Fungsi inverse yang aman berapapun fitur yang aktif
     def inverse_scale_dynamic(y_data, scaler_obj, total_scale_cols, n_target_cols):
         n_samples, out_len, n_pc = y_data.shape
-        # Bikin matriks 0 sebesar total kolom yang di-scale
         dummy = np.zeros((n_samples * out_len, total_scale_cols))
-        # Masukkan tebakan AI ke kolom-kolom terdepan (karena Target kita taruh depan tadi)
         dummy[:, :n_target_cols] = y_data.reshape(-1, n_pc)
         unscaled = scaler_obj.inverse_transform(dummy)
-        # Ambil kembali hasil inverse-nya
         return unscaled[:, :n_target_cols].reshape(n_samples, out_len, n_target_cols)
 
     TOTAL_SCALED_COLS = len(SCALE_COLS)
@@ -177,7 +179,7 @@ def train_component(comp):
     y_true_unscaled = inverse_scale_dynamic(Y_test, scaler, TOTAL_SCALED_COLS, N_PC_FEATURES)
 
     print("\n" + "-"*40)
-    print(f"🏆 DETAIL R² PER MODE ({comp.upper()})")
+    print(f"🏆 DETAIL R² PER MODE ({comp.upper()}) (DATA TEST)")
     print("-"*40)
     for i in range(N_PC_FEATURES):
         r2_pc = r2_score(y_true_unscaled[:, :, i].reshape(-1), y_pred_unscaled[:, :, i].reshape(-1))

@@ -226,6 +226,5 @@ def proses_aws():
 if __name__ == "__main__":
     print("🚀 MENJALANKAN PIPELINE DATA COLLECTOR...")
     proses_hf_radar()
-    proses_aws()
     print("\n🏁 SEMUA PROSES AKUISISI DATA SELESAI!")
 

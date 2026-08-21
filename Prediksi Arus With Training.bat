@@ -17,6 +17,7 @@ echo.
 echo -------------------------------------------------
 echo [3/3] Mengeksekusi Script Python...
 echo -------------------------------------------------
+
 echo =^> Extract Data Arus dan Pasut
 python "extractdata.py"
 
@@ -26,7 +27,7 @@ python "Spatial Pre-processing.py"
 echo =^> MEOF Analysis
 python "MEOF Analysis.py"
 
-echo =^> Training Model
+echo =^> Training
 python "Training.py"
 
 echo =^> Reconstruction

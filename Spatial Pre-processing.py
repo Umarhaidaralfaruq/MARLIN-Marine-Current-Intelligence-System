@@ -10,7 +10,7 @@ import os
 import requests
 import warnings
 
-from config import PATHS, MODEL_CONFIG
+from config import PATHS, MODEL_CONFIG, SPATIAL_CONFIG
 warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
 
 # Definisikan nama file output spesifik untuk modul ini
@@ -32,6 +32,38 @@ def filter_temporal_iqr(da):
     # Grid yang nilainya di luar batas akan otomatis diubah menjadi NaN
     is_normal = (da >= lower_bound) & (da <= upper_bound)
     return da.where(is_normal)
+
+def resample_velocity(ds, method='max_amplitude', freq='1H', u_var='u', v_var='v'):
+    if method == 'mean':
+        print(f"🔄 Resample ({freq}) menggunakan metode: MEAN")
+        return ds.resample(time=freq).mean()
+        
+    elif method == 'max_amplitude':
+        print(f"🔄 Resample ({freq}) menggunakan metode: MAX AMPLITUDE (Vector-Preserving)")
+        
+        def _get_vector_at_max_speed(subset_ds):
+            if len(subset_ds.time) == 0:
+                return subset_ds
+                
+            # 1. Hitung amplitudo
+            speed = np.sqrt(subset_ds[u_var]**2 + subset_ds[v_var]**2)
+            
+            # 2. PERBAIKAN: Isi NaN dengan -1 sementara agar argmax tidak error di area daratan
+            idx = speed.fillna(-1.0).argmax(dim='time')
+            
+            # 3. Potong dataset
+            return subset_ds.isel(time=idx)
+            
+        return ds.resample(time=freq).map(_get_vector_at_max_speed)
+        
+    elif method == 'p95':
+        print(f"🔄 Resample ({freq}) menggunakan metode: P95 (95th Percentile Extreme)")
+        ds_p95 = ds.resample(time=freq).quantile(0.95).drop_vars('quantile', errors='ignore')
+        ds_p05 = ds.resample(time=freq).quantile(0.05).drop_vars('quantile', errors='ignore')
+        return xr.where(abs(ds_p05) > abs(ds_p95), ds_p05, ds_p95)
+        
+    else:
+        raise ValueError(f"Metode '{method}' tidak didukung. Pilih 'mean', 'max_amplitude', atau 'p95'.")
 
 def run_data_preparation():
     print("\n" + "="*50)
@@ -83,8 +115,33 @@ def run_data_preparation():
         # Ini yang bikin urutan file gak masalah, xarray yang ngurutin otomatis!
         ds = ds.sortby('time') 
         ds = ds.sel(time=~ds.get_index('time').duplicated())
-        ds = ds.resample(time='1H').mean()
+        
+        # ==========================================
+        # TREATMENT: POTONG JAM TERAKHIR JIKA BELUM PENUH
+        # ==========================================
+        import pandas as pd
+        
+        # Ambil waktu paling ujung/terakhir dari dataset
+        waktu_terakhir = pd.to_datetime(ds.time.values[-1])
+        
+        # Cek apakah menit terakhir belum menyentuh 50
+        if waktu_terakhir.minute < 50:
+            # Mundurkan batas waktu ke jam sebelumnya (Contoh: 11:30 jadi 10:59:59)
+            batas_waktu = waktu_terakhir.floor('h') - pd.Timedelta(seconds=1)
+            
+            # Potong dataset hanya sampai batas waktu tersebut
+            ds = ds.sel(time=slice(None, batas_waktu))
+            print(f"✂️ CUTOFF: Data jam {waktu_terakhir.hour}:00 dibuang karena tidak penuh (hanya sampai menit {waktu_terakhir.minute}).")
+        # ==========================================
+
+        # Setelah bersih, baru dilakukan resample
+        ds = resample_velocity(
+            ds, 
+            method=SPATIAL_CONFIG['RESAMPLE_METHOD'], 
+            freq=SPATIAL_CONFIG['RESAMPLE_FREQ']
+        )
         print(f"✅ Dataset Tergabung: {ds.dims}")
+        
     except Exception as e:
         print(f"❌ Gagal menggabungkan: {e}")
         return None
@@ -101,8 +158,14 @@ def run_data_preparation():
     ds['v'] = filter_temporal_iqr(ds['v'])
 
     print(f"🩹 6. Menambal data bolong (Interpolation maks {MODEL_CONFIG['max_save_nan']} jam)...")
-    # HANYA interpolasi waktu (maks 3 jam). Dilarang keras ffill spasial (lon/lat)!
-    ds_filled = ds.interpolate_na(dim='time', method='linear', limit=MODEL_CONFIG['max_save_nan'])
+    
+    # Tambahkan parameter max_gap agar gap yang lebih besar dari limit tidak disentuh sama sekali
+    ds_filled = ds.interpolate_na(
+        dim='time', 
+        method='linear', 
+        limit=MODEL_CONFIG['max_save_nan'],
+        max_gap=f"{MODEL_CONFIG['max_save_nan']}h"  # '3h' (3 jam)
+    )
 
     print("📉 7. Menghitung Anomali Spasial (Mean-Centering Bebas Leakage)...")
     
@@ -127,7 +190,7 @@ def run_data_preparation():
     u_mean.to_netcdf(PATHS['spatial_mean_u'], mode='w')
     v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
     
-    print("🧼 8. Imputasi Akhir (Sisa NaN > 3 Jam menjadi 0.0 murni)...")
+    print("🧼 8. Imputasi Akhir (Sisa NaN > {MODEL_CONFIG['max_save_nan']} Jam menjadi 0.0 murni)...")
     # Merubah sisa celah waktu yang besar menjadi netral (0.0) untuk PCA
     ds_final = ds_anom.fillna(0.0)
 

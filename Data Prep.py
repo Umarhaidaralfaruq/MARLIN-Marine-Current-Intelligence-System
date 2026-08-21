@@ -10,7 +10,7 @@ import pandas as pd
 import joblib
 import os
 from sklearn.decomposition import PCA
-from config import PATHS, MODEL_CONFIG
+from config import PATHS, MODEL_CONFIG, FEATURE_TOGGLES
 
 N_MODES = MODEL_CONFIG['n_modes']
 MAX_SAFE_NAN = MODEL_CONFIG['max_save_nan']
@@ -47,19 +47,23 @@ def prepare_operational_data():
         print(f"❌ File {file_input} tidak ditemukan!")
         return
 
-    # Load Data Pasut (Dengan Interpolasi)
-    try:
-        print("🌊 Membaca dan resampling data Elevasi Pasut...")
-        df_pasut = pd.read_excel(PATHS['aws_database'])
-        df_pasut.columns = df_pasut.columns.str.strip()
-        df_pasut['datetime'] = pd.to_datetime(df_pasut['datetime'], format='%d/%m/%Y %H:%M:%S')
-        
-        df_pasut = df_pasut.set_index('datetime').resample('1H').mean()
-        df_pasut = df_pasut.interpolate(method='time').reset_index()
-        df_pasut = df_pasut.drop_duplicates(subset=['datetime'])
-    except Exception as e:
-        print(f"❌ Error memuat data pasut: {e}")
-        return
+    # Load Data Pasut (Dengan Interpolasi) JIKA DIAKTIFKAN
+    if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
+        try:
+            print("🌊 Membaca dan resampling data Elevasi Pasut...")
+            df_pasut = pd.read_excel(PATHS['aws_database'])
+            df_pasut.columns = df_pasut.columns.str.strip()
+            df_pasut['datetime'] = pd.to_datetime(df_pasut['datetime'], format='%d/%m/%Y %H:%M:%S')
+            
+            df_pasut = df_pasut.set_index('datetime').resample('1H').mean()
+            df_pasut = df_pasut.interpolate(method='time').reset_index()
+            df_pasut = df_pasut.drop_duplicates(subset=['datetime'])
+        except Exception as e:
+            print(f"❌ Error memuat data pasut: {e}")
+            df_pasut = None
+    else:
+        print("⏭️ Fitur Elevasi Pasut dimatikan di config. Melewati pemrosesan pasut.")
+        df_pasut = None
 
     # 1. LOAD DATA NETCDF
     print("🥞 Memuat data NetCDF dan meratakan matriks spasial (Stacking)...")
@@ -110,14 +114,14 @@ def prepare_operational_data():
             df_master = pd.merge(df_master, df_comp, on='datetime', how='inner')
 
     # 5. PENGGABUNGAN DENGAN DATA PASUT & SEGMENTASI
-    print("\n🔗 Menggabungkan Datetime, Seluruh PC (U & V), dan Data Pasut...")
-    df_master = pd.merge(df_master, df_pasut, on='datetime', how='inner')
+    if df_pasut is not None:
+        print("\n🔗 Menggabungkan Datetime, Seluruh PC (U & V), dan Data Pasut...")
+        df_master = pd.merge(df_master, df_pasut, on='datetime', how='inner')
+    else:
+        print("\n🔗 Menggabungkan Datetime dan Seluruh PC (U & V) saja...")
 
     print("🏷️ Melabeli Segmen menggunakan logika Datetime Gap...")
     df_final = apply_segmentation_datetime(df_master)
-
-    print(f"   -> Total Baris Data Siap Operasional: {len(df_final)}")
-    print(f"   -> Jumlah Segmen Terbentuk: {df_final['Segment_ID'].nunique()}")
 
     # 6. SIMPAN KE DATA_GABUNG.CSV
     output_path = PATHS['data_gabung']
