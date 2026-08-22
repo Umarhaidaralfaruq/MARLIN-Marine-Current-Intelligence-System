@@ -578,9 +578,9 @@ def create_bmkg_report(df_source, title_text):
     x_min_buffer = x_min_asli - pd.Timedelta(hours=1)
     x_max_buffer = x_max_asli + pd.Timedelta(hours=1)
     
-    # PERBAIKAN: Atur frekuensi grid/label otomatis (Per 1 Jam vs Per 2 Jam)
+    # PERBAIKAN: Gunakan huruf kecil 'h' untuk format Pandas terbaru
     durasi_jam = (x_max_buffer - x_min_buffer).total_seconds() / 3600
-    frekuensi = '2H' if durasi_jam > 15 else '1H'
+    frekuensi = '2h' if durasi_jam > 15 else 'h'
     extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq=frekuensi)
 
     fig_bmkg, ax0 = plt.subplots(figsize=(14, 7), dpi=100)
