@@ -53,7 +53,8 @@ HTML_TEMPLATE = """
 <body>
     <div id="map"></div>
     <script>
-        var map = L.map('map').setView([__LAT_CENTER__, __LON_CENTER__], 12.5);
+        var map = L.map('map');
+        map.fitBounds([ [__LAT_MIN__, __LON_MIN__], [__LAT_MAX__, __LON_MAX__] ]);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(map);
@@ -336,12 +337,12 @@ with col_map:
     
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     
-    # PERBAIKAN PETA TERPOTONG: Gunakan konstanta global, jangan dari min/max data per jam
-    lat_min_plot, lat_max_plot = LAT_MIN, LAT_MAX
-    lon_min_plot, lon_max_plot = LON_MIN, LON_MAX
+    # KEMBALIKAN KE DINAMIS: Ambil batas asli dari data jam ini agar plot penuh
+    lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
+    lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
 
     @st.cache_data(show_spinner=False, ttl=3600)
-    def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
+    def generate_map_background(df_hour_json, lat_min, lat_max, lon_min, lon_max, vmax_plot):
         df_hour = pd.DataFrame(df_hour_json)
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
         batas_resolusi = 0.010 
@@ -353,8 +354,8 @@ with col_map:
         custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['blue', 'green', 'yellow', 'orange', 'red'])
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.axis('off')
-        ax.set_xlim(lon_min_data, lon_max_data) 
-        ax.set_ylim(lat_min_data, lat_max_data)
+        ax.set_xlim(lon_min, lon_max) 
+        ax.set_ylim(lat_min, lat_max)
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
@@ -375,7 +376,9 @@ with col_map:
 
     df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
     vmax_dinamis = 3.0 * faktor_konversi
-    image_base64 = generate_map_background(df_hour_dict, lat_min_plot, lat_max_plot, lon_min_plot, lon_max_plot, vmax_dinamis)
+    
+    # Passing batas data dinamis ke generator gambar
+    image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_dinamis)
 
     placed_labels = []
     labels_list = []
@@ -393,9 +396,9 @@ with col_map:
             labels_list.append({"lat": lat, "lon": lon, "val": f"{kec:.2f}"})
             placed_labels.append((lat, lon))
 
-    lat_tengah, lon_tengah = (lat_min_plot + lat_max_plot) / 2, (lon_min_plot + lon_max_plot) / 2
+    lat_tengah, lon_tengah = (lat_min_data + lat_max_data) / 2, (lon_min_data + lon_max_data) / 2
     
-    html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour)).replace("__LABELS_JSON__", json.dumps(labels_list)).replace("__IMAGE_BASE64__", image_base64).replace("__LAT_MIN__", str(lat_min_plot)).replace("__LON_MIN__", str(lon_min_plot)).replace("__LAT_MAX__", str(lat_max_plot)).replace("__LON_MAX__", str(lon_max_plot)).replace("__LAT_CENTER__", str(lat_tengah)).replace("__LON_CENTER__", str(lon_tengah)).replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi)).replace("__SATUAN__", satuan_teks).replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}").replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}").replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}").replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
+    html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour)).replace("__LABELS_JSON__", json.dumps(labels_list)).replace("__IMAGE_BASE64__", image_base64).replace("__LAT_MIN__", str(lat_min_data)).replace("__LON_MIN__", str(lon_min_data)).replace("__LAT_MAX__", str(lat_max_data)).replace("__LON_MAX__", str(lon_max_data)).replace("__LAT_CENTER__", str(lat_tengah)).replace("__LON_CENTER__", str(lon_tengah)).replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi)).replace("__SATUAN__", satuan_teks).replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}").replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}").replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}").replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
     
     components.html(html_siap_render, height=480)
 
