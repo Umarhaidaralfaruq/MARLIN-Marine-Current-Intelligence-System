@@ -128,7 +128,9 @@ def konversi_ke_velocity_json(df_hour):
     la1, la2 = float(lats[0]), float(lats[-1])
     dx = (lo2 - lo1) / (nx - 1) if nx > 1 else 0
     dy = (la1 - la2) / (ny - 1) if ny > 1 else 0
+    
     data_dict = df_hour.set_index(['lat', 'lon'])[['predicted_u', 'predicted_v']].to_dict('index')
+    
     u_data, v_data = [], []
     for lat in lats:
         for lon in lons:
@@ -136,8 +138,10 @@ def konversi_ke_velocity_json(df_hour):
                 u_data.append(float(data_dict[(lat, lon)]['predicted_u']))
                 v_data.append(float(data_dict[(lat, lon)]['predicted_v']))
             else:
-                u_data.append(0.0)
-                v_data.append(0.0)
+                # PERBAIKAN: Gunakan None (bukan 0.0) agar animasi partikel mati saat menyentuh batas/daratan
+                u_data.append(None)
+                v_data.append(None)
+                
     velocity_json = [
         {"header": {"parameterCategory": 2, "parameterNumber": 2, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": u_data},
         {"header": {"parameterCategory": 2, "parameterNumber": 3, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": v_data}
