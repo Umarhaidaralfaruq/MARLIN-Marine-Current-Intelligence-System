@@ -244,6 +244,11 @@ with col_head1:
 # PERSIAPAN DATA UNTUK SUMMARY (BACKGROUND PROCESS)
 # ==========================================
 selected_filename = st.session_state.get('sel_file', list(file_options.keys())[0])
+
+# PERBAIKAN: Reset pilihan jika memori Streamlit (session state) menyimpan format nama lama
+if selected_filename not in file_options:
+    selected_filename = list(file_options.keys())[0]
+
 satuan_pilihan = st.session_state.get('sel_unit', 'm/s')
 
 df_spatial = load_data(file_options[selected_filename])
