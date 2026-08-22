@@ -323,7 +323,7 @@ df_filtered_area_24 = df_spatial[
 idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(get_p95_idx)
 df_trend_p95 = df_filtered_area_24.loc[idx_p95_trend_24].reset_index(drop=True)
 
-# 4. Kalkulasi KPI Operational (Interaktif Berdasarkan Waktu Aktual & 24 Jam)
+# 4. Kalkulasi KPI Operational (Interaktif Berdasarkan Waktu Aktual & 12 Jam)
 waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 
 if not df_trend_p95.empty:
@@ -333,14 +333,16 @@ if not df_trend_p95.empty:
     
     kecepatan_saat_ini = baris_saat_ini['predicted_v_max']
     jam_saat_ini_str = baris_saat_ini['datetime_wib'].strftime('%H:%M WIB')
-    
-    # B. Cari kecepatan PUNCAK (Dalam 24 Jam kedepan)
-    baris_max = df_trend_p95.loc[df_trend_p95['predicted_v_max'].idxmax()]
-    max_speed_global = baris_max['predicted_v_max']
-    waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
 else:
     kecepatan_saat_ini = 0.0
     jam_saat_ini_str = "--:--"
+
+# B. Cari kecepatan PUNCAK (Hanya untuk 12 Jam Kedepan / Sesuai Shift)
+if 'df_trend_p95_shift' in locals() and not df_trend_p95_shift.empty:
+    baris_max = df_trend_p95_shift.loc[df_trend_p95_shift['predicted_v_max'].idxmax()]
+    max_speed_global = baris_max['predicted_v_max']
+    waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
+else:
     max_speed_global = 0.0
     waktu_ekstrem = "--:--"
 
@@ -350,7 +352,7 @@ selisih_jam = (waktu_sekarang_wib - waktu_baserun_wib).total_seconds() / 3600
 
 with col_head2:
     status_icon_data = "🟢" if selisih_jam <= 24 else "🔴"
-    status_teks_data = "DATA TERUPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
+    status_teks_data = "DATA UPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
     teks_warna_data = "#28a745" if selisih_jam <= 24 else "#dc3545"
     st.markdown(f"<div style='text-align: right; margin-top: 20px; font-weight: bold; color: {teks_warna_data};'>{status_icon_data} {status_teks_data}</div>", unsafe_allow_html=True)
 
@@ -385,7 +387,7 @@ html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{kecepatan_saat_ini:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Puncak (24J)</div>
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Puncak (12J)</div>
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
