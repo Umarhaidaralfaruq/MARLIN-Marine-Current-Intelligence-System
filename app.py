@@ -195,6 +195,15 @@ logo_seacast = "logo_bmkg2.png"
 ikon = Image.open(logo_seacast) if os.path.exists(logo_seacast) else (Image.open("logo_bmkg.png") if os.path.exists("logo_bmkg.png") else "🌊")
 
 st.set_page_config(page_title="MARLIN Dashboard", page_icon=ikon, layout="wide")
+st.markdown("""
+    <style>
+        /* Memaksa peta, legenda, tabel, dan seluruh teks kustom pakai font bawaan Streamlit */
+        .leaflet-container, .info.legend, .custom-div-icon, 
+        table, th, td, .stMarkdown, div[data-testid="stTable"] {
+            font-family: "Source Sans Pro", sans-serif !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
 
 def get_base64_logo(img_path):
@@ -672,6 +681,7 @@ with col_chart:
             ymax_plot = max(ymax_plot, batas_awas + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
+            font=dict(family="Source Sans Pro, sans-serif"),
             margin=dict(l=0, r=0, t=10, b=20), 
             xaxis_title=None,
             yaxis_title=f"Kecepatan ({satuan_teks})",
