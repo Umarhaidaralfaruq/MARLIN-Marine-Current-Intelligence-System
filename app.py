@@ -611,23 +611,34 @@ def create_bmkg_report(df_source, title_text):
         label_text = f"{panah_bmkg}\n{row['predicted_v_max']:.2f}"
         ax0.annotate(label_text, (row['datetime_utc'], row['predicted_v_max']), textcoords="offset points", xytext=(0,15), ha='center', fontsize=10, weight='bold')
 
-    header_text_left = "Kantor Layanan Informasi Meteorologi\nMaritim Ketapang, BMKG\nBMKG"
+    # PERBAIKAN 3: Teks Header baru
+    header_text_left = "Kantor Layanan Informasi Meteorologi Maritim\nKetapang - Gilimanuk\nBanyuwangi"
     fig_bmkg.text(0.11, 0.95, header_text_left, fontsize=12, weight='bold', color='black', ha='left', va='top', linespacing=1.4)
     
+    # PERBAIKAN 1: Waktu Keluaran dipaksa WIB (+7 jam dari UTC server)
     bulan_indo_bmkg = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
-    issue_time_wib = datetime.now() 
+    issue_time_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
     issue_date_str = f"{issue_time_wib.strftime('%d')} {bulan_indo_bmkg[issue_time_wib.month]} {issue_time_wib.strftime('%Y')}"
     
-    fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_wib.strftime('%H:%M WIB')}, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
+    fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_wib.strftime('%H:%M')} WIB, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
 
-    if os.path.exists(logo_filename):
+    # PERBAIKAN 2: Logo BMKG dengan Path Absolute yang robust
+    # Mencari kombinasi nama file logo yang mungkin ada di folder kerja lu
+    logo_path = BASE_DIR / "Logo_BMKG.png"
+    if not logo_path.exists():
+        logo_path = BASE_DIR / "logo_bmkg2.png"
+    if not logo_path.exists():
+        logo_path = BASE_DIR / "logo_bmkg.png"
+
+    if logo_path.exists():
         try:
-            arr_logo = plt.imread(logo_filename)
+            arr_logo = plt.imread(str(logo_path))
             imagebox = OffsetImage(arr_logo, zoom=0.08) 
             logo_loc = AnnotationBbox(imagebox, (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1))
             ax0.add_artist(logo_loc)
         except Exception as e:
-            pass
+            pass # Lolos tanpa error jika file ada tapi korup
+            
     return fig_bmkg
 # -----------------------------------------------------------
 
