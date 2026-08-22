@@ -122,17 +122,22 @@ HTML_TEMPLATE = """
 
 def konversi_ke_velocity_json(df_hour):
     # Ambil batas koordinat persis dari data
-    lo1, lo2 = float(df_hour['lon'].min()), float(df_hour['lon'].max())
-    la2, la1 = float(df_hour['lat'].min()), float(df_hour['lat'].max()) # la1 (Utara) ke la2 (Selatan)
+    lo1 = float(df_hour['lon'].min())
+    lo2 = float(df_hour['lon'].max())
+    la1 = float(df_hour['lat'].max()) # Utara
+    la2 = float(df_hour['lat'].min()) # Selatan
     
-    # Buat grid reguler (60x60 kotak) biar animasinya simetris 100% dengan peta
     nx, ny = 60, 60
     grid_lon = np.linspace(lo1, lo2, nx)
     grid_lat = np.linspace(la1, la2, ny) 
-    dx = (lo2 - lo1) / (nx - 1)
-    dy = (la2 - la1) / (ny - 1) 
     
-    # Terapkan Triangulasi dan MASKING yang PERSIS SAMA dengan background warna
+    dx = (lo2 - lo1) / (nx - 1)
+    
+    # PERBAIKAN: Jarak dy harus positif (Utara dikurang Selatan). 
+    # Kalau minus, panahnya malah merender terbang ke Utara (kayak error sebelumnya)!
+    dy = (la1 - la2) / (ny - 1) 
+    
+    # Triangulasi yang SAMA PERSIS dengan Matplotlib
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
     batas_resolusi = 0.011 
     
@@ -142,11 +147,11 @@ def konversi_ke_velocity_json(df_hour):
     sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
     sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
     
-    # Potong area di luar batas resolusi (darat/lautan kosong)
+    # Potong area yang di luar batas
     mask = np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0)
     triang.set_mask(mask)
     
-    # Cetak ulang data kecepatan arus ke grid reguler yang sudah dipotong
+    # Cetak ulang data arus ke grid kotak (interpolasi)
     interp_u = tri.LinearTriInterpolator(triang, df_hour['predicted_u'])
     interp_v = tri.LinearTriInterpolator(triang, df_hour['predicted_v'])
     
@@ -154,13 +159,12 @@ def konversi_ke_velocity_json(df_hour):
     U_grid = interp_u(Grid_lon, Grid_lat)
     V_grid = interp_v(Grid_lon, Grid_lat)
     
-    # Masukkan ke format array JSON untuk Leaflet Velocity
     u_data, v_data = [], []
     for i in range(ny):
         for j in range(nx):
             u_val = U_grid[i, j]
             v_val = V_grid[i, j]
-            # Jika posisinya ada di area potongan/hantu, paksa matikan (None)
+            # Jika posisinya di area terpotong/daratan, jadikan None agar animasi mati
             if np.ma.is_masked(u_val) or np.isnan(u_val):
                 u_data.append(None)
                 v_data.append(None)
