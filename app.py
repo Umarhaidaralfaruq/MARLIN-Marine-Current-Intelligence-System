@@ -18,6 +18,7 @@ from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import re
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from datetime import datetime
 from pathlib import Path
@@ -195,10 +196,28 @@ def get_p95_idx(group):
     return (group['predicted_v_max'] - p95).abs().idxmin()
 
 list_of_files = get_available_baseruns()
+
 if not list_of_files:
     st.error(f"❌ Tidak ada file prediksi ditemukan di folder: {FOLDER_OUTPUT}")
     st.stop()
-file_options = {os.path.basename(f): f for f in list_of_files}
+
+# FUNGSI BARU: Mengubah "prediksi_spasial_20260822_0900.csv" jadi "2026-08-22 16:00 WIB"
+def format_nama_baserun(filepath):
+    filename = os.path.basename(filepath)
+    # Cari pola angka YYYYMMDD dan HHMM dari nama file
+    match = re.search(r'prediksi_spasial_(\d{8})_(\d{4})\.csv', filename)
+    if match:
+        tanggal_str = match.group(1) # '20260822'
+        jam_str = match.group(2)     # '0900'
+        # Gabungkan dan konversi ke objek waktu Pandas (UTC)
+        waktu_utc = pd.to_datetime(f"{tanggal_str}{jam_str}", format="%Y%m%d%H%M")
+        # Tambah 7 Jam ke WIB
+        waktu_wib = waktu_utc + pd.Timedelta(hours=7)
+        return waktu_wib.strftime("%Y-%m-%d %H:%M WIB")
+    return filename # Kembalikan nama asli jika format file berbeda
+
+# Membuat dictionary dengan kunci nama WIB dan value lokasi asli file
+file_options = {format_nama_baserun(f): f for f in list_of_files}
 
 # ==========================================
 # 1. HEADER & SYSTEM STATUS (COMPACT)
