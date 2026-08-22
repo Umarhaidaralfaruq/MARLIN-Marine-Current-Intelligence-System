@@ -577,7 +577,11 @@ def create_bmkg_report(df_source, title_text):
     x_max_asli = df_plot['datetime_utc'].max()
     x_min_buffer = x_min_asli - pd.Timedelta(hours=1)
     x_max_buffer = x_max_asli + pd.Timedelta(hours=1)
-    extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq='h')
+    
+    # PERBAIKAN: Atur frekuensi grid/label otomatis (Per 1 Jam vs Per 2 Jam)
+    durasi_jam = (x_max_buffer - x_min_buffer).total_seconds() / 3600
+    frekuensi = '2H' if durasi_jam > 15 else '1H'
+    extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq=frekuensi)
 
     fig_bmkg, ax0 = plt.subplots(figsize=(14, 7), dpi=100)
     fig_bmkg.subplots_adjust(left=0.08, right=0.95, top=0.7, bottom=0.15) 
@@ -611,19 +615,15 @@ def create_bmkg_report(df_source, title_text):
         label_text = f"{panah_bmkg}\n{row['predicted_v_max']:.2f}"
         ax0.annotate(label_text, (row['datetime_utc'], row['predicted_v_max']), textcoords="offset points", xytext=(0,15), ha='center', fontsize=10, weight='bold')
 
-    # PERBAIKAN 3: Teks Header baru
     header_text_left = "Kantor Layanan Informasi Meteorologi Maritim\nKetapang - Gilimanuk\nBanyuwangi"
     fig_bmkg.text(0.11, 0.95, header_text_left, fontsize=12, weight='bold', color='black', ha='left', va='top', linespacing=1.4)
     
-    # PERBAIKAN 1: Waktu Keluaran dipaksa WIB (+7 jam dari UTC server)
     bulan_indo_bmkg = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
     issue_time_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
     issue_date_str = f"{issue_time_wib.strftime('%d')} {bulan_indo_bmkg[issue_time_wib.month]} {issue_time_wib.strftime('%Y')}"
     
     fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_wib.strftime('%H:%M')} WIB, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
 
-    # PERBAIKAN 2: Logo BMKG dengan Path Absolute yang robust
-    # Mencari kombinasi nama file logo yang mungkin ada di folder kerja lu
     logo_path = BASE_DIR / "Logo_BMKG.png"
     if not logo_path.exists():
         logo_path = BASE_DIR / "logo_bmkg2.png"
@@ -637,7 +637,7 @@ def create_bmkg_report(df_source, title_text):
             logo_loc = AnnotationBbox(imagebox, (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1))
             ax0.add_artist(logo_loc)
         except Exception as e:
-            pass # Lolos tanpa error jika file ada tapi korup
+            pass 
             
     return fig_bmkg
 # -----------------------------------------------------------
