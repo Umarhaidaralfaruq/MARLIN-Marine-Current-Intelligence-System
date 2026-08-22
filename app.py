@@ -84,8 +84,11 @@ HTML_TEMPLATE = """
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
             velocityScale: 0.05,           
-            particleAge: 200,
-            particleMultiplier: 0.002,     
+            
+            // PERBAIKAN ANIMASI: 
+            particleAge: 50,           // Kurangi dari 200 ke 50 agar panah langsung mati saat keluar warna
+            particleMultiplier: 0.001, // Kurangi kepadatan agar pinggiran tidak terlalu berantakan
+            
             colorScale: ['#ffffff']        
         });
         velocityLayer.addTo(map);
@@ -118,29 +121,52 @@ HTML_TEMPLATE = """
 """
 
 def konversi_ke_velocity_json(df_hour):
-    df_hour = df_hour.copy()
-    df_hour['lon'] = df_hour['lon'].round(4)
-    df_hour['lat'] = df_hour['lat'].round(4)
-    lons = np.sort(df_hour['lon'].unique())
-    lats = np.sort(df_hour['lat'].unique())[::-1] 
-    nx, ny = len(lons), len(lats)
-    lo1, lo2 = float(lons[0]), float(lons[-1])
-    la1, la2 = float(lats[0]), float(lats[-1])
-    dx = (lo2 - lo1) / (nx - 1) if nx > 1 else 0
-    dy = (la1 - la2) / (ny - 1) if ny > 1 else 0
+    # Ambil batas koordinat persis dari data
+    lo1, lo2 = float(df_hour['lon'].min()), float(df_hour['lon'].max())
+    la2, la1 = float(df_hour['lat'].min()), float(df_hour['lat'].max()) # la1 (Utara) ke la2 (Selatan)
     
-    data_dict = df_hour.set_index(['lat', 'lon'])[['predicted_u', 'predicted_v']].to_dict('index')
+    # Buat grid reguler (60x60 kotak) biar animasinya simetris 100% dengan peta
+    nx, ny = 60, 60
+    grid_lon = np.linspace(lo1, lo2, nx)
+    grid_lat = np.linspace(la1, la2, ny) 
+    dx = (lo2 - lo1) / (nx - 1)
+    dy = (la2 - la1) / (ny - 1) 
     
+    # Terapkan Triangulasi dan MASKING yang PERSIS SAMA dengan background warna
+    triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
+    batas_resolusi = 0.011 
+    
+    x_tri = triang.x[triang.triangles]
+    y_tri = triang.y[triang.triangles]
+    sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
+    sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
+    sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
+    
+    # Potong area di luar batas resolusi (darat/lautan kosong)
+    mask = np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0)
+    triang.set_mask(mask)
+    
+    # Cetak ulang data kecepatan arus ke grid reguler yang sudah dipotong
+    interp_u = tri.LinearTriInterpolator(triang, df_hour['predicted_u'])
+    interp_v = tri.LinearTriInterpolator(triang, df_hour['predicted_v'])
+    
+    Grid_lon, Grid_lat = np.meshgrid(grid_lon, grid_lat)
+    U_grid = interp_u(Grid_lon, Grid_lat)
+    V_grid = interp_v(Grid_lon, Grid_lat)
+    
+    # Masukkan ke format array JSON untuk Leaflet Velocity
     u_data, v_data = [], []
-    for lat in lats:
-        for lon in lons:
-            if (lat, lon) in data_dict and not pd.isna(data_dict[(lat, lon)]['predicted_u']):
-                u_data.append(float(data_dict[(lat, lon)]['predicted_u']))
-                v_data.append(float(data_dict[(lat, lon)]['predicted_v']))
-            else:
-                # PERBAIKAN: Gunakan None (bukan 0.0) agar animasi partikel mati saat menyentuh batas/daratan
+    for i in range(ny):
+        for j in range(nx):
+            u_val = U_grid[i, j]
+            v_val = V_grid[i, j]
+            # Jika posisinya ada di area potongan/hantu, paksa matikan (None)
+            if np.ma.is_masked(u_val) or np.isnan(u_val):
                 u_data.append(None)
                 v_data.append(None)
+            else:
+                u_data.append(float(u_val))
+                v_data.append(float(v_val))
                 
     velocity_json = [
         {"header": {"parameterCategory": 2, "parameterNumber": 2, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": u_data},
@@ -444,8 +470,8 @@ with col_map:
         
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
         
-        # PERBAIKAN: Perbesar batas resolusi masking agar selimut warna merender seluruh titik data
-        batas_resolusi = 0.025 # <-- UBAH NILAI INI (Sebelumnya 0.010)
+        # KEMBALIKAN KE RESOLUSI AMAN (Agar tidak mewarnai daratan)
+        batas_resolusi = 0.011 
         
         x_tri = triang.x[triang.triangles]
         y_tri = triang.y[triang.triangles]
