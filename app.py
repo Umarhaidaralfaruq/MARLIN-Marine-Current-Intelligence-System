@@ -333,16 +333,26 @@ if not df_trend_p95.empty:
     
     kecepatan_saat_ini = baris_saat_ini['predicted_v_max']
     jam_saat_ini_str = baris_saat_ini['datetime_wib'].strftime('%H:%M WIB')
+    
+    # B. Cari kecepatan PUNCAK (Saring langsung 12 Jam / Sesuai Shift)
+    waktu_utc = df_trend_p95['datetime_wib'] - pd.Timedelta(hours=7)
+    jam_terakhir = waktu_utc.max().hour
+    start_h = 12 if jam_terakhir < 12 else 0
+    end_h = 24 if jam_terakhir < 12 else 12
+    
+    mask_shift = (waktu_utc.dt.hour >= start_h) & (waktu_utc.dt.hour < end_h)
+    df_12j = df_trend_p95[mask_shift]
+    
+    if not df_12j.empty:
+        baris_max = df_12j.loc[df_12j['predicted_v_max'].idxmax()]
+        max_speed_global = baris_max['predicted_v_max']
+        waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
+    else:
+        max_speed_global = 0.0
+        waktu_ekstrem = "--:--"
 else:
     kecepatan_saat_ini = 0.0
     jam_saat_ini_str = "--:--"
-
-# B. Cari kecepatan PUNCAK (Hanya untuk 12 Jam Kedepan / Sesuai Shift)
-if 'df_trend_p95_shift' in locals() and not df_trend_p95_shift.empty:
-    baris_max = df_trend_p95_shift.loc[df_trend_p95_shift['predicted_v_max'].idxmax()]
-    max_speed_global = baris_max['predicted_v_max']
-    waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
-else:
     max_speed_global = 0.0
     waktu_ekstrem = "--:--"
 
