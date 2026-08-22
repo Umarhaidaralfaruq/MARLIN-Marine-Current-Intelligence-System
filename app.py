@@ -56,7 +56,9 @@ HTML_TEMPLATE = """
     <script>
         var map = L.map('map');
         map.fitBounds([ [__LAT_MIN__, __LON_MIN__], [__LAT_MAX__, __LON_MAX__] ]);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        
+        // 1. PERUBAHAN BASEMAP KE CARTO DARK MATTER
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(map);
 
@@ -66,9 +68,10 @@ HTML_TEMPLATE = """
 
         var labelsData = __LABELS_JSON__;
         labelsData.forEach(function(lbl) {
+            // 2. PERBAIKAN LABEL WARNA: Teks Putih dengan Bayangan Hitam Tebal
             var icon = L.divIcon({
                 className: 'custom-div-icon',
-                html: '<div style="font-size: 11px; color: black; font-weight: bold; text-shadow: 2px 2px 3px white, -2px -2px 3px white;">' + lbl.val + '</div>',
+                html: '<div style="font-size: 11px; color: white; font-weight: bold; text-shadow: 1px 1px 3px black, -1px -1px 3px black, 0px 0px 4px black;">' + lbl.val + '</div>',
                 iconSize: [30, 15],
                 iconAnchor: [15, 7]
             });
@@ -87,20 +90,22 @@ HTML_TEMPLATE = """
         });
         velocityLayer.addTo(map);
 
+        // 3. PERBAIKAN LEGENDA: Disesuaikan jadi Dark Mode
         var legend = L.control({position: 'bottomright'});
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
-            div.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+            // Background legenda digelapkan (warna slate tua)
+            div.style.backgroundColor = 'rgba(15, 23, 42, 0.9)'; 
             div.style.padding = '10px 15px';
             div.style.borderRadius = '8px';
-            div.style.border = '1px solid #ccc';
-            div.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.2)';
+            div.style.border = '1px solid rgba(148,163,184,0.3)';
+            div.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.5)';
             div.style.fontFamily = 'Arial, sans-serif';
             div.innerHTML = 
-                '<div style="margin-bottom: 8px; font-weight: bold; font-size: 12px; color: black; text-align: center;">Kecepatan Arus (__SATUAN__)</div>' +
+                '<div style="margin-bottom: 8px; font-weight: bold; font-size: 12px; color: #f8fafc; text-align: center;">Kecepatan Arus (__SATUAN__)</div>' +
                 '<div style="background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082); ' +
-                'width: 250px; height: 15px; border-radius: 10px; box-shadow: inset 0 0 2px rgba(0,0,0,0.5);"></div>' +
-                '<div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; color: black; font-weight: bold; padding: 0 5px;">' +
+                'width: 250px; height: 15px; border-radius: 10px; box-shadow: inset 0 0 2px rgba(0,0,0,0.8);"></div>' +
+                '<div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; color: #cbd5e1; font-weight: bold; padding: 0 5px;">' +
                     '<span>0</span>' +
                     '<span>__LEG_1__</span><span>__LEG_2__</span><span>__LEG_3__</span><span>__LEG_4__</span>' +
                 '</div>';
