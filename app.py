@@ -285,52 +285,30 @@ else:
     status_icon = "🟢"
     text_color = "#ffffff"
 
-# Injeksi HTML/CSS untuk membuat Card yang padat, elegan, dan eye-catching
-html_summary = f"""
-<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); 
-            border: 1px solid rgba(148,163,184,0.2); 
-            border-radius: 8px; 
-            padding: 20px 25px; 
-            margin-bottom: 20px; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
-    <h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">
-        Ringkasan Operasional
-    </h3>
-    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-        
-        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks 24J</div>
-            <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">
-                {max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
-            </div>
-        </div>
-        
-        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Waktu Puncak</div>
-            <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">
-                {waktu_ekstrem[:5]} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">WIB</span>
-            </div>
-        </div>
-        
-        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Arah Dominan</div>
-            <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1.2;">
-                {arah_dominan_global}
-            </div>
-        </div>
-        
-        <div style="flex: 1; min-width: 150px;">
-            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Status Kondisi</div>
-            <div style="display: inline-block; background-color: {status_bg}; color: {text_color}; padding: 6px 16px; border-radius: 20px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                {status_icon} {status_text}
-            </div>
-        </div>
-        
-    </div>
+# Injeksi HTML/CSS (RATA KIRI TOTAL AGAR TIDAK DIBACA SEBAGAI CODE BLOCK OLEH STREAMLIT)
+html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
+<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional</h3>
+<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+<div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks 24J</div>
+<div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
-"""
-st.markdown(html_summary, unsafe_allow_html=True)
+<div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Waktu Puncak</div>
+<div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{waktu_ekstrem[:5]} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">WIB</span></div>
+</div>
+<div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Arah Dominan</div>
+<div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1.2;">{arah_dominan_global}</div>
+</div>
+<div style="flex: 1; min-width: 150px;">
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Status Kondisi</div>
+<div style="display: inline-block; background-color: {status_bg}; color: {text_color}; padding: 6px 16px; border-radius: 20px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">{status_icon} {status_text}</div>
+</div>
+</div>
+</div>"""
 
+st.markdown(html_summary, unsafe_allow_html=True)
 
 # ==========================================
 # 3. KONTROL DATA (P1)
