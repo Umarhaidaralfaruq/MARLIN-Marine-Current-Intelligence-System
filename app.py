@@ -493,7 +493,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
     with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
         
         # ---------------------------------------------------------
-        # LANGKAH 1: PRE-LOAD DATA REAL (AGAR BISA MATCHING 12 TITIK)
+        # LANGKAH 1: PRE-LOAD DATA REAL
         # ---------------------------------------------------------
         from pathlib import Path
         BASE_DIR = Path(__file__).parent.resolve()
@@ -510,7 +510,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                 df_real_raw['Tanggal'] = df_real_raw['waktu_utc'].dt.strftime('%Y-%m-%d')
                 df_real_raw['Shift'] = df_real_raw['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
                 
-                # Konversi satuan Data Real sejak awal (m/s atau Knot)
                 if satuan_teks == "Knot":
                     df_real_raw['Real_Max_Speed_ms'] = df_real_raw['Real_Max_Speed_ms'] * 1.94384
                 
@@ -533,61 +532,197 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                 df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(qc_shift)
 
         # ---------------------------------------------------------
-        # LANGKAH 2 & 3: [PASTE LOGIKA LOOPING PREDIKSI & GABUNGKAN DATA REAL LU DI SINI]
-        # (Sengaja gw skip panjangnya biar hemat layar, tapi logika Python lu dari line `rekap_prediksi = []` 
-        # sampai penentuan `mbe_score` dan `rmse_score` 100% aman dipakai utuh)
+        # LANGKAH 2: LOOPING DATA PREDIKSI (BASERUNS)
         # ---------------------------------------------------------
+        rekap_prediksi = []
         
-        # Asumsikan mbe_score, rmse_score, valid_data, df_verif_tampil sudah terhitung
-        
+        def cek_shift_target(df_prediksi_24jam):
+            last_time = df_prediksi_24jam['datetime'].max()
+            if last_time.hour < 12: return 12, 24, "Malam"
+            else: return 0, 12, "Pagi"
+
+        def get_p95_idx_local(group):
+            p95 = group['predicted_v_max'].quantile(0.95)
+            if pd.isna(p95): return group.index[0]
+            return (group['predicted_v_max'] - p95).abs().idxmin()
+
+        for filepath in list_of_files:
+            df_temp = load_data(filepath)
+            start_hour_utc, end_hour_utc, shift_nama = cek_shift_target(df_temp)
+            
+            mask_shift_local = (
+                (df_temp['datetime'].dt.hour >= start_hour_utc) & 
+                (df_temp['datetime'].dt.hour < end_hour_utc) &
+                (df_temp['lat'] >= LAT_MIN) & (df_temp['lat'] <= LAT_MAX) &
+                (df_temp['lon'] >= LON_MIN) & (df_temp['lon'] <= LON_MAX)
+            )
+            df_temp_shift = df_temp.loc[mask_shift_local]
+            
+            if df_temp_shift.empty:
+                continue
+                
+            idx_p95 = df_temp_shift.groupby('datetime_wib').apply(get_p95_idx_local)
+            df_p95_shift = df_temp_shift.loc[idx_p95].copy()
+            
+            tanggal_str = df_temp_shift['datetime'].dt.strftime('%Y-%m-%d').mode()[0]
+            
+            df_p95_shift['pred_speed'] = df_p95_shift['predicted_v_max'] * faktor_konversi
+            baris_max_pred = df_p95_shift.loc[df_p95_shift['pred_speed'].idxmax()]
+            
+            max_pred_shift = baris_max_pred['pred_speed']
+            waktu_max_pred_str = baris_max_pred['datetime_wib'].strftime('%H:%M WIB')
+            
+            shift_mbe = np.nan
+            shift_rmse = np.nan
+            raw_errors_shift = [] 
+            chart_data_dict = {} 
+            
+            if not df_real_hourly.empty:
+                df_chart = pd.merge(
+                    df_p95_shift[['datetime', 'datetime_wib', 'pred_speed']], 
+                    df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms']], 
+                    left_on='datetime', 
+                    right_on='waktu_utc', 
+                    how='left'
+                )
+                
+                df_chart['jam_wib'] = df_chart['datetime_wib'].dt.strftime('%H:%M')
+                chart_data_dict = {
+                    'waktu': df_chart['jam_wib'].tolist(),
+                    'prediksi': df_chart['pred_speed'].tolist(),
+                    'observasi': df_chart['Real_Max_Speed_ms'].tolist()
+                }
+                
+                df_merged = df_chart.dropna(subset=['Real_Max_Speed_ms', 'pred_speed'])
+                
+                if not df_merged.empty:
+                    errors = df_merged['Real_Max_Speed_ms'] - df_merged['pred_speed']
+                    shift_mbe = errors.mean()
+                    shift_rmse = np.sqrt((errors**2).mean())
+                    raw_errors_shift = errors.tolist() 
+            
+            rekap_prediksi.append({
+                'Tanggal': tanggal_str,
+                'Shift': shift_nama,
+                f'Prediksi Arus Maks ({satuan_teks})': max_pred_shift,
+                f'MBE ({satuan_teks})': shift_mbe,
+                f'RMSE ({satuan_teks})': shift_rmse,
+                'Baserun': os.path.basename(filepath),
+                'raw_errors': raw_errors_shift,
+                'chart_data': chart_data_dict
+            })
+            
+        df_rekap_pred = pd.DataFrame(rekap_prediksi)
+
         # ---------------------------------------------------------
-        # LANGKAH 4: RENDER UI KARTU METRIK & TABEL (Sesuai Brief Redesign)
+        # LANGKAH 3: GABUNGKAN & HITUNG METRIK GLOBAL
         # ---------------------------------------------------------
-        if len(valid_data) > 0: # Cek jika ada data yang tervalidasi
-            # Menggunakan 3 kolom sejajar yang compact
+        if not df_rekap_pred.empty and not df_real_agg.empty:
+            df_verif = pd.merge(
+                df_rekap_pred, 
+                df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Waktu_Max_Real', 'Kualitas_Data']], 
+                on=['Tanggal', 'Shift'], 
+                how='left' 
+            )
+            mask_kosong = df_verif['Real_Max_Speed_Max'].isna()
+            df_verif.loc[mask_kosong, f'MBE ({satuan_teks})'] = np.nan
+            df_verif.loc[mask_kosong, f'RMSE ({satuan_teks})'] = np.nan
+            df_verif.loc[mask_kosong, 'Waktu_Max_Real'] = np.nan
+        else:
+            df_verif = df_rekap_pred.copy() if not df_rekap_pred.empty else pd.DataFrame()
+            if not df_verif.empty:
+                df_verif['Real_Max_Speed_Max'] = np.nan
+                df_verif['Waktu_Max_Real'] = np.nan
+                df_verif['Kualitas_Data'] = "Tidak Ada Data CSV"
+
+        if not df_verif.empty:
+            df_verif.rename(columns={
+                'Real_Max_Speed_Max': f'Observasi ({satuan_teks})',
+                'Waktu_Max_Real': 'Waktu Puncak',
+                'Kualitas_Data': 'Ketersediaan Data'
+            }, inplace=True)
+            
+            df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
+            df_verif['Waktu Puncak'] = df_verif['Waktu Puncak'].fillna("-")
+            df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
+
+            valid_data = df_verif.dropna(subset=[f'RMSE ({satuan_teks})', f'Observasi ({satuan_teks})'])
+            
+            if len(valid_data) > 0:
+                all_errors = []
+                for err_list in valid_data['raw_errors']:
+                    if isinstance(err_list, list) and len(err_list) > 0:
+                        all_errors.extend(err_list)
+                        
+                all_errors = np.array(all_errors)
+                mbe_score = all_errors.mean() if len(all_errors) > 0 else 0.0
+                rmse_score = np.sqrt((all_errors**2).mean()) if len(all_errors) > 0 else 0.0
+                
+                delta_teks_rmse = "Akurasi Baik" if rmse_score <= 0.4 else "Waspada Error"
+                color_rmse = "normal" if rmse_score <= 0.4 else "inverse"
+                
+                if mbe_score > 0.1: 
+                    delta_teks_mbe, color_mbe = "Cenderung Underestimate", "off"
+                elif mbe_score < -0.1: 
+                    delta_teks_mbe, color_mbe = "Cenderung Overestimate", "off"
+                else:
+                    delta_teks_mbe, color_mbe = "Sangat Presisi", "normal"
+            else:
+                mbe_score, rmse_score = 0.0, 0.0
+                delta_teks_rmse = delta_teks_mbe = "Menunggu Observasi"
+                color_rmse = color_mbe = "off"
+
+            # Format angka untuk tabel
+            df_verif[f'Prediksi Arus Maks ({satuan_teks})'] = df_verif[f'Prediksi Arus Maks ({satuan_teks})'].map('{:.2f}'.format)
+            df_verif[f'Observasi ({satuan_teks})'] = df_verif[f'Observasi ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+            df_verif[f'MBE ({satuan_teks})'] = df_verif[f'MBE ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+            df_verif[f'RMSE ({satuan_teks})'] = df_verif[f'RMSE ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
+
+            kolom_fix = ['Tanggal', 'Shift', f'Prediksi Arus Maks ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']
+            df_verif_tampil = df_verif[kolom_fix]
+
+            # FUNGSI POP-UP GRAFIK
+            @st.dialog("📈 Grafik Perbandingan Shift", width="large")
+            def tampilkan_popup_grafik(tanggal, shift, chart_data):
+                if not chart_data or 'waktu' not in chart_data:
+                    st.warning("Data observasi grafik tidak tersedia untuk shift ini.")
+                    return
+                    
+                fig_popup = go.Figure()
+                fig_popup.add_trace(go.Scatter(x=chart_data['waktu'], y=chart_data['prediksi'], mode='lines+markers', name='Prediksi Model', line=dict(color='blue', width=2)))
+                fig_popup.add_trace(go.Scatter(x=chart_data['waktu'], y=chart_data['observasi'], mode='lines+markers', name='Observasi HF Radar', line=dict(color='red', width=2)))
+                fig_popup.update_layout(
+                    title=f"Tanggal: {tanggal} | Shift: {shift}",
+                    xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan Arus ({satuan_teks})",
+                    hovermode="x unified", margin=dict(l=0, r=0, t=60, b=0),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5) 
+                )
+                st.plotly_chart(fig_popup, use_container_width=True)
+
+            # ---------------------------------------------------------
+            # LANGKAH 4: RENDER UI
+            # ---------------------------------------------------------
             col_v1, col_v2, col_v3 = st.columns(3)
-    
-            with col_v1:
-                st.metric(
-                    label="Shift Available", 
-                    value=f"{len(valid_data)}", 
-                    delta=f"Dari total {len(df_verif)} shift", 
-                    delta_color="normal"
-                )
-    
-            with col_v2:
-                st.metric(
-                    label="MBE",  
-                    value=f"{mbe_score:.2f} {satuan_teks}", 
-                    delta=delta_teks_mbe, 
-                    delta_color=color_mbe
-                )
-    
-            with col_v3:
-                st.metric(
-                    label="RMSE", 
-                    value=f"{rmse_score:.2f} {satuan_teks}", 
-                    delta=delta_teks_rmse, 
-                    delta_color=color_rmse
-                )
-    
+            with col_v1: st.metric("Shift Available", f"{len(valid_data)}", f"Dari total {len(df_verif)}", delta_color="normal")
+            with col_v2: st.metric("MBE", f"{mbe_score:.2f} {satuan_teks}", delta_teks_mbe, delta_color=color_mbe)
+            with col_v3: st.metric("RMSE", f"{rmse_score:.2f} {satuan_teks}", delta_teks_rmse, delta_color=color_rmse)
+
             def warnai_ketersediaan(val):
                 if isinstance(val, str):
                     if 'Sangat Baik' in val: return 'color: #28a745;'
                     elif 'Cukup' in val: return 'color: #ffc107;'
                     elif 'Menunggu' in val or 'Tidak' in val: return 'color: #dc3545;'
                 return ''
-    
+
             st.markdown("**Tabel Riwayat Validasi**")
             styled_df = df_verif_tampil.style.map(warnai_ketersediaan, subset=['Ketersediaan Data'])
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
-            # Popup Grafik Pilihan (Tetap dipertahankan karena berguna)
             st.markdown("---")
             col_pilih1, col_pilih2, empty = st.columns([2, 1, 1])
             with col_pilih1:
                 opsi_pilihan = df_verif['Tanggal'].astype(str) + " - Shift " + df_verif['Shift'].astype(str)
-                pilihan_shift = st.selectbox("Pilih jadwal untuk grafik perbandingan:", options=opsi_pilihan.tolist(), label_visibility="collapsed")
+                pilihan_shift = st.selectbox("Pilih jadwal grafik perbandingan:", options=opsi_pilihan.tolist(), label_visibility="collapsed")
             with col_pilih2:
                 if st.button("Lihat Grafik", use_container_width=True):
                     idx = opsi_pilihan.tolist().index(pilihan_shift)
