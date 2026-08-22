@@ -397,7 +397,7 @@ html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{kecepatan_saat_ini:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Puncak (12J)</div>
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Puncak - 12 Jam</div>
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
