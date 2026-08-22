@@ -666,8 +666,9 @@ with col_exp1:
 with col_exp2:
     if st.button("📥 Unduh Grafik 24 Jam", use_container_width=True):
         with st.spinner("Memproses grafik..."):
-            if 'df_trend' in locals() and not df_trend.empty:
-                fig_24j = create_bmkg_report(df_trend, "Prediksi Kecepatan Arus Ketapang-Gilimanuk 24 Jam Kedepan")
+            # PERBAIKAN: Ubah df_trend menjadi df_trend_p95 (variabel data 24 jam dari atas)
+            if 'df_trend_p95' in locals() and not df_trend_p95.empty:
+                fig_24j = create_bmkg_report(df_trend_p95, "Prediksi Kecepatan Arus Ketapang-Gilimanuk 24 Jam Kedepan")
                 with io.BytesIO() as buf:
                     fig_24j.savefig(buf, format="png", dpi=150)
                     st.download_button(
