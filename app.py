@@ -438,15 +438,14 @@ with col_map:
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
 
-    # ========================================================
-    # FUNGSI CACHE UNTUK BACKGROUND PETA (BERSIH DARI EFEK HALO PUTIH)
-    # ========================================================
     @st.cache_data(show_spinner=False, ttl=3600)
     def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
         df_hour = pd.DataFrame(df_hour_json)
         
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-        batas_resolusi = 0.010 
+        
+        # PERBAIKAN: Perbesar batas resolusi masking agar selimut warna merender seluruh titik data
+        batas_resolusi = 0.025 # <-- UBAH NILAI INI (Sebelumnya 0.010)
         
         x_tri = triang.x[triang.triangles]
         y_tri = triang.y[triang.triangles]
@@ -456,7 +455,7 @@ with col_map:
         
         mask = np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0)
         triang.set_mask(mask)
-    
+
         custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['blue', 'green', 'yellow', 'orange', 'red'])
     
         fig, ax = plt.subplots(figsize=(6, 6))
