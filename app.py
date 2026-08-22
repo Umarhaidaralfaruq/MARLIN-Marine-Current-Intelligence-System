@@ -434,38 +434,49 @@ with col_map:
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
 
+    # ========================================================
+    # FUNGSI CACHE UNTUK BACKGROUND PETA (BERSIH DARI EFEK HALO PUTIH)
+    # ========================================================
     @st.cache_data(show_spinner=False, ttl=3600)
-    def generate_map_background(df_hour_json, lat_min, lat_max, lon_min, lon_max, vmax_plot):
+    def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
         df_hour = pd.DataFrame(df_hour_json)
+        
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
         batas_resolusi = 0.010 
-        x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
+        
+        x_tri = triang.x[triang.triangles]
+        y_tri = triang.y[triang.triangles]
         sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
         sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
         sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
-        triang.set_mask(np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0))
+        
+        mask = np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0)
+        triang.set_mask(mask)
+    
         custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['blue', 'green', 'yellow', 'orange', 'red'])
+    
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.axis('off')
-        ax.set_xlim(lon_min, lon_max) 
-        ax.set_ylim(lat_min, lat_max)
+        ax.set_xlim(lon_min_data, lon_max_data) 
+        ax.set_ylim(lat_min_data, lat_max_data)
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.margins(0,0)
-        ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0.0, vmax_plot, 1000), cmap=custom_cmap, vmin=0.0, vmax=vmax_plot, extend='max', alpha=0.9)
+        
+        ax.tricontourf(
+            triang, df_hour['predicted_v_max'], 
+            levels=np.linspace(0.0, vmax_plot, 1000), 
+            cmap=custom_cmap, vmin=0.0, vmax=vmax_plot, extend='max', alpha=0.9
+        )
+    
         buf = io.BytesIO()
+        # Langsung simpan dengan transparan murni tanpa proses PIL yang bikin halo putih
         plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, transparent=True)
         buf.seek(0)
         plt.close(fig)
-        img = Image.open(buf)
-        r, g, b, a = img.split()
-        a_blur = a.filter(ImageFilter.GaussianBlur(radius=10))
-        a_final = a_blur.point(lambda p: 255 if p > 120 else 0).filter(ImageFilter.GaussianBlur(radius=1))
-        img_rounded = Image.merge('RGBA', (r, g, b, a_final))
-        buf_final = io.BytesIO()
-        img_rounded.save(buf_final, format='PNG')
-        return base64.b64encode(buf_final.getvalue()).decode('utf-8')
+    
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
 
     df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
     vmax_dinamis = 3.0 * faktor_konversi
