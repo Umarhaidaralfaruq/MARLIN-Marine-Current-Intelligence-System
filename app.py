@@ -224,8 +224,6 @@ with col_head1:
 # ==========================================
 # PERSIAPAN DATA UNTUK SUMMARY (BACKGROUND PROCESS)
 # ==========================================
-# Default selections from query params or session state could go here, 
-# for now we use the first file for calculations
 selected_filename = st.session_state.get('sel_file', list(file_options.keys())[0])
 satuan_pilihan = st.session_state.get('sel_unit', 'm/s')
 
@@ -233,33 +231,59 @@ df_spatial = load_data(file_options[selected_filename])
 faktor_konversi = 1.94384 if satuan_pilihan == "Knot" else 1.0
 satuan_teks = satuan_pilihan
 batas_waspada = 1.2 * faktor_konversi 
+batas_awas = 2.0 * faktor_konversi
 
 df_spatial['predicted_v_max'] = df_spatial['predicted_v_max'] * faktor_konversi
 df_spatial['predicted_u'] = df_spatial['predicted_u'] * faktor_konversi
 df_spatial['predicted_v'] = df_spatial['predicted_v'] * faktor_konversi
 
-df_filtered_area = df_spatial[
+# 1. Menentukan Shift Saat Ini (12 Jam)
+def get_shift_range_now(df_prediksi_24jam):
+    last_hour = df_prediksi_24jam['datetime'].max().hour 
+    return (12, 24, "Shift Malam") if last_hour < 12 else (0, 12, "Shift Pagi")
+
+start_hour_utc, end_hour_utc, shift_name_global = get_shift_range_now(df_spatial)
+
+# 2. Filter Data 12 Jam untuk Summary
+mask_shift_global = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
+df_filtered_area_shift = df_spatial[
+    mask_shift_global &
     (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
     (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
 ]
-idx_p95_trend = df_filtered_area.groupby('datetime_wib').apply(get_p95_idx)
-df_trend_p95 = df_filtered_area.loc[idx_p95_trend].reset_index(drop=True)
 
-# Kalkulasi KPI Operational
-baris_max = df_trend_p95.loc[df_trend_p95['predicted_v_max'].idxmax()]
-max_speed_global = baris_max['predicted_v_max']
-waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
-arah_dominan_global = derajat_ke_arah_lengkap(baris_max['arah_derajat'])
-status_operasi = "⚠ WASPADA" if max_speed_global > batas_waspada else "🟢 NORMAL"
+# 3. Tetap simpan kalkulasi 24 Jam utuh untuk fitur Tombol Unduh 24 Jam di bawah
+df_filtered_area_24 = df_spatial[
+    (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
+    (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
+]
+idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(get_p95_idx)
+df_trend_p95 = df_filtered_area_24.loc[idx_p95_trend_24].reset_index(drop=True)
 
-# Hitung Status Data
+# 4. Kalkulasi KPI Operational (Fokus ke 12 Jam / Shift Aktif)
+if not df_filtered_area_shift.empty:
+    idx_p95_trend_shift = df_filtered_area_shift.groupby('datetime_wib').apply(get_p95_idx)
+    df_trend_p95_shift = df_filtered_area_shift.loc[idx_p95_trend_shift].reset_index(drop=True)
+    
+    baris_max = df_trend_p95_shift.loc[df_trend_p95_shift['predicted_v_max'].idxmax()]
+    max_speed_global = baris_max['predicted_v_max']
+    waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
+    
+    arah_mode_shift = df_trend_p95_shift['arah_derajat'].apply(derajat_ke_arah_lengkap).mode()
+    arah_dominan_global = arah_mode_shift[0] if not arah_mode_shift.empty else "Variabel"
+else:
+    max_speed_global = 0.0
+    waktu_ekstrem = "--:--"
+    arah_dominan_global = "-"
+
+# Hitung Status Data Sistem
 waktu_baserun_wib = df_spatial['datetime_wib'].min() - pd.Timedelta(hours=1)
 waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 selisih_jam = (waktu_sekarang_wib - waktu_baserun_wib).total_seconds() / 3600
 
 with col_head2:
     status_icon = "🟢" if selisih_jam <= 24 else "🔴"
-    status_teks_data = "DATA TERUPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
+    status_teks_data = "DATA UPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
     teks_warna = "#28a745" if selisih_jam <= 24 else "#dc3545"
     st.markdown(f"<div style='text-align: right; margin-top: 20px; font-weight: bold; color: {teks_warna};'>{status_icon} {status_teks_data}</div>", unsafe_allow_html=True)
 
@@ -269,7 +293,7 @@ st.divider()
 # 2. RINGKASAN OPERASIONAL (P0) - PRIMARY CARD
 # ==========================================
 # Menentukan styling dinamis untuk Status
-if max_speed_global >= (2.0 * faktor_konversi):
+if max_speed_global >= batas_awas:
     status_bg = "#dc3545" # Merah
     status_text = "AWAS"
     status_icon = "🔴"
@@ -278,19 +302,19 @@ elif max_speed_global >= batas_waspada:
     status_bg = "#ffc107" # Kuning
     status_text = "WASPADA"
     status_icon = "🟡"
-    text_color = "#000000" # Teks hitam agar kontras dengan kuning
+    text_color = "#000000" 
 else:
     status_bg = "#28a745" # Hijau
     status_text = "NORMAL"
     status_icon = "🟢"
     text_color = "#ffffff"
 
-# Injeksi HTML/CSS (RATA KIRI TOTAL AGAR TIDAK DIBACA SEBAGAI CODE BLOCK OLEH STREAMLIT)
+# Injeksi HTML/CSS (RATA KIRI TOTAL)
 html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
-<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional</h3>
+<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional — {shift_name_global}</h3>
 <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks 24J</div>
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks ({shift_name_global})</div>
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
