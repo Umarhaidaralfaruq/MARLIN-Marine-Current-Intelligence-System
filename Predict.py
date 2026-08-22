@@ -138,6 +138,25 @@ def main_operational_forecast():
         anom_u_1d = pca_u.inverse_transform(pc_u_hour)[0]
         anom_v_1d = pca_v.inverse_transform(pc_v_hour)[0]
         
+        # ==============================================================
+        # KODE PERBAIKAN: ADAPTASI DIMENSI ANOMALI PCA KE UKURAN PETA
+        # ==============================================================
+        current_map_size = len(mean_u_map)
+        
+        def sinkronisasi_grid(anomali, target_size):
+            if len(anomali) > target_size:
+                # Potong kelebihan grid
+                return anomali[:target_size]
+            elif len(anomali) < target_size:
+                # Tambahkan nilai 0 (tanpa anomali) untuk grid baru
+                padding = np.zeros(target_size - len(anomali))
+                return np.concatenate((anomali, padding))
+            return anomali
+
+        anom_u_1d = sinkronisasi_grid(anom_u_1d, current_map_size)
+        anom_v_1d = sinkronisasi_grid(anom_v_1d, current_map_size)
+        # ==============================================================
+        
         u_absolute = anom_u_1d + mean_u_map
         v_absolute = anom_v_1d + mean_v_map
         
