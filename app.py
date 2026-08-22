@@ -195,15 +195,6 @@ logo_seacast = "logo_bmkg2.png"
 ikon = Image.open(logo_seacast) if os.path.exists(logo_seacast) else (Image.open("logo_bmkg.png") if os.path.exists("logo_bmkg.png") else "🌊")
 
 st.set_page_config(page_title="MARLIN Dashboard", page_icon=ikon, layout="wide")
-st.markdown("""
-    <style>
-        /* Memaksa peta, legenda, tabel, dan seluruh teks kustom pakai font bawaan Streamlit */
-        .leaflet-container, .info.legend, .custom-div-icon, 
-        table, th, td, .stMarkdown, div[data-testid="stTable"] {
-            font-family: "Source Sans Pro", sans-serif !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
 
 def get_base64_logo(img_path):
@@ -242,6 +233,44 @@ def get_p95_idx(group):
     p95 = group['predicted_v_max'].quantile(0.95)
     if pd.isna(p95): return group.index[0]
     return (group['predicted_v_max'] - p95).abs().idxmin()
+
+# ==========================================
+# STATUS ARUS (SATU SUMBER KEBENARAN)
+# Sebelumnya logika Normal/Waspada/Awas ini diduplikasi & sebagian di-hardcode
+# terpisah di 4 tempat berbeda (Ringkasan Operasional, Status Prakiraan,
+# format_speed_badge, style_tabel_peringatan). Sekarang semua manggil fungsi
+# ini, jadi kalau warna/ambang batas berubah, cukup diubah di satu tempat.
+# ==========================================
+STATUS_STYLE = {
+    "AWAS":    {"icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
+    "WASPADA": {"icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
+    "NORMAL":  {"icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"},
+}
+for _status_key, _style in STATUS_STYLE.items():
+    _style["label"] = f"{_style['icon']} {_status_key}"
+
+def get_status_arus(speed, batas_waspada, batas_awas):
+    """
+    Tentukan status kondisi arus (NORMAL/WASPADA/AWAS) dari satu angka kecepatan.
+    Mengembalikan dict: status, icon, bg, text_color, label (icon+status siap pakai).
+    """
+    if pd.isna(speed):
+        status = "NORMAL"
+    elif speed >= batas_awas:
+        status = "AWAS"
+    elif speed >= batas_waspada:
+        status = "WASPADA"
+    else:
+        status = "NORMAL"
+
+    style = STATUS_STYLE[status]
+    return {
+        "status": status,
+        "icon": style["icon"],
+        "bg": style["bg"],
+        "text_color": style["text_color"],
+        "label": style["label"],
+    }
 
 list_of_files = get_available_baseruns()
 
@@ -403,21 +432,11 @@ st.divider()
 # ==========================================
 # 2. RINGKASAN OPERASIONAL (P0) - PRIMARY CARD
 # ==========================================
-if kecepatan_saat_ini >= batas_awas:
-    status_bg = "#dc3545" 
-    status_text = "AWAS"
-    status_icon = "🔴"
-    text_color = "#ffffff"
-elif kecepatan_saat_ini >= batas_waspada:
-    status_bg = "#ffc107" 
-    status_text = "WASPADA"
-    status_icon = "🟡"
-    text_color = "#000000" 
-else:
-    status_bg = "#28a745" 
-    status_text = "NORMAL"
-    status_icon = "🟢"
-    text_color = "#ffffff"
+status_ringkasan = get_status_arus(kecepatan_saat_ini, batas_waspada, batas_awas)
+status_bg = status_ringkasan["bg"]
+status_text = status_ringkasan["status"]
+status_icon = status_ringkasan["icon"]
+text_color = status_ringkasan["text_color"]
 
 # Injeksi HTML/CSS (RATA KIRI TOTAL)
 html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
@@ -612,22 +631,13 @@ with col_chart:
         arah_dominan = arah_mode[0] if not arah_mode.empty else "Variabel"
         
         # PERBAIKAN: Desain Alert disamakan dengan Ringkasan Operasional (Mini Card)
-        batas_waspada = 1.2 * faktor_konversi
-        batas_awas = 2.0 * faktor_konversi
-        
-        if max_speed_shift >= batas_awas:
-            status_bg = "#dc3545"
-            text_color = "#ffffff"
-            status_icon, status_text = "🔴", "AWAS"
-        elif max_speed_shift >= batas_waspada:
-            status_bg = "#ffc107"
-            text_color = "#000000"
-            status_icon, status_text = "🟡", "WASPADA"
-        else:
-            status_bg = "#28a745"
-            text_color = "#ffffff"
-            status_icon, status_text = "🟢", "NORMAL"
-            
+        # Status pakai get_status_arus() -> otomatis konsisten dgn kartu Ringkasan Operasional.
+        # batas_waspada/batas_awas dipakai dari scope global (baris ~334), tidak dihitung ulang.
+        status_prakiraan = get_status_arus(max_speed_shift, batas_waspada, batas_awas)
+        status_bg = status_prakiraan["bg"]
+        text_color = status_prakiraan["text_color"]
+        status_icon, status_text = status_prakiraan["icon"], status_prakiraan["status"]
+
         html_alert = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-left: 5px solid {status_bg}; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div style="color: #cbd5e1; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Status Prakiraan</div>
@@ -665,23 +675,25 @@ with col_chart:
         ymax_plot = max_v + (0.3 * faktor_konversi)
 
         # Hanya munculkan garis Waspada jika grafik mendekati/melebihi 1.2
+        warna_waspada = STATUS_STYLE["WASPADA"]["bg"]
+        warna_awas = STATUS_STYLE["AWAS"]["bg"]
+
         if ymax_plot >= batas_waspada:
-            fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="#ffc107", 
+            fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color=warna_waspada, 
                                 annotation_text=f"Waspada > {batas_waspada:.2f}", 
                                 annotation_position="top left",
-                                annotation_font_color="#ffc107")
+                                annotation_font_color=warna_waspada)
             ymax_plot = max(ymax_plot, batas_waspada + (0.2 * faktor_konversi))
                                 
         # Hanya munculkan garis Awas jika grafik mendekati/melebihi 2.0
         if ymax_plot >= batas_awas:
-            fig_shift.add_hline(y=batas_awas, line_dash="solid", line_color="#dc3545", 
+            fig_shift.add_hline(y=batas_awas, line_dash="solid", line_color=warna_awas, 
                                 annotation_text=f"Awas > {batas_awas:.2f}", 
                                 annotation_position="top left",
-                                annotation_font_color="#dc3545")
+                                annotation_font_color=warna_awas)
             ymax_plot = max(ymax_plot, batas_awas + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
-            font=dict(family="Source Sans Pro, sans-serif"),
             margin=dict(l=0, r=0, t=10, b=20), 
             xaxis_title=None,
             yaxis_title=f"Kecepatan ({satuan_teks})",
@@ -720,12 +732,13 @@ def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
     df_trend_area = df_area.loc[idx_p95_area].reset_index(drop=True)
     
     # Menambahkan badge teks langsung ke dataframe agar mudah di-scan
+    # (dulu ambang batasnya hardcode literal 2.0/1.2 di sini, terpisah dari
+    # variabel batas_waspada/batas_awas di tempat lain -> sekarang satu sumber)
     def format_speed_badge(val):
-        if val >= (2.0 * faktor_konversi):
-            return f"{val:.2f} 🔴 AWAS"
-        elif val >= (1.2 * faktor_konversi):
-            return f"{val:.2f} 🟡 WASPADA"
-        return f"{val:.2f}"
+        info = get_status_arus(val, batas_waspada, batas_awas)
+        if info["status"] == "NORMAL":
+            return f"{val:.2f}"
+        return f"{val:.2f} {info['label']}"
 
     return pd.DataFrame({
         'Waktu (WIB)': df_trend_area['datetime_wib'].dt.strftime('%H:%M'),
@@ -734,12 +747,13 @@ def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
     })
 
 # Pewarnaan teks tabel menggunakan Pandas Styler
+# (label & warna dicocokkan dari STATUS_STYLE yang sama, bukan hardcode ulang)
 def style_tabel_peringatan(val):
     if isinstance(val, str):
-        if "🔴 AWAS" in val:
-            return 'color: #dc3545; font-weight: bold;'
-        elif "🟡 WASPADA" in val:
-            return 'color: #ffc107; font-weight: bold;'
+        if STATUS_STYLE["AWAS"]["label"] in val:
+            return f'color: {STATUS_STYLE["AWAS"]["bg"]}; font-weight: bold;'
+        elif STATUS_STYLE["WASPADA"]["label"] in val:
+            return f'color: {STATUS_STYLE["WASPADA"]["bg"]}; font-weight: bold;'
     return ''
 
 # Menggunakan df_shift_raw yang sudah difilter di Fase 2 (Prakiraan 12 Jam)
