@@ -308,14 +308,22 @@ st.divider()
 # ==========================================
 st.markdown("### PEMANTAUAN UTAMA")
 
-# Trik CSS untuk menyembunyikan angka bawaan yang melayang di atas slider
 st.markdown("""
 <style>
-    /* Menyembunyikan nilai di atas bulatan slider */
-    div[data-testid="stThumbValue"] { display: none !important; }
+    /* Hilangkan angka yang melayang di atas bulatan (Thumb Value) */
+    div[data-testid="stThumbValue"] { 
+        display: none !important; 
+        color: transparent !important;
+        background: transparent !important;
+    }
     
-    /* Menyembunyikan label tick di bawah/sepanjang garis (jika ada) */
-    div[data-testid="stTickBar"] { display: none !important; }
+    /* Hilangkan teks ujung kiri dan kanan */
+    div[data-testid="stTickBarMin"], 
+    div[data-testid="stTickBarMax"],
+    div[data-testid="stTickBar"] { 
+        display: none !important; 
+        color: transparent !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -327,7 +335,8 @@ with col_map:
     waktu_sekarang_str = waktu_sekarang_wib.floor('h').strftime('%Y-%m-%d %H:%M')
     waktu_default = waktu_sekarang_str if waktu_sekarang_str in waktu_unik else waktu_unik[-1]
 
-    st.markdown("<div style='margin-bottom: -15px; font-weight: bold;'>PETA SPASIAL ARUS</div>", unsafe_allow_html=True)
+    # PERBAIKAN: Margin dinormalkan (jadi 5px) supaya tidak tabrakan dengan slider
+    st.markdown("<div style='margin-bottom: 5px; font-weight: bold;'>PETA SPASIAL ARUS</div>", unsafe_allow_html=True)
     
     selected_time_str = st.select_slider("Waktu Prediksi", options=waktu_unik, value=waktu_default, label_visibility="collapsed")
     
@@ -335,7 +344,6 @@ with col_map:
     dt_obj = datetime.strptime(selected_time_str, '%Y-%m-%d %H:%M')
     formatted_time = f"{dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB"
     
-    # Background dibikin semi-transparan agar masuk ke Light/Dark mode
     st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 4px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px;'>⏱️ {formatted_time}</div>", unsafe_allow_html=True)
     
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
