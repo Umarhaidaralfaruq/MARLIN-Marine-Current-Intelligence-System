@@ -323,45 +323,49 @@ df_filtered_area_24 = df_spatial[
 idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(get_p95_idx)
 df_trend_p95 = df_filtered_area_24.loc[idx_p95_trend_24].reset_index(drop=True)
 
-# 4. Kalkulasi KPI Operational (Fokus ke 12 Jam / Shift Aktif)
-if not df_filtered_area_shift.empty:
-    idx_p95_trend_shift = df_filtered_area_shift.groupby('datetime_wib').apply(get_p95_idx)
-    df_trend_p95_shift = df_filtered_area_shift.loc[idx_p95_trend_shift].reset_index(drop=True)
+# 4. Kalkulasi KPI Operational (Interaktif Berdasarkan Waktu Aktual & 24 Jam)
+waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
+
+if not df_trend_p95.empty:
+    # A. Cari kecepatan SAAT INI (Paling mendekati jam lokal saat dibuka)
+    df_trend_p95['selisih_waktu'] = abs(df_trend_p95['datetime_wib'] - waktu_sekarang_wib)
+    baris_saat_ini = df_trend_p95.loc[df_trend_p95['selisih_waktu'].idxmin()]
     
-    baris_max = df_trend_p95_shift.loc[df_trend_p95_shift['predicted_v_max'].idxmax()]
+    kecepatan_saat_ini = baris_saat_ini['predicted_v_max']
+    jam_saat_ini_str = baris_saat_ini['datetime_wib'].strftime('%H:%M WIB')
+    
+    # B. Cari kecepatan PUNCAK (Dalam 24 Jam kedepan)
+    baris_max = df_trend_p95.loc[df_trend_p95['predicted_v_max'].idxmax()]
     max_speed_global = baris_max['predicted_v_max']
     waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
-    
-    arah_mode_shift = df_trend_p95_shift['arah_derajat'].apply(derajat_ke_arah_lengkap).mode()
-    arah_dominan_global = arah_mode_shift[0] if not arah_mode_shift.empty else "Variabel"
 else:
+    kecepatan_saat_ini = 0.0
+    jam_saat_ini_str = "--:--"
     max_speed_global = 0.0
     waktu_ekstrem = "--:--"
-    arah_dominan_global = "-"
 
 # Hitung Status Data Sistem
 waktu_baserun_wib = df_spatial['datetime_wib'].min() - pd.Timedelta(hours=1)
-waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 selisih_jam = (waktu_sekarang_wib - waktu_baserun_wib).total_seconds() / 3600
 
 with col_head2:
-    status_icon = "🟢" if selisih_jam <= 24 else "🔴"
-    status_teks_data = "DATA UPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
-    teks_warna = "#28a745" if selisih_jam <= 24 else "#dc3545"
-    st.markdown(f"<div style='text-align: right; margin-top: 20px; font-weight: bold; color: {teks_warna};'>{status_icon} {status_teks_data}</div>", unsafe_allow_html=True)
+    status_icon_data = "🟢" if selisih_jam <= 24 else "🔴"
+    status_teks_data = "DATA TERUPDATE" if selisih_jam <= 24 else "TIDAK UPDATE"
+    teks_warna_data = "#28a745" if selisih_jam <= 24 else "#dc3545"
+    st.markdown(f"<div style='text-align: right; margin-top: 20px; font-weight: bold; color: {teks_warna_data};'>{status_icon_data} {status_teks_data}</div>", unsafe_allow_html=True)
 
 st.divider()
 
 # ==========================================
 # 2. RINGKASAN OPERASIONAL (P0) - PRIMARY CARD
 # ==========================================
-# Menentukan styling dinamis untuk Status
-if max_speed_global >= batas_awas:
+# Status bahaya sekarang diikat ke Kecepatan Saat Ini (Real-time)
+if kecepatan_saat_ini >= batas_awas:
     status_bg = "#dc3545" # Merah
     status_text = "AWAS"
     status_icon = "🔴"
     text_color = "#ffffff"
-elif max_speed_global >= batas_waspada:
+elif kecepatan_saat_ini >= batas_waspada:
     status_bg = "#ffc107" # Kuning
     status_text = "WASPADA"
     status_icon = "🟡"
@@ -374,22 +378,22 @@ else:
 
 # Injeksi HTML/CSS (RATA KIRI TOTAL)
 html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
-<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional — {shift_name_global}</h3>
+<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional</h3>
 <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks ({shift_name_global})</div>
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Saat Ini <span style="font-size: 0.75rem; color: #cbd5e1;">({jam_saat_ini_str})</span></div>
+<div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{kecepatan_saat_ini:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
+</div>
+<div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Puncak (24J)</div>
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
 </div>
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
 <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Waktu Puncak</div>
 <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">{waktu_ekstrem[:5]} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">WIB</span></div>
 </div>
-<div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Arah Dominan</div>
-<div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1.2;">{arah_dominan_global}</div>
-</div>
 <div style="flex: 1; min-width: 150px;">
-<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Status Kondisi</div>
+<div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Status Kondisi Saat Ini</div>
 <div style="display: inline-block; background-color: {status_bg}; color: {text_color}; padding: 6px 16px; border-radius: 20px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">{status_icon} {status_text}</div>
 </div>
 </div>
