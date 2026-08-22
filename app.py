@@ -266,34 +266,86 @@ with col_head2:
 st.divider()
 
 # ==========================================
-# 2. OPERATIONAL SUMMARY (P0)
+# 2. RINGKASAN OPERASIONAL (P0) - PRIMARY CARD
 # ==========================================
-st.markdown("### OPERATIONAL SUMMARY")
-col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+# Menentukan styling dinamis untuk Status
+if max_speed_global >= (2.0 * faktor_konversi):
+    status_bg = "#dc3545" # Merah
+    status_text = "AWAS"
+    status_icon = "🔴"
+    text_color = "#ffffff"
+elif max_speed_global >= batas_waspada:
+    status_bg = "#ffc107" # Kuning
+    status_text = "WASPADA"
+    status_icon = "🟡"
+    text_color = "#000000" # Teks hitam agar kontras dengan kuning
+else:
+    status_bg = "#28a745" # Hijau
+    status_text = "NORMAL"
+    status_icon = "🟢"
+    text_color = "#ffffff"
 
-col_kpi1.metric("Max Speed 24H", f"{max_speed_global:.2f} {satuan_teks}")
-col_kpi2.metric("Peak Time", waktu_ekstrem)
-col_kpi3.metric("Dominant Direction", arah_dominan_global)
-# Mengakali warna metric bawaan Streamlit
-col_kpi4.metric("Status", status_operasi, delta="Di atas Threshold" if max_speed_global > batas_waspada else "Aman", delta_color="inverse" if max_speed_global > batas_waspada else "normal")
+# Injeksi HTML/CSS untuk membuat Card yang padat, elegan, dan eye-catching
+html_summary = f"""
+<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); 
+            border: 1px solid rgba(148,163,184,0.2); 
+            border-radius: 8px; 
+            padding: 20px 25px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
+    <h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">
+        Ringkasan Operasional
+    </h3>
+    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+        
+        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Maks 24J</div>
+            <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">
+                {max_speed_global:.2f} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
+            </div>
+        </div>
+        
+        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Waktu Puncak</div>
+            <div style="color: #f8fafc; font-size: 2.2rem; font-weight: bold; line-height: 1;">
+                {waktu_ekstrem[:5]} <span style="font-size: 1.1rem; color: #94a3b8; font-weight: normal;">WIB</span>
+            </div>
+        </div>
+        
+        <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
+            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Arah Dominan</div>
+            <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1.2;">
+                {arah_dominan_global}
+            </div>
+        </div>
+        
+        <div style="flex: 1; min-width: 150px;">
+            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Status Kondisi</div>
+            <div style="display: inline-block; background-color: {status_bg}; color: {text_color}; padding: 6px 16px; border-radius: 20px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                {status_icon} {status_text}
+            </div>
+        </div>
+        
+    </div>
+</div>
+"""
+st.markdown(html_summary, unsafe_allow_html=True)
 
-st.divider()
 
 # ==========================================
-# 3. DATA CONTROL (P1)
+# 3. KONTROL DATA (P1)
 # ==========================================
-# Dibuat satu baris ringkas
-st.markdown("**Data Control**")
+st.markdown("**Kontrol Data**")
 col_dc1, col_dc2, col_dc3 = st.columns([2, 1, 1])
 
 with col_dc1:
-    selected_filename = st.selectbox("Prediction File", options=list(file_options.keys()), label_visibility="collapsed")
+    selected_filename = st.selectbox("File Prediksi", options=list(file_options.keys()), label_visibility="collapsed")
 with col_dc2:
-    if st.button("↻ Refresh Data", use_container_width=True):
+    if st.button("↻ Perbarui Data", use_container_width=True):
         load_data.clear() 
         st.rerun()
 with col_dc3:
-    satuan_pilihan = st.radio("Unit:", ["m/s", "Knot"], horizontal=True, label_visibility="collapsed")
+    satuan_pilihan = st.radio("Satuan:", ["m/s", "Knot"], horizontal=True, label_visibility="collapsed")
 
 # Save state for reload
 if st.session_state.get('sel_file') != selected_filename or st.session_state.get('sel_unit') != satuan_pilihan:
@@ -543,7 +595,7 @@ def style_tabel_peringatan(val):
 df_shift_full = df_shift_raw if 'df_shift_raw' in locals() else pd.DataFrame()
 
 with col_ket:
-    st.markdown("**⚓ Area Pelabuhan Ketapang**")
+    st.markdown("**Area Pelabuhan Ketapang**")
     tabel_ketapang = buat_tabel_area(df_shift_full, -8.209161, -8.151693, 114.38673, 114.414975)
     if not tabel_ketapang.empty:
         styled_ket = tabel_ketapang.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
@@ -552,7 +604,7 @@ with col_ket:
         st.caption("Data area Ketapang tidak tersedia untuk shift ini.")
 
 with col_gil:
-    st.markdown("**⚓ Area Pelabuhan Gilimanuk**")
+    st.markdown("**Area Pelabuhan Gilimanuk**")
     tabel_gilimanuk = buat_tabel_area(df_shift_full, -8.21003, -8.16198, 114.41354, 114.43416)
     if not tabel_gilimanuk.empty:
         styled_gil = tabel_gilimanuk.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
@@ -646,7 +698,7 @@ def create_bmkg_report(df_source, title_text):
 col_exp1, col_exp2, col_exp_empty = st.columns([1, 1, 2])
 
 with col_exp1:
-    if st.button("📥 Unduh Grafik 12 Jam", use_container_width=True):
+    if st.button("Unduh Grafik 12 Jam", use_container_width=True):
         with st.spinner("Memproses grafik..."):
             if 'df_shift' in locals() and not df_shift.empty:
                 fig_12j = create_bmkg_report(df_shift, f"Prediksi Kecepatan Arus Ketapang-Gilimanuk 12 Jam Kedepan")
@@ -664,7 +716,7 @@ with col_exp1:
                 st.error("Data 12 Jam belum tersedia.")
 
 with col_exp2:
-    if st.button("📥 Unduh Grafik 24 Jam", use_container_width=True):
+    if st.button("Unduh Grafik 24 Jam", use_container_width=True):
         with st.spinner("Memproses grafik..."):
             # PERBAIKAN: Ubah df_trend menjadi df_trend_p95 (variabel data 24 jam dari atas)
             if 'df_trend_p95' in locals() and not df_trend_p95.empty:
