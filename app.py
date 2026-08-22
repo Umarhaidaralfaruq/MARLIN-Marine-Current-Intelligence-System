@@ -566,6 +566,71 @@ st.divider()
 # 6. UNDUH GRAFIK (P3)
 # ==========================================
 st.markdown("### UNDUH GRAFIK")
+
+# --- FUNGSI GENERATOR LAPORAN BMKG (DIKEMBALIKAN) ---
+def create_bmkg_report(df_source, title_text):
+    df_plot = df_source.copy()
+    if 'datetime_utc' not in df_plot.columns:
+        df_plot['datetime_utc'] = df_plot['datetime_wib'] - pd.Timedelta(hours=7)
+        
+    x_min_asli = df_plot['datetime_utc'].min()
+    x_max_asli = df_plot['datetime_utc'].max()
+    x_min_buffer = x_min_asli - pd.Timedelta(hours=1)
+    x_max_buffer = x_max_asli + pd.Timedelta(hours=1)
+    extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq='h')
+
+    fig_bmkg, ax0 = plt.subplots(figsize=(14, 7), dpi=100)
+    fig_bmkg.subplots_adjust(left=0.08, right=0.95, top=0.7, bottom=0.15) 
+
+    line_color, grid_color = 'black', '#A9CCE3' 
+    
+    ax0.set_title(title_text, fontsize=16, pad=60)
+    ax0.plot(df_plot['datetime_utc'], df_plot['predicted_v_max'], color=line_color, linewidth=2, marker='o', markersize=6, markerfacecolor=line_color, markeredgecolor='white')
+
+    ax0.set_ylabel(f"Kecepatan Arus ({satuan_teks})", fontsize=13, weight='bold')
+    y_max = max(2.0 * faktor_konversi, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi))
+    ax0.set_ylim(0, y_max)
+    ax0.grid(color=grid_color, linestyle='--', linewidth=0.8)
+
+    ax0.set_xlim(x_min_buffer, x_max_buffer)
+    ax0.set_xlabel("Waktu (UTC)", fontsize=13, weight='bold', labelpad=10)
+    ax0.set_xticks(extended_ticks_utc)
+    ax0.set_xticklabels([t.strftime('%H:%M') for t in extended_ticks_utc], rotation=0, ha='center', fontsize=11, weight='bold')
+
+    ax0_twin = ax0.twiny()
+    ax0_twin.set_xlabel("Waktu (WIB)", fontsize=13, weight='bold', labelpad=10)
+    ax0_twin.set_xlim(x_min_buffer, x_max_buffer)
+    ax0_twin.set_xticks(extended_ticks_utc)
+    
+    extended_ticks_wib = extended_ticks_utc + pd.Timedelta(hours=7)
+    ax0_twin.set_xticklabels([t.strftime('%H:%M') for t in extended_ticks_wib], rotation=0, ha='center', fontsize=11, weight='bold')
+
+    for idx, row in df_plot.iterrows():
+        deg = row.get('arah_derajat', pd.NA)
+        panah_bmkg = "" if pd.isna(deg) else ("↑ U" if deg >= 270 or deg < 90 else "↓ S")
+        label_text = f"{panah_bmkg}\n{row['predicted_v_max']:.2f}"
+        ax0.annotate(label_text, (row['datetime_utc'], row['predicted_v_max']), textcoords="offset points", xytext=(0,15), ha='center', fontsize=10, weight='bold')
+
+    header_text_left = "Kantor Layanan Informasi Meteorologi\nMaritim Ketapang, BMKG\nBMKG"
+    fig_bmkg.text(0.11, 0.95, header_text_left, fontsize=12, weight='bold', color='black', ha='left', va='top', linespacing=1.4)
+    
+    bulan_indo_bmkg = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
+    issue_time_wib = datetime.now() 
+    issue_date_str = f"{issue_time_wib.strftime('%d')} {bulan_indo_bmkg[issue_time_wib.month]} {issue_time_wib.strftime('%Y')}"
+    
+    fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {issue_time_wib.strftime('%H:%M WIB')}, {issue_date_str}", fontsize=12, weight='bold', color='black', ha='right', va='top')
+
+    if os.path.exists(logo_filename):
+        try:
+            arr_logo = plt.imread(logo_filename)
+            imagebox = OffsetImage(arr_logo, zoom=0.08) 
+            logo_loc = AnnotationBbox(imagebox, (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1))
+            ax0.add_artist(logo_loc)
+        except Exception as e:
+            pass
+    return fig_bmkg
+# -----------------------------------------------------------
+
 # Mengubah section download menjadi secondary action yang lebih compact
 col_exp1, col_exp2, col_exp_empty = st.columns([1, 1, 2])
 
