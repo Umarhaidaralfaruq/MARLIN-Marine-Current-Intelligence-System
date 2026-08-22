@@ -310,19 +310,18 @@ st.markdown("### PEMANTAUAN UTAMA")
 
 st.markdown("""
 <style>
-    /* Hilangkan angka yang melayang di atas bulatan (Thumb Value) */
-    div[data-testid="stThumbValue"] { 
-        display: none !important; 
+    /* Bikin semua font di dalam elemen slider jadi transparan */
+    .stSlider, .stSlider div, .stSlider span, .stSlider p {
         color: transparent !important;
-        background: transparent !important;
     }
     
-    /* Hilangkan teks ujung kiri dan kanan */
-    div[data-testid="stTickBarMin"], 
-    div[data-testid="stTickBarMax"],
-    div[data-testid="stTickBar"] { 
-        display: none !important; 
-        color: transparent !important;
+    /* Jaga-jaga mematikan display elemen utamanya kalau ketemu */
+    .stSlider [data-testid="stThumbValue"], 
+    .stSlider [data-testid="stTickBarMin"], 
+    .stSlider [data-testid="stTickBarMax"],
+    .stSlider [data-testid="stTickBar"] {
+        display: none !important;
+        opacity: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
