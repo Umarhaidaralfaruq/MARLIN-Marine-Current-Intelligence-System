@@ -563,26 +563,41 @@ with col_chart:
         arah_mode = df_shift['arah_derajat'].apply(derajat_ke_arah_lengkap).mode()
         arah_dominan = arah_mode[0] if not arah_mode.empty else "Variabel"
         
-        # PERBAIKAN: Threshold baru dan Desain Alert transparan (hanya border yang berwarna)
+        # PERBAIKAN: Desain Alert disamakan dengan Ringkasan Operasional (Mini Card)
         batas_waspada = 1.2 * faktor_konversi
         batas_awas = 2.0 * faktor_konversi
         
         if max_speed_shift >= batas_awas:
-            border_color, icon, status_text = "#dc3545", "🔴", "AWAS"
+            status_bg = "#dc3545"
+            text_color = "#ffffff"
+            status_icon, status_text = "🔴", "AWAS"
         elif max_speed_shift >= batas_waspada:
-            border_color, icon, status_text = "#ffc107", "🟡", "WASPADA"
+            status_bg = "#ffc107"
+            text_color = "#000000"
+            status_icon, status_text = "🟡", "WASPADA"
         else:
-            border_color, icon, status_text = "#28a745", "🟢", "NORMAL"
+            status_bg = "#28a745"
+            text_color = "#ffffff"
+            status_icon, status_text = "🟢", "NORMAL"
             
-        st.markdown(f"""
-        <div style="background-color: transparent; border: 1px solid rgba(128,128,128,0.2); border-left: 5px solid {border_color}; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-            <div style="font-weight: bold; font-size: 15px; margin-bottom: 4px; color: {border_color};">{icon} {status_text}</div>
-            <div style="font-size: 14px; opacity: 0.9;">
-                Puncak: <strong>{max_speed_shift:.2f} {satuan_teks}</strong> ({waktu_max_shift}) <br>
-                Arah Dominan: <strong>{arah_dominan}</strong>
-            </div>
+        html_alert = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-left: 5px solid {status_bg}; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="color: #cbd5e1; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Status Prakiraan</div>
+        <div style="background-color: {status_bg}; color: {text_color}; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">{status_icon} {status_text}</div>
         </div>
-        """, unsafe_allow_html=True)
+        <div style="display: flex; gap: 20px;">
+        <div>
+        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 3px;">Puncak Kecepatan</div>
+        <div style="color: #f8fafc; font-size: 1.2rem; font-weight: bold;">{max_speed_shift:.2f} <span style="font-size: 0.9rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span> <span style="font-size: 0.85rem; color: #94a3b8; font-weight: normal;">({waktu_max_shift})</span></div>
+        </div>
+        <div>
+        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 3px;">Arah Dominan</div>
+        <div style="color: #f8fafc; font-size: 1.2rem; font-weight: bold;">{arah_dominan}</div>
+        </div>
+        </div>
+        </div>"""
+        
+        st.markdown(html_alert, unsafe_allow_html=True)
 
         fig_shift = go.Figure()
         
@@ -595,21 +610,33 @@ with col_chart:
             hovertemplate="<b>%{x}</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
         ))
         
-        # PERBAIKAN: Update garis Waspada dan Awas
-        fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="#ffc107", 
-                            annotation_text=f"Waspada > {batas_waspada:.2f}", 
-                            annotation_position="top left",
-                            annotation_font_color="#ffc107")
-                            
-        fig_shift.add_hline(y=batas_awas, line_dash="solid", line_color="#dc3545", 
-                            annotation_text=f"Awas > {batas_awas:.2f}", 
-                            annotation_position="top left",
-                            annotation_font_color="#dc3545")
+        # ==========================================
+        # PERBAIKAN: Sumbu Y dan Garis Threshold Dinamis
+        # ==========================================
+        max_v = df_shift['predicted_v_max'].max()
+        ymax_plot = max_v + (0.3 * faktor_konversi)
+
+        # Hanya munculkan garis Waspada jika grafik mendekati/melebihi 1.2
+        if ymax_plot >= batas_waspada:
+            fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="#ffc107", 
+                                annotation_text=f"Waspada > {batas_waspada:.2f}", 
+                                annotation_position="top left",
+                                annotation_font_color="#ffc107")
+            ymax_plot = max(ymax_plot, batas_waspada + (0.2 * faktor_konversi))
+                                
+        # Hanya munculkan garis Awas jika grafik mendekati/melebihi 2.0
+        if ymax_plot >= batas_awas:
+            fig_shift.add_hline(y=batas_awas, line_dash="solid", line_color="#dc3545", 
+                                annotation_text=f"Awas > {batas_awas:.2f}", 
+                                annotation_position="top left",
+                                annotation_font_color="#dc3545")
+            ymax_plot = max(ymax_plot, batas_awas + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
             margin=dict(l=0, r=0, t=10, b=20), 
             xaxis_title=None,
             yaxis_title=f"Kecepatan ({satuan_teks})",
+            yaxis=dict(range=[0, ymax_plot]), # <-- Batas sumbu Y dipasang dinamis di sini
             height=340, 
             showlegend=False,
             hovermode="x unified",
