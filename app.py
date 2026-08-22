@@ -500,9 +500,9 @@ with col_chart:
 st.divider()
 
 # ==========================================
-# 5. PORT CONDITIONS (P1)
+# 5. KONDISI PELABUHAN (P1)
 # ==========================================
-st.markdown("### PORT CONDITIONS")
+st.markdown("### KONDISI PELABUHAN")
 col_ket, col_gil = st.columns(2)
 
 def derajat_ke_utara_selatan(deg):
@@ -512,53 +512,98 @@ def derajat_ke_utara_selatan(deg):
 def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
     df_area = df_raw[(df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) & (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)]
     if df_area.empty: return pd.DataFrame()
+    
     idx_p95_area = df_area.groupby('datetime_wib').apply(get_p95_idx)
     df_trend_area = df_area.loc[idx_p95_area].reset_index(drop=True)
+    
+    # Menambahkan badge teks langsung ke dataframe agar mudah di-scan
+    def format_speed_badge(val):
+        if val >= (2.0 * faktor_konversi):
+            return f"{val:.2f} 🔴 AWAS"
+        elif val >= (1.2 * faktor_konversi):
+            return f"{val:.2f} 🟡 WASPADA"
+        return f"{val:.2f}"
+
     return pd.DataFrame({
         'Waktu (WIB)': df_trend_area['datetime_wib'].dt.strftime('%H:%M'),
-        f'Speed ({satuan_teks})': df_trend_area['predicted_v_max'], 
-        'Direction': df_trend_area['arah_derajat'].apply(derajat_ke_utara_selatan)
+        f'Kecepatan ({satuan_teks})': df_trend_area['predicted_v_max'].apply(format_speed_badge), 
+        'Arah Dominan': df_trend_area['arah_derajat'].apply(derajat_ke_utara_selatan)
     })
 
-def style_kecepatan(val):
-    return 'color: #dc3545; font-weight: bold;' if val > batas_waspada else ''
+# Pewarnaan teks tabel menggunakan Pandas Styler
+def style_tabel_peringatan(val):
+    if isinstance(val, str):
+        if "🔴 AWAS" in val:
+            return 'color: #dc3545; font-weight: bold;'
+        elif "🟡 WASPADA" in val:
+            return 'color: #ffc107; font-weight: bold;'
+    return ''
 
-df_shift_full = df_spatial.loc[mask_shift] if 'mask_shift' in locals() else pd.DataFrame()
+# Menggunakan df_shift_raw yang sudah difilter di Fase 2 (Prakiraan 12 Jam)
+df_shift_full = df_shift_raw if 'df_shift_raw' in locals() else pd.DataFrame()
 
 with col_ket:
-    st.markdown("**Ketapang**")
-    tabel_ketapang = buat_tabel_area(df_shift_full, -8.209161, -8.151693, 114.38673, 114.414975) if not df_shift_full.empty else pd.DataFrame()
+    st.markdown("**⚓ Area Pelabuhan Ketapang**")
+    tabel_ketapang = buat_tabel_area(df_shift_full, -8.209161, -8.151693, 114.38673, 114.414975)
     if not tabel_ketapang.empty:
-        styled_ket = tabel_ketapang.style.format({f'Speed ({satuan_teks})': "{:.2f}"}).map(style_kecepatan, subset=[f'Speed ({satuan_teks})'])
+        styled_ket = tabel_ketapang.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
         st.dataframe(styled_ket, hide_index=True, use_container_width=True)
     else:
-        st.caption("No data")
+        st.caption("Data area Ketapang tidak tersedia untuk shift ini.")
 
 with col_gil:
-    st.markdown("**Gilimanuk**")
-    tabel_gilimanuk = buat_tabel_area(df_shift_full, -8.21003, -8.16198, 114.41354, 114.43416) if not df_shift_full.empty else pd.DataFrame()
+    st.markdown("**⚓ Area Pelabuhan Gilimanuk**")
+    tabel_gilimanuk = buat_tabel_area(df_shift_full, -8.21003, -8.16198, 114.41354, 114.43416)
     if not tabel_gilimanuk.empty:
-        styled_gil = tabel_gilimanuk.style.format({f'Speed ({satuan_teks})': "{:.2f}"}).map(style_kecepatan, subset=[f'Speed ({satuan_teks})'])
+        styled_gil = tabel_gilimanuk.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
         st.dataframe(styled_gil, hide_index=True, use_container_width=True)
     else:
-        st.caption("No data")
+        st.caption("Data area Gilimanuk tidak tersedia untuk shift ini.")
 
 st.divider()
 
 # ==========================================
-# 6. EXPORT (P3)
+# 6. UNDUH GRAFIK (P3)
 # ==========================================
-st.markdown("### EXPORT")
-# Compact view for Export
+st.markdown("### UNDUH GRAFIK")
+# Mengubah section download menjadi secondary action yang lebih compact
 col_exp1, col_exp2, col_exp_empty = st.columns([1, 1, 2])
 
 with col_exp1:
-    # Dummy button logic based on original, kept compact
-    if st.button("↓ Grafik 12 Jam", use_container_width=True):
-        st.toast("Generating 12H Chart...")
+    if st.button("📥 Unduh Grafik 12 Jam", use_container_width=True):
+        with st.spinner("Memproses grafik..."):
+            if 'df_shift' in locals() and not df_shift.empty:
+                fig_12j = create_bmkg_report(df_shift, f"Prediksi Kecepatan Arus Ketapang-Gilimanuk 12 Jam Kedepan")
+                with io.BytesIO() as buf:
+                    fig_12j.savefig(buf, format="png", dpi=150)
+                    st.download_button(
+                        label="Klik Untuk Menyimpan (12 Jam)",
+                        data=buf.getvalue(),
+                        file_name=f"Grafik_Arus_12J.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+                plt.close(fig_12j)
+            else:
+                st.error("Data 12 Jam belum tersedia.")
+
 with col_exp2:
-    if st.button("↓ Grafik 24 Jam", use_container_width=True):
-        st.toast("Generating 24H Chart...")
+    if st.button("📥 Unduh Grafik 24 Jam", use_container_width=True):
+        with st.spinner("Memproses grafik..."):
+            if 'df_trend' in locals() and not df_trend.empty:
+                fig_24j = create_bmkg_report(df_trend, "Prediksi Kecepatan Arus Ketapang-Gilimanuk 24 Jam Kedepan")
+                with io.BytesIO() as buf:
+                    fig_24j.savefig(buf, format="png", dpi=150)
+                    st.download_button(
+                        label="Klik Untuk Menyimpan (24 Jam)",
+                        data=buf.getvalue(),
+                        file_name="Grafik_Arus_24J.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+                plt.close(fig_24j)
+            else:
+                st.error("Data 24 Jam belum tersedia.")
 
 st.divider()
 
