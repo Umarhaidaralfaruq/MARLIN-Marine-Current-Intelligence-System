@@ -97,6 +97,20 @@ def prepare_operational_data():
         # 3. EOF ANALYSIS (Menggunakan SEMUA Data Bersih)
         model_path = str(PATHS['meof_pca_model']).replace('_model.joblib', f'_{comp}_model.joblib')
         pca = joblib.load(model_path)
+        
+        # ======================================================
+        # KODE PERBAIKAN: PENYELARASAN DINAMIS JUMLAH FITUR GRID
+        # ======================================================
+        expected_features = pca.n_features_in_
+        if X_clean.shape[1] > expected_features:
+            print(f"⚠️ Adaptasi Grid: Memotong {X_clean.shape[1] - expected_features} titik terluar agar sesuai dengan model PCA ({expected_features} fitur).")
+            X_clean = X_clean[:, :expected_features]
+        elif X_clean.shape[1] < expected_features:
+            print(f"⚠️ Adaptasi Grid: Menambah {expected_features - X_clean.shape[1]} titik padding nol agar sesuai dengan model PCA.")
+            padding = np.zeros((X_clean.shape[0], expected_features - X_clean.shape[1]))
+            X_clean = np.hstack((X_clean, padding))
+        # ======================================================
+        
         pc_all = pca.transform(X_clean)
         
         explained_var = pca.explained_variance_ratio_ * 100
