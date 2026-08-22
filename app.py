@@ -958,7 +958,7 @@ with st.expander("🔬 Klik Untuk Menampilkan Verifikasi Model vs HF Radar 🔗"
         # ---------------------------------------------------------
         from pathlib import Path
         BASE_DIR = Path(__file__).parent.resolve()
-        path_verif_csv = BASE_DIR / "Dashboard_Arus" / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
+        path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
         
         df_real_hourly = pd.DataFrame()
         df_real_agg = pd.DataFrame()
