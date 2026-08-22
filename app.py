@@ -308,11 +308,14 @@ st.divider()
 # ==========================================
 st.markdown("### PEMANTAUAN UTAMA")
 
-# 1. CSS Trik: Sembunyikan angka bawaan di atas slider Streamlit biar nggak numpuk
+# Trik CSS untuk menyembunyikan angka bawaan yang melayang di atas slider
 st.markdown("""
 <style>
-    div[data-testid="stThumbValue"] { display: none; }
-    div[data-testid="stTickBar"] { display: none; }
+    /* Menyembunyikan nilai di atas bulatan slider */
+    div[data-testid="stThumbValue"] { display: none !important; }
+    
+    /* Menyembunyikan label tick di bawah/sepanjang garis (jika ada) */
+    div[data-testid="stTickBar"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
