@@ -306,17 +306,26 @@ st.divider()
 # 4. MAIN MONITORING (P0 - Map & Forecast)
 # ==========================================
 st.markdown("### MAIN MONITORING")
-col_map, col_chart = st.columns([1.2, 1]) # Proporsi di-adjust ~55% vs 45%
+col_map, col_chart = st.columns([1.3, 1]) # Proporsi di-adjust ~55-60% vs 40-45%
 
 # --- MAP SECTION (LEFT) ---
 with col_map:
-    st.markdown("**Peta Spasial Arus**")
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
     waktu_sekarang_str = waktu_sekarang_wib.floor('h').strftime('%Y-%m-%d %H:%M')
     waktu_default = waktu_sekarang_str if waktu_sekarang_str in waktu_unik else waktu_unik[-1]
 
+    # Desain Header Peta yang Compact
+    st.markdown("<div style='margin-bottom: -15px; font-weight: bold;'>PETA SPASIAL ARUS</div>", unsafe_allow_html=True)
+    
+    # Slider dibuat sedekat mungkin dengan map
     selected_time_str = st.select_slider("Waktu Prediksi", options=waktu_unik, value=waktu_default, label_visibility="collapsed")
-    st.caption(f"**Waktu:** {selected_time_str} WIB")
+    
+    # Format Timestamp UI/UX Brief (Contoh: 22 AGU 2026 • 20:00 WIB)
+    bulan_indo = {1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MEI', 6: 'JUN', 7: 'JUL', 8: 'AGU', 9: 'SEP', 10: 'OKT', 11: 'NOV', 12: 'DES'}
+    dt_obj = datetime.strptime(selected_time_str, '%Y-%m-%d %H:%M')
+    formatted_time = f"{dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB"
+    
+    st.markdown(f"<div style='text-align: center; background-color: #f8f9fa; padding: 4px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px; color: #333;'>⏱️ {formatted_time}</div>", unsafe_allow_html=True)
     
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
@@ -378,7 +387,7 @@ with col_map:
     lat_tengah, lon_tengah = (lat_min_data + lat_max_data) / 2, (lon_min_data + lon_max_data) / 2
     html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour)).replace("__LABELS_JSON__", json.dumps(labels_list)).replace("__IMAGE_BASE64__", image_base64).replace("__LAT_MIN__", str(lat_min_data)).replace("__LON_MIN__", str(lon_min_data)).replace("__LAT_MAX__", str(lat_max_data)).replace("__LON_MAX__", str(lon_max_data)).replace("__LAT_CENTER__", str(lat_tengah)).replace("__LON_CENTER__", str(lon_tengah)).replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi)).replace("__SATUAN__", satuan_teks).replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}").replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}").replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}").replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
     
-    components.html(html_siap_render, height=500)
+    components.html(html_siap_render, height=480)
 
 # --- FORECAST SECTION (RIGHT) ---
 with col_chart:
@@ -390,7 +399,7 @@ with col_chart:
     mask_shift = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
     df_shift_raw = df_spatial.loc[mask_shift & (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) & (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)]
     
-    st.markdown(f"**Forecast 12 Jam ({shift_name})**")
+    st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>FORECAST KECEPATAN & ARAH — 12 JAM</div>", unsafe_allow_html=True)
 
     if not df_shift_raw.empty:
         idx_p95_shift = df_shift_raw.groupby('datetime_wib').apply(get_p95_idx)
@@ -399,23 +408,64 @@ with col_chart:
         
         baris_max_shift = df_shift.loc[df_shift['predicted_v_max'].idxmax()]
         max_speed_shift = baris_max_shift['predicted_v_max']
+        waktu_max_shift = baris_max_shift['datetime_wib'].strftime('%H:%M WIB')
         
-        # Alert Summary
-        if max_speed_shift > batas_waspada:
-            st.error(f"⚠ WASPADA: Peak {max_speed_shift:.2f} {satuan_teks} pada {baris_max_shift['datetime_wib'].strftime('%H:%M WIB')}")
+        # Logika Dominant Direction untuk Summary
+        arah_mode = df_shift['arah_derajat'].apply(derajat_ke_arah_lengkap).mode()
+        arah_dominan = arah_mode[0] if not arah_mode.empty else "Variabel"
+        
+        # UI/UX Alert Summary (Pengganti paragraf panjang)
+        batas_bahaya = 1.5 * faktor_konversi
+        if max_speed_shift >= batas_bahaya:
+            bg_color, border_color, icon, status_text = "#f8d7da", "#f5c6cb", "🔴", "BAHAYA"
+        elif max_speed_shift >= batas_waspada:
+            bg_color, border_color, icon, status_text = "#fff3cd", "#ffe8a1", "🟡", "WASPADA"
         else:
-            st.success(f"🟢 AMAN: Peak {max_speed_shift:.2f} {satuan_teks} pada {baris_max_shift['datetime_wib'].strftime('%H:%M WIB')}")
+            bg_color, border_color, icon, status_text = "#d4edda", "#c3e6cb", "🟢", "NORMAL"
+            
+        st.markdown(f"""
+        <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+            <div style="font-weight: bold; font-size: 15px; margin-bottom: 4px; color: #333;">{icon} {status_text}</div>
+            <div style="font-size: 14px; color: #444;">
+                Peak: <strong>{max_speed_shift:.2f} {satuan_teks}</strong> ({waktu_max_shift}) <br>
+                Arah Dominan: <strong>{arah_dominan}</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
+        # Plotly Line Chart (Dibersihkan dari clutter label)
         fig_shift = go.Figure()
+        
+        # Line utama (tanpa teks di setiap titik)
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], y=df_shift['predicted_v_max'],
-            mode='lines+markers+text', name=f'Arus {shift_name}',
-            line=dict(color='blue', width=2),
-            marker=dict(size=8, color='crimson'),
-            text=df_shift['arah_panah'], textposition="top center"
+            mode='lines+markers', name='Prediksi Arus',
+            line=dict(color='#0d6efd', width=3), # Biru bersih
+            marker=dict(size=8, color='#0d6efd', line=dict(color='white', width=1)),
+            customdata=df_shift['arah_panah'],
+            hovertemplate="<b>%{x}</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
         ))
-        fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="orange", annotation_text=f"Waspada ({batas_waspada:.2f} {satuan_teks})")
-        fig_shift.update_layout(xaxis_title="Jam (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})", margin=dict(l=0, r=0, t=30, b=0), height=400)
+        
+        # Threshold: Waspada (Kuning/Amber)
+        fig_shift.add_hline(y=batas_waspada, line_dash="dash", line_color="#ffc107", 
+                            annotation_text=f"Waspada > {batas_waspada:.2f}", 
+                            annotation_position="top left",
+                            annotation_font_color="#b38600")
+                            
+        # Threshold: Bahaya (Merah)
+        fig_shift.add_hline(y=batas_bahaya, line_dash="solid", line_color="#dc3545", 
+                            annotation_text=f"Bahaya > {batas_bahaya:.2f}", 
+                            annotation_position="top left",
+                            annotation_font_color="#dc3545")
+
+        fig_shift.update_layout(
+            margin=dict(l=0, r=0, t=10, b=20), # Margin atas dikurangi karena judul pakai Markdown
+            xaxis_title=None,
+            yaxis_title=f"Kecepatan ({satuan_teks})",
+            height=340, # Diselaraskan agar sejajar dengan tinggi Map
+            showlegend=False,
+            hovermode="x unified"
+        )
         st.plotly_chart(fig_shift, use_container_width=True)
     else:
         st.info("Data prediksi untuk shift ini belum tersedia.")
