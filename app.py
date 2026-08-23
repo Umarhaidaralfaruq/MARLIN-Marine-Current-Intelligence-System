@@ -392,7 +392,7 @@ waktu_baserun_wib = df_spatial['datetime_wib'].min() - pd.Timedelta(hours=1)
 selisih_jam = (waktu_sekarang_wib - waktu_baserun_wib).total_seconds() / 3600
 
 with col_head2:
-    status_icon_data, status_teks_data = ("🟢", "DATA TERUPDATE") if selisih_jam <= 24 else ("🔴", "TIDAK UPDATE")
+    status_icon_data, status_teks_data = ("🟢", "DATA UPDATE") if selisih_jam <= 24 else ("🔴", "TIDAK UPDATE")
     teks_warna_data = "#28a745" if selisih_jam <= 24 else "#dc3545"
     st.markdown(f"<div style='text-align: right; margin-top: 20px; font-weight: bold; color: {teks_warna_data};'>{status_icon_data} {status_teks_data}</div>", unsafe_allow_html=True)
 
@@ -404,7 +404,7 @@ st.divider()
 status_ringkasan = get_status_arus(kecepatan_saat_ini, batas_waspada, batas_awas)
 
 html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
-<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional (Mode: {METODE_STATISTIK})</h3>
+<h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional</h3>
 <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
 <div style="flex: 1; min-width: 150px; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 15px;">
 <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px;">Kecepatan Saat Ini <span style="font-size: 0.75rem; color: #cbd5e1;">({jam_saat_ini_str})</span></div>
@@ -451,7 +451,7 @@ st.divider()
 # ==========================================
 # 4. PEMANTAUAN UTAMA
 # ==========================================
-st.markdown("### PEMANTAUAN UTAMA")
+st.markdown("### PEMANTAUAN ARUS SPASIAL DAN TEMPORAL")
 st.markdown("<style>.stSlider, .stSlider div, .stSlider span, .stSlider p { color: transparent !important; } .stSlider [data-testid='stThumbValue'], .stSlider [data-testid='stTickBarMin'], .stSlider [data-testid='stTickBarMax'], .stSlider [data-testid='stTickBar'] { display: none !important; opacity: 0 !important; }</style>", unsafe_allow_html=True)
 
 col_map, col_chart = st.columns([1.3, 1])
@@ -570,9 +570,24 @@ with col_chart:
             ymax_plot = max(ymax_plot, batas_awas + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
-            margin=dict(l=0, r=0, t=10, b=20), xaxis_title=None, yaxis_title=f"Kecepatan ({satuan_teks})",
-            yaxis=dict(range=[0, ymax_plot]), height=340, showlegend=False, hovermode="x unified",
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+            margin=dict(l=0, r=0, t=10, b=20), 
+            xaxis_title=None, 
+            yaxis_title=f"Kecepatan ({satuan_teks})",
+            yaxis=dict(range=[0, ymax_plot]), 
+            height=340, 
+            showlegend=False, 
+            hovermode="x unified",
+            
+            # --- TAMBAHKAN KODE INI UNTUK MENGHILANGKAN PUTIH-PUTIH ---
+            hoverlabel=dict(
+                bgcolor="#1e293b",       # Background box gelap (slate tua)
+                font_color="#f8fafc",    # Teks warna putih terang
+                bordercolor="#334155"    # Garis tepi / border warna gelap biar nyaru
+            ),
+            # ----------------------------------------------------------
+            
+            paper_bgcolor='rgba(0,0,0,0)', 
+            plot_bgcolor='rgba(0,0,0,0)'
         )
         fig_shift.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
         fig_shift.update_xaxes(showgrid=False)
