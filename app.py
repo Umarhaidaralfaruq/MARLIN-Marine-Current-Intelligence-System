@@ -164,7 +164,7 @@ def konversi_ke_velocity_json(df_hour):
     dy = (la1 - la2) / (ny - 1) 
     
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-    batas_resolusi = 0.009
+    batas_resolusi = 0.011
     
     x_tri = triang.x[triang.triangles]
     y_tri = triang.y[triang.triangles]
