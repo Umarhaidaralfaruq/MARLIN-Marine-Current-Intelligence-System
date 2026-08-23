@@ -33,6 +33,34 @@ from PIL import Image, ImageFilter
 from plotly.subplots import make_subplots
 
 # ==========================================
+# [BLOK KONFIGURASI GLOBAL] 
+# Mencegah Hardcode & Magic Numbers
+# ==========================================
+
+# 1. KOORDINAT AREA UTAMA (Bounding Box Keseluruhan)
+AREA_LAT_MIN, AREA_LAT_MAX = -8.209161, -8.160084
+AREA_LON_MIN, AREA_LON_MAX = 114.387089, 114.435215
+
+# 2. KOORDINAT PELABUHAN KETAPANG 
+# Memastikan batasnya terpotong oleh area utama agar tidak *out of bounds*
+KET_LAT_MIN = max(-8.209161, AREA_LAT_MIN)
+KET_LAT_MAX = min(-8.151693, AREA_LAT_MAX)
+KET_LON_MIN = max(114.38673, AREA_LON_MIN)
+KET_LON_MAX = min(114.414975, AREA_LON_MAX)
+
+# 3. KOORDINAT PELABUHAN GILIMANUK
+# Memastikan batasnya terpotong oleh area utama agar tidak *out of bounds*
+GIL_LAT_MIN = max(-8.21003, AREA_LAT_MIN)
+GIL_LAT_MAX = min(-8.160084, AREA_LAT_MAX)
+GIL_LON_MIN = max(114.41354, AREA_LON_MIN)
+GIL_LON_MAX = min(114.435215, AREA_LON_MAX)
+
+# 4. AMBANG BATAS KECEPATAN (Satuan m/s)
+BATAS_WASPADA_MS = 1.2
+BATAS_AWAS_MS = 2.0
+FAKTOR_KNOT = 1.94384
+
+# ==========================================
 # [BAGIAN AWAL TETAP SAMA: HTML Template, Fungsi Velocity, Konfigurasi Tema]
 # ==========================================
 HTML_TEMPLATE = """
@@ -83,7 +111,7 @@ HTML_TEMPLATE = """
             displayOptions: { velocityType: 'Kecepatan Arus', displayPosition: 'bottomleft', displayEmptyString: 'Tidak ada data' },
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
-            velocityScale: 0.05,           
+            velocityScale: 0.05,            
             
             // PERBAIKAN ANIMASI: 
             particleAge: 50,           // Kurangi dari 200 ke 50 agar panah langsung mati saat keluar warna
@@ -134,7 +162,6 @@ def konversi_ke_velocity_json(df_hour):
     dx = (lo2 - lo1) / (nx - 1)
     
     # PERBAIKAN: Jarak dy harus positif (Utara dikurang Selatan). 
-    # Kalau minus, panahnya malah merender terbang ke Utara (kayak error sebelumnya)!
     dy = (la1 - la2) / (ny - 1) 
     
     # Triangulasi yang SAMA PERSIS dengan Matplotlib
@@ -184,9 +211,6 @@ plt.rcParams['font.weight'] = 'bold'
 plt.rcParams['axes.labelweight'] = 'bold'
 plt.rcParams['axes.titleweight'] = 'bold'
 
-LAT_MIN, LAT_MAX = -8.209161, -8.160084
-LON_MIN, LON_MAX = 114.387089, 114.435215
-
 # ==========================================
 # SETUP HALAMAN WEBSITE
 # ==========================================
@@ -229,17 +253,8 @@ def derajat_ke_panah(deg):
     panah = ['↑ U', '↗ TL', '→ T', '↘ TG', '↓ S', '↙ BD', '← B', '↖ BL']
     return panah[int((deg + 22.5) % 360 // 45)]
 
-def get_p95_idx(group):
-    p95 = group['predicted_v_max'].quantile(0.95)
-    if pd.isna(p95): return group.index[0]
-    return (group['predicted_v_max'] - p95).abs().idxmin()
-
 # ==========================================
 # STATUS ARUS (SATU SUMBER KEBENARAN)
-# Sebelumnya logika Normal/Waspada/Awas ini diduplikasi & sebagian di-hardcode
-# terpisah di 4 tempat berbeda (Ringkasan Operasional, Status Prakiraan,
-# format_speed_badge, style_tabel_peringatan). Sekarang semua manggil fungsi
-# ini, jadi kalau warna/ambang batas berubah, cukup diubah di satu tempat.
 # ==========================================
 STATUS_STYLE = {
     "AWAS":    {"icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
@@ -252,7 +267,6 @@ for _status_key, _style in STATUS_STYLE.items():
 def get_status_arus(speed, batas_waspada, batas_awas):
     """
     Tentukan status kondisi arus (NORMAL/WASPADA/AWAS) dari satu angka kecepatan.
-    Mengembalikan dict: status, icon, bg, text_color, label (icon+status siap pakai).
     """
     if pd.isna(speed):
         status = "NORMAL"
@@ -278,22 +292,17 @@ if not list_of_files:
     st.error(f"❌ Tidak ada file prediksi ditemukan di folder: {FOLDER_OUTPUT}")
     st.stop()
 
-# FUNGSI BARU: Mengubah "prediksi_spasial_20260822_0900.csv" jadi "2026-08-22 16:00 WIB"
 def format_nama_baserun(filepath):
     filename = os.path.basename(filepath)
-    # Cari pola angka YYYYMMDD dan HHMM dari nama file
     match = re.search(r'prediksi_spasial_(\d{8})_(\d{4})\.csv', filename)
     if match:
-        tanggal_str = match.group(1) # '20260822'
-        jam_str = match.group(2)     # '0900'
-        # Gabungkan dan konversi ke objek waktu Pandas (UTC)
+        tanggal_str = match.group(1) 
+        jam_str = match.group(2)     
         waktu_utc = pd.to_datetime(f"{tanggal_str}{jam_str}", format="%Y%m%d%H%M")
-        # Tambah 7 Jam ke WIB
         waktu_wib = waktu_utc + pd.Timedelta(hours=7)
         return waktu_wib.strftime("%Y-%m-%d %H:%M WIB")
-    return filename # Kembalikan nama asli jika format file berbeda
+    return filename 
 
-# Membuat dictionary dengan kunci nama WIB dan value lokasi asli file
 file_options = {format_nama_baserun(f): f for f in list_of_files}
 
 # ==========================================
@@ -301,12 +310,10 @@ file_options = {format_nama_baserun(f): f for f in list_of_files}
 # ==========================================
 logo_base64 = get_base64_logo(logo_seacast)
 
-# Kita taruh header dan status bersebelahan
 col_head1, col_head2 = st.columns([3, 1])
 
 with col_head1:
     if logo_base64:
-        # Header dibuat lebih compact, margin diperkecil
         html_header = f"""<div style="display: flex; flex-direction: row; align-items: center; margin-bottom: 5px;">
         <img src="data:image/png;base64,{logo_base64}" style="height: 60px; width: auto; margin-right: 15px;">
         <div style="display: flex; flex-direction: column; justify-content: center;">
@@ -322,17 +329,18 @@ with col_head1:
 # ==========================================
 selected_filename = st.session_state.get('sel_file', list(file_options.keys())[0])
 
-# PERBAIKAN: Reset pilihan jika memori Streamlit (session state) menyimpan format nama lama
 if selected_filename not in file_options:
     selected_filename = list(file_options.keys())[0]
 
 satuan_pilihan = st.session_state.get('sel_unit', 'm/s')
 
 df_spatial = load_data(file_options[selected_filename])
-faktor_konversi = 1.94384 if satuan_pilihan == "Knot" else 1.0
+faktor_konversi = FAKTOR_KNOT if satuan_pilihan == "Knot" else 1.0
 satuan_teks = satuan_pilihan
-batas_waspada = 1.2 * faktor_konversi 
-batas_awas = 2.0 * faktor_konversi
+
+# Hitung Batas Kecepatan Secara Dinamis
+batas_waspada = BATAS_WASPADA_MS * faktor_konversi 
+batas_awas = BATAS_AWAS_MS * faktor_konversi
 
 df_spatial['predicted_v_max'] = df_spatial['predicted_v_max'] * faktor_konversi
 df_spatial['predicted_u'] = df_spatial['predicted_u'] * faktor_konversi
@@ -345,57 +353,50 @@ def get_shift_range_now(df_prediksi_24jam):
 
 start_hour_utc, end_hour_utc, shift_name_global = get_shift_range_now(df_spatial)
 
-# 2. Filter Data 12 Jam untuk Summary
-mask_shift_global = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
-df_filtered_area_shift = df_spatial[
-    mask_shift_global &
-    (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
-    (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
-]
-
-# 3. Tetap simpan kalkulasi 24 Jam utuh untuk fitur Tombol Unduh 24 Jam di bawah
+# 2. Filter Data Area Keseluruhan 24 Jam
 df_filtered_area_24 = df_spatial[
-    (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
-    (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
+    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) &
+    (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)
 ]
-idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib')['predicted_v_max'].idxmax()
-df_trend_p95 = df_filtered_area_24.loc[idx_p95_trend_24].reset_index(drop=True)
 
-# 4. Kalkulasi KPI Operational (Interaktif Berdasarkan Waktu Aktual & 12 Jam)
+# PERBAIKAN: Menggunakan IDMAX (Bukan P95) Secara Menyeluruh
+idx_max_trend_24 = df_filtered_area_24.groupby('datetime_wib')['predicted_v_max'].idxmax()
+df_trend_max = df_filtered_area_24.loc[idx_max_trend_24].reset_index(drop=True)
+
+# 4. Kalkulasi KPI Operational 
 waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 
-if not df_trend_p95.empty:
+if not df_trend_max.empty:
     # A. Cari kecepatan SAAT INI
-    df_trend_p95['selisih_waktu'] = abs(df_trend_p95['datetime_wib'] - waktu_sekarang_wib)
-    baris_saat_ini = df_trend_p95.loc[df_trend_p95['selisih_waktu'].idxmin()]
+    df_trend_max['selisih_waktu'] = abs(df_trend_max['datetime_wib'] - waktu_sekarang_wib)
+    baris_saat_ini = df_trend_max.loc[df_trend_max['selisih_waktu'].idxmin()]
     
     kecepatan_saat_ini = baris_saat_ini['predicted_v_max']
     jam_saat_ini_str = baris_saat_ini['datetime_wib'].strftime('%H:%M WIB')
     
-    # B. Cari kecepatan PUNCAK (Saring langsung 12 Jam / Sesuai Shift)
-    waktu_utc = df_trend_p95['datetime_wib'] - pd.Timedelta(hours=7)
+    # B. Cari kecepatan PUNCAK Shift 12 Jam
+    waktu_utc = df_trend_max['datetime_wib'] - pd.Timedelta(hours=7)
     jam_terakhir = waktu_utc.max().hour
     start_h = 12 if jam_terakhir < 12 else 0
     end_h = 24 if jam_terakhir < 12 else 12
     
     mask_shift = (waktu_utc.dt.hour >= start_h) & (waktu_utc.dt.hour < end_h)
-    df_12j = df_trend_p95[mask_shift]
+    df_12j = df_trend_max[mask_shift]
     
     if not df_12j.empty:
         baris_max = df_12j.loc[df_12j['predicted_v_max'].idxmax()]
         max_speed_global = baris_max['predicted_v_max']
         waktu_ekstrem = baris_max['datetime_wib'].strftime('%H:%M WIB')
         
-        # --- LOGIKA BARU: HITUNG MUNDUR MENUJU PUNCAK ---
         waktu_puncak_dt = baris_max['datetime_wib']
         selisih_detik = (waktu_puncak_dt - waktu_sekarang_wib).total_seconds()
         
-        if selisih_detik < -1800: # Sudah lewat lebih dari 30 menit
+        if selisih_detik < -1800: 
             teks_selisih = "Sudah terlewati"
-            warna_selisih = "#28a745" # Hijau (Aman)
-        elif -1800 <= selisih_detik <= 1800: # Plus minus 30 menit dari sekarang
+            warna_selisih = "#28a745"
+        elif -1800 <= selisih_detik <= 1800: 
             teks_selisih = "Sedang terjadi"
-            warna_selisih = "#dc3545" # Merah (Kritis)
+            warna_selisih = "#dc3545"
         else:
             jam_lagi = int(selisih_detik // 3600)
             menit_lagi = int((selisih_detik % 3600) // 60)
@@ -403,7 +404,7 @@ if not df_trend_p95.empty:
                 teks_selisih = f"{jam_lagi}j {menit_lagi}m lagi"
             else:
                 teks_selisih = f"{menit_lagi}m lagi"
-            warna_selisih = "#ffc107" # Kuning (Antisipasi)
+            warna_selisih = "#ffc107"
             
         info_puncak_html = f"<div style='font-size: 0.9rem; color: {warna_selisih}; font-weight: 600; margin-top: 5px;'>{teks_selisih}</div>"
     else:
@@ -438,7 +439,6 @@ status_text = status_ringkasan["status"]
 status_icon = status_ringkasan["icon"]
 text_color = status_ringkasan["text_color"]
 
-# Injeksi HTML/CSS (RATA KIRI TOTAL)
 html_summary = f"""<div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
 <h3 style="color: #cbd5e1; margin-top: 0; margin-bottom: 20px; font-size: 1.1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Ringkasan Operasional</h3>
 <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
@@ -479,7 +479,6 @@ with col_dc2:
 with col_dc3:
     satuan_pilihan = st.radio("Satuan:", ["m/s", "Knot"], horizontal=True, label_visibility="collapsed")
 
-# Save state for reload
 if st.session_state.get('sel_file') != selected_filename or st.session_state.get('sel_unit') != satuan_pilihan:
     st.session_state['sel_file'] = selected_filename
     st.session_state['sel_unit'] = satuan_pilihan
@@ -494,19 +493,11 @@ st.markdown("### PEMANTAUAN UTAMA")
 
 st.markdown("""
 <style>
-    /* Bikin semua font di dalam elemen slider jadi transparan */
-    .stSlider, .stSlider div, .stSlider span, .stSlider p {
-        color: transparent !important;
-    }
-    
-    /* Jaga-jaga mematikan display elemen utamanya kalau ketemu */
+    .stSlider, .stSlider div, .stSlider span, .stSlider p { color: transparent !important; }
     .stSlider [data-testid="stThumbValue"], 
     .stSlider [data-testid="stTickBarMin"], 
     .stSlider [data-testid="stTickBarMax"],
-    .stSlider [data-testid="stTickBar"] {
-        display: none !important;
-        opacity: 0 !important;
-    }
+    .stSlider [data-testid="stTickBar"] { display: none !important; opacity: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -518,7 +509,6 @@ with col_map:
     waktu_sekarang_str = waktu_sekarang_wib.floor('h').strftime('%Y-%m-%d %H:%M')
     waktu_default = waktu_sekarang_str if waktu_sekarang_str in waktu_unik else waktu_unik[-1]
 
-    # PERBAIKAN: Margin dinormalkan (jadi 5px) supaya tidak tabrakan dengan slider
     st.markdown("<div style='margin-bottom: 5px; font-weight: bold;'>PETA SPASIAL ARUS</div>", unsafe_allow_html=True)
     
     selected_time_str = st.select_slider("Waktu Prediksi", options=waktu_unik, value=waktu_default, label_visibility="collapsed")
@@ -531,7 +521,6 @@ with col_map:
     
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     
-    # KEMBALIKAN KE DINAMIS: Ambil batas asli dari data jam ini agar plot penuh
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
 
@@ -540,8 +529,6 @@ with col_map:
         df_hour = pd.DataFrame(df_hour_json)
         
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-        
-        # KEMBALIKAN KE RESOLUSI AMAN (Agar tidak mewarnai daratan)
         batas_resolusi = 0.011 
         
         x_tri = triang.x[triang.triangles]
@@ -571,7 +558,6 @@ with col_map:
         )
     
         buf = io.BytesIO()
-        # Langsung simpan dengan transparan murni tanpa proses PIL yang bikin halo putih
         plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, transparent=True)
         buf.seek(0)
         plt.close(fig)
@@ -581,7 +567,6 @@ with col_map:
     df_hour_dict = df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list')
     vmax_dinamis = 3.0 * faktor_konversi
     
-    # Passing batas data dinamis ke generator gambar
     image_base64 = generate_map_background(df_hour_dict, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_dinamis)
 
     placed_labels = []
@@ -608,19 +593,17 @@ with col_map:
 
 # --- PRAKIRAAN SECTION (KANAN) ---
 with col_chart:
-    def get_shift_range_now(df_prediksi_24jam):
-        last_hour = df_prediksi_24jam['datetime'].max().hour 
-        return (12, 24, "Shift Malam") if last_hour < 12 else (0, 12, "Shift Pagi")
-
-    start_hour_utc, end_hour_utc, shift_name = get_shift_range_now(df_spatial)
     mask_shift = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
-    df_shift_raw = df_spatial.loc[mask_shift & (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) & (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)]
+    
+    # PERBAIKAN: Gunakan AREA_LON_MIN dkk.
+    df_shift_raw = df_spatial.loc[mask_shift & (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) & (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)]
     
     st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>PRAKIRAAN KECEPATAN & ARAH — 12 JAM</div>", unsafe_allow_html=True)
 
     if not df_shift_raw.empty:
-        idx_p95_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].idxmax()
-        df_shift = df_shift_raw.loc[idx_p95_shift].reset_index(drop=True)
+        # PERBAIKAN: Gunakan metode MAX, bukan P95
+        idx_max_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].idxmax()
+        df_shift = df_shift_raw.loc[idx_max_shift].reset_index(drop=True)
         df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
         
         baris_max_shift = df_shift.loc[df_shift['predicted_v_max'].idxmax()]
@@ -630,9 +613,6 @@ with col_chart:
         arah_mode = df_shift['arah_derajat'].apply(derajat_ke_arah_lengkap).mode()
         arah_dominan = arah_mode[0] if not arah_mode.empty else "Variabel"
         
-        # PERBAIKAN: Desain Alert disamakan dengan Ringkasan Operasional (Mini Card)
-        # Status pakai get_status_arus() -> otomatis konsisten dgn kartu Ringkasan Operasional.
-        # batas_waspada/batas_awas dipakai dari scope global (baris ~334), tidak dihitung ulang.
         status_prakiraan = get_status_arus(max_speed_shift, batas_waspada, batas_awas)
         status_bg = status_prakiraan["bg"]
         text_color = status_prakiraan["text_color"]
@@ -668,13 +648,9 @@ with col_chart:
             hovertemplate="<b>%{x}</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
         ))
         
-        # ==========================================
-        # PERBAIKAN: Sumbu Y dan Garis Threshold Dinamis
-        # ==========================================
         max_v = df_shift['predicted_v_max'].max()
         ymax_plot = max_v + (0.3 * faktor_konversi)
 
-        # Hanya munculkan garis Waspada jika grafik mendekati/melebihi 1.2
         warna_waspada = STATUS_STYLE["WASPADA"]["bg"]
         warna_awas = STATUS_STYLE["AWAS"]["bg"]
 
@@ -685,7 +661,6 @@ with col_chart:
                                 annotation_font_color=warna_waspada)
             ymax_plot = max(ymax_plot, batas_waspada + (0.2 * faktor_konversi))
                                 
-        # Hanya munculkan garis Awas jika grafik mendekati/melebihi 2.0
         if ymax_plot >= batas_awas:
             fig_shift.add_hline(y=batas_awas, line_dash="solid", line_color=warna_awas, 
                                 annotation_text=f"Awas > {batas_awas:.2f}", 
@@ -697,14 +672,13 @@ with col_chart:
             margin=dict(l=0, r=0, t=10, b=20), 
             xaxis_title=None,
             yaxis_title=f"Kecepatan ({satuan_teks})",
-            yaxis=dict(range=[0, ymax_plot]), # <-- Batas sumbu Y dipasang dinamis di sini
+            yaxis=dict(range=[0, ymax_plot]), 
             height=340, 
             showlegend=False,
             hovermode="x unified",
             paper_bgcolor='rgba(0,0,0,0)', 
             plot_bgcolor='rgba(0,0,0,0)'
         )
-        # Menambahkan grid samar biar nyambung sama dark mode
         fig_shift.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
         fig_shift.update_xaxes(showgrid=False)
         
@@ -728,12 +702,10 @@ def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
     df_area = df_raw[(df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) & (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)]
     if df_area.empty: return pd.DataFrame()
     
-    idx_p95_area = df_area.groupby('datetime_wib').apply(get_p95_idx)
-    df_trend_area = df_area.loc[idx_p95_area].reset_index(drop=True)
+    # PERBAIKAN: Menggunakan IDMAX (Metode Maksimum) sebagai pengganti P95
+    idx_max_area = df_area.groupby('datetime_wib')['predicted_v_max'].idxmax()
+    df_trend_area = df_area.loc[idx_max_area].reset_index(drop=True)
     
-    # Menambahkan badge teks langsung ke dataframe agar mudah di-scan
-    # (dulu ambang batasnya hardcode literal 2.0/1.2 di sini, terpisah dari
-    # variabel batas_waspada/batas_awas di tempat lain -> sekarang satu sumber)
     def format_speed_badge(val):
         info = get_status_arus(val, batas_waspada, batas_awas)
         if info["status"] == "NORMAL":
@@ -746,8 +718,6 @@ def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
         'Arah Dominan': df_trend_area['arah_derajat'].apply(derajat_ke_utara_selatan)
     })
 
-# Pewarnaan teks tabel menggunakan Pandas Styler
-# (label & warna dicocokkan dari STATUS_STYLE yang sama, bukan hardcode ulang)
 def style_tabel_peringatan(val):
     if isinstance(val, str):
         if STATUS_STYLE["AWAS"]["label"] in val:
@@ -756,12 +726,12 @@ def style_tabel_peringatan(val):
             return f'color: {STATUS_STYLE["WASPADA"]["bg"]}; font-weight: bold;'
     return ''
 
-# Menggunakan df_shift_raw yang sudah difilter di Fase 2 (Prakiraan 12 Jam)
 df_shift_full = df_shift_raw if 'df_shift_raw' in locals() else pd.DataFrame()
 
 with col_ket:
     st.markdown("**Area Pelabuhan Ketapang**")
-    tabel_ketapang = buat_tabel_area(df_shift_full, -8.209161, -8.151693, 114.38673, 114.414975)
+    # PERBAIKAN: Menggunakan Variabel Config Global (No Magic Numbers)
+    tabel_ketapang = buat_tabel_area(df_shift_full, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX)
     if not tabel_ketapang.empty:
         styled_ket = tabel_ketapang.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
         st.dataframe(styled_ket, hide_index=True, use_container_width=True)
@@ -770,7 +740,8 @@ with col_ket:
 
 with col_gil:
     st.markdown("**Area Pelabuhan Gilimanuk**")
-    tabel_gilimanuk = buat_tabel_area(df_shift_full, -8.21003, -8.16198, 114.41354, 114.43416)
+    # PERBAIKAN: Menggunakan Variabel Config Global (No Magic Numbers)
+    tabel_gilimanuk = buat_tabel_area(df_shift_full, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX)
     if not tabel_gilimanuk.empty:
         styled_gil = tabel_gilimanuk.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})'])
         st.dataframe(styled_gil, hide_index=True, use_container_width=True)
@@ -784,7 +755,6 @@ st.divider()
 # ==========================================
 st.markdown("### UNDUH GRAFIK")
 
-# --- FUNGSI GENERATOR LAPORAN BMKG (DIKEMBALIKAN) ---
 def create_bmkg_report(df_source, title_text):
     df_plot = df_source.copy()
     if 'datetime_utc' not in df_plot.columns:
@@ -795,7 +765,6 @@ def create_bmkg_report(df_source, title_text):
     x_min_buffer = x_min_asli - pd.Timedelta(hours=1)
     x_max_buffer = x_max_asli + pd.Timedelta(hours=1)
     
-    # PERBAIKAN: Gunakan huruf kecil 'h' untuk format Pandas terbaru
     durasi_jam = (x_max_buffer - x_min_buffer).total_seconds() / 3600
     frekuensi = '2h' if durasi_jam > 15 else 'h'
     extended_ticks_utc = pd.date_range(start=x_min_buffer, end=x_max_buffer, freq=frekuensi)
@@ -809,7 +778,7 @@ def create_bmkg_report(df_source, title_text):
     ax0.plot(df_plot['datetime_utc'], df_plot['predicted_v_max'], color=line_color, linewidth=2, marker='o', markersize=6, markerfacecolor=line_color, markeredgecolor='white')
 
     ax0.set_ylabel(f"Kecepatan Arus ({satuan_teks})", fontsize=13, weight='bold')
-    y_max = max(2.0 * faktor_konversi, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi))
+    y_max = max(BATAS_AWAS_MS * faktor_konversi, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi))
     ax0.set_ylim(0, y_max)
     ax0.grid(color=grid_color, linestyle='--', linewidth=0.8)
 
@@ -857,9 +826,7 @@ def create_bmkg_report(df_source, title_text):
             pass 
             
     return fig_bmkg
-# -----------------------------------------------------------
 
-# Mengubah section download menjadi secondary action yang lebih compact
 col_exp1, col_exp2, col_exp_empty = st.columns([1, 1, 2])
 
 with col_exp1:
@@ -883,9 +850,9 @@ with col_exp1:
 with col_exp2:
     if st.button("Unduh Grafik 24 Jam", use_container_width=True):
         with st.spinner("Memproses grafik..."):
-            # PERBAIKAN: Ubah df_trend menjadi df_trend_p95 (variabel data 24 jam dari atas)
-            if 'df_trend_p95' in locals() and not df_trend_p95.empty:
-                fig_24j = create_bmkg_report(df_trend_p95, "Prediksi Kecepatan Arus Ketapang-Gilimanuk 24 Jam Kedepan")
+            # PERBAIKAN: Gunakan variabel yang direname (df_trend_max)
+            if 'df_trend_max' in locals() and not df_trend_max.empty:
+                fig_24j = create_bmkg_report(df_trend_max, "Prediksi Kecepatan Arus Ketapang-Gilimanuk 24 Jam Kedepan")
                 with io.BytesIO() as buf:
                     fig_24j.savefig(buf, format="png", dpi=150)
                     st.download_button(
@@ -908,11 +875,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
     st.markdown("### Akurasi & Validasi Model")
     with st.spinner("Merekap riwayat seluruh baserun prediksi..."):
         
-        # ---------------------------------------------------------
-        # LANGKAH 1: PRE-LOAD DATA REAL
-        # ---------------------------------------------------------
-        from pathlib import Path
-        BASE_DIR = Path(__file__).parent.resolve()
         path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
         
         df_real_hourly = pd.DataFrame()
@@ -927,7 +889,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                 df_real_raw['Shift'] = df_real_raw['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
                 
                 if satuan_teks == "Knot":
-                    df_real_raw['Real_Max_Speed_ms'] = df_real_raw['Real_Max_Speed_ms'] * 1.94384
+                    df_real_raw['Real_Max_Speed_ms'] = df_real_raw['Real_Max_Speed_ms'] * FAKTOR_KNOT
                 
                 df_real_hourly = df_real_raw[['waktu_utc', 'Real_Max_Speed_ms']].copy()
                 
@@ -947,9 +909,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                         
                 df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(qc_shift)
 
-        # ---------------------------------------------------------
-        # LANGKAH 2: LOOPING DATA PREDIKSI (BASERUNS)
-        # ---------------------------------------------------------
         rekap_prediksi = []
         
         def cek_shift_target(df_prediksi_24jam):
@@ -957,33 +916,30 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             if last_time.hour < 12: return 12, 24, "Malam"
             else: return 0, 12, "Pagi"
 
-        def get_p95_idx_local(group):
-            p95 = group['predicted_v_max'].quantile(0.95)
-            if pd.isna(p95): return group.index[0]
-            return (group['predicted_v_max'] - p95).abs().idxmin()
-
         for filepath in list_of_files:
             df_temp = load_data(filepath)
             start_hour_utc, end_hour_utc, shift_nama = cek_shift_target(df_temp)
             
+            # PERBAIKAN: Filter dikoordinasikan dengan Batas Global
             mask_shift_local = (
                 (df_temp['datetime'].dt.hour >= start_hour_utc) & 
                 (df_temp['datetime'].dt.hour < end_hour_utc) &
-                (df_temp['lat'] >= LAT_MIN) & (df_temp['lat'] <= LAT_MAX) &
-                (df_temp['lon'] >= LON_MIN) & (df_temp['lon'] <= LON_MAX)
+                (df_temp['lat'] >= AREA_LAT_MIN) & (df_temp['lat'] <= AREA_LAT_MAX) &
+                (df_temp['lon'] >= AREA_LON_MIN) & (df_temp['lon'] <= AREA_LON_MAX)
             )
             df_temp_shift = df_temp.loc[mask_shift_local]
             
             if df_temp_shift.empty:
                 continue
                 
-            idx_p95 = df_temp_shift.groupby('datetime_wib').apply(get_p95_idx_local)
-            df_p95_shift = df_temp_shift.loc[idx_p95].copy()
+            # PERBAIKAN: IDMAX menggantikan apply(P95)
+            idx_max_local = df_temp_shift.groupby('datetime_wib')['predicted_v_max'].idxmax()
+            df_max_shift = df_temp_shift.loc[idx_max_local].copy()
             
             tanggal_str = df_temp_shift['datetime'].dt.strftime('%Y-%m-%d').mode()[0]
             
-            df_p95_shift['pred_speed'] = df_p95_shift['predicted_v_max'] * faktor_konversi
-            baris_max_pred = df_p95_shift.loc[df_p95_shift['pred_speed'].idxmax()]
+            df_max_shift['pred_speed'] = df_max_shift['predicted_v_max'] * faktor_konversi
+            baris_max_pred = df_max_shift.loc[df_max_shift['pred_speed'].idxmax()]
             
             max_pred_shift = baris_max_pred['pred_speed']
             waktu_max_pred_str = baris_max_pred['datetime_wib'].strftime('%H:%M WIB')
@@ -995,7 +951,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             
             if not df_real_hourly.empty:
                 df_chart = pd.merge(
-                    df_p95_shift[['datetime', 'datetime_wib', 'pred_speed']], 
+                    df_max_shift[['datetime', 'datetime_wib', 'pred_speed']], 
                     df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms']], 
                     left_on='datetime', 
                     right_on='waktu_utc', 
@@ -1030,9 +986,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             
         df_rekap_pred = pd.DataFrame(rekap_prediksi)
 
-        # ---------------------------------------------------------
-        # LANGKAH 3: GABUNGKAN & HITUNG METRIK GLOBAL
-        # ---------------------------------------------------------
         if not df_rekap_pred.empty and not df_real_agg.empty:
             df_verif = pd.merge(
                 df_rekap_pred, 
@@ -1088,7 +1041,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                 delta_teks_rmse = delta_teks_mbe = "Menunggu Observasi"
                 color_rmse = color_mbe = "off"
 
-            # Format angka untuk tabel
             df_verif[f'Prediksi Arus Maks ({satuan_teks})'] = df_verif[f'Prediksi Arus Maks ({satuan_teks})'].map('{:.2f}'.format)
             df_verif[f'Observasi ({satuan_teks})'] = df_verif[f'Observasi ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
             df_verif[f'MBE ({satuan_teks})'] = df_verif[f'MBE ({satuan_teks})'].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
@@ -1097,7 +1049,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             kolom_fix = ['Tanggal', 'Shift', f'Prediksi Arus Maks ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']
             df_verif_tampil = df_verif[kolom_fix]
 
-            # FUNGSI POP-UP GRAFIK
             @st.dialog("📈 Grafik Perbandingan Shift", width="large")
             def tampilkan_popup_grafik(tanggal, shift, chart_data):
                 if not chart_data or 'waktu' not in chart_data:
@@ -1115,9 +1066,6 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                 )
                 st.plotly_chart(fig_popup, use_container_width=True)
 
-            # ---------------------------------------------------------
-            # LANGKAH 4: RENDER UI
-            # ---------------------------------------------------------
             col_v1, col_v2, col_v3 = st.columns(3)
             with col_v1: st.metric("Shift Available", f"{len(valid_data)}", f"Dari total {len(df_verif)}", delta_color="normal")
             with col_v2: st.metric("MBE", f"{mbe_score:.2f} {satuan_teks}", delta_teks_mbe, delta_color=color_mbe)
