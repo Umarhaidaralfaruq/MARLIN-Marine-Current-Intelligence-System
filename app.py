@@ -93,7 +93,7 @@ HTML_TEMPLATE = """
     <div id="map"></div>
     <script>
         var map = L.map('map');
-        map.setView([__LAT_CENTER__, __LON_CENTER__], 12);
+        map.setView([__LAT_CENTER__, __LON_CENTER__], 13);
         
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
