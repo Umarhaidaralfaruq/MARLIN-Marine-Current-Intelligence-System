@@ -164,7 +164,7 @@ def konversi_ke_velocity_json(df_hour):
     dy = (la1 - la2) / (ny - 1) 
     
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-    batas_resolusi = 0.011 
+    batas_resolusi = 0.009
     
     x_tri = triang.x[triang.triangles]
     y_tri = triang.y[triang.triangles]
@@ -494,7 +494,7 @@ with col_map:
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.margins(0,0)
         ax.tricontourf(triang, df_hour['predicted_v_max'], 
-               levels=np.linspace(0.0, vmax_plot, 100), # <-- Cukup 100 aja udah mulus banget
+               levels=np.linspace(0.0, vmax_plot, 1000), # <-- Cukup 100 aja udah mulus banget
                cmap=custom_cmap, 
                vmin=0.0, vmax=vmax_plot, 
                extend='max', 
