@@ -184,7 +184,7 @@ plt.rcParams['font.weight'] = 'bold'
 plt.rcParams['axes.labelweight'] = 'bold'
 plt.rcParams['axes.titleweight'] = 'bold'
 
-LAT_MIN, LAT_MAX = -8.209, -8.160084
+LAT_MIN, LAT_MAX = -8.209161, -8.160084
 LON_MIN, LON_MAX = 114.387089, 114.435215
 
 # ==========================================
