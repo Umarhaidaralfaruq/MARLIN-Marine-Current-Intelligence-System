@@ -358,7 +358,7 @@ df_filtered_area_24 = df_spatial[
     (df_spatial['lat'] >= LAT_MIN) & (df_spatial['lat'] <= LAT_MAX) &
     (df_spatial['lon'] >= LON_MIN) & (df_spatial['lon'] <= LON_MAX)
 ]
-idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(get_p95_idx)
+idx_p95_trend_24 = df_filtered_area_24.groupby('datetime_wib')['predicted_v_max'].idxmax()
 df_trend_p95 = df_filtered_area_24.loc[idx_p95_trend_24].reset_index(drop=True)
 
 # 4. Kalkulasi KPI Operational (Interaktif Berdasarkan Waktu Aktual & 12 Jam)
@@ -619,7 +619,7 @@ with col_chart:
     st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>PRAKIRAAN KECEPATAN & ARAH — 12 JAM</div>", unsafe_allow_html=True)
 
     if not df_shift_raw.empty:
-        idx_p95_shift = df_shift_raw.groupby('datetime_wib').apply(get_p95_idx)
+        idx_p95_shift = df_shift_raw.groupby('datetime_wib')['predicted_v_max'].idxmax()
         df_shift = df_shift_raw.loc[idx_p95_shift].reset_index(drop=True)
         df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
         
