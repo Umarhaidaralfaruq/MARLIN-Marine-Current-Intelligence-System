@@ -493,10 +493,16 @@ with col_map:
         ax.patch.set_alpha(0.0)
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.margins(0,0)
-        ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0.0, vmax_plot, 1000), cmap=custom_cmap, vmin=0.0, vmax=vmax_plot, extend='max', alpha=0.9)
+        ax.tricontourf(triang, df_hour['predicted_v_max'], 
+               levels=np.linspace(0.0, vmax_plot, 100), # <-- Cukup 100 aja udah mulus banget
+               cmap=custom_cmap, 
+               vmin=0.0, vmax=vmax_plot, 
+               extend='max', 
+               alpha=0.9,
+               antialiased=True)
     
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, transparent=True)
+        plt.savefig(buf, format='png', transparent=True, dpi=300, bbox_inches='tight', pad_inches=0)
         buf.seek(0)
         plt.close(fig)
         return base64.b64encode(buf.getvalue()).decode('utf-8')
