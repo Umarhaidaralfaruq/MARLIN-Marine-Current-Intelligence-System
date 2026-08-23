@@ -477,7 +477,7 @@ with col_map:
     def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
         df_hour = pd.DataFrame(df_hour_json)
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-        batas_resolusi = 0.008
+        batas_resolusi = 0.015
         x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
         sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
         sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
