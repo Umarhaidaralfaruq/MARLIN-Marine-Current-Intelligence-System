@@ -590,7 +590,13 @@ with col_chart:
             plot_bgcolor='rgba(0,0,0,0)'
         )
         fig_shift.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-        fig_shift.update_xaxes(showgrid=False)
+        fig_shift.update_xaxes(
+            showgrid=False,
+            showspikes=True,             # Pastikan garis hover aktif
+            spikecolor="#94a3b8",        # Ubah warna garis jadi abu-abu kalem (tidak putih mencolok)
+            spikethickness=1,            # Ketebalan garis
+            spikedash="dash"             # Format garis putus-putus
+        )
         st.plotly_chart(fig_shift, use_container_width=True)
     else:
         st.info("Data prediksi untuk shift ini belum tersedia.")
