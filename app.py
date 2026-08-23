@@ -477,7 +477,7 @@ with col_map:
     def generate_map_background(df_hour_json, lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_plot):
         df_hour = pd.DataFrame(df_hour_json)
         triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-        batas_resolusi = 0.011 
+        batas_resolusi = 0.008
         x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
         sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
         sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
@@ -511,8 +511,19 @@ with col_map:
     image_base64 = generate_map_background(df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list'), lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_dinamis)
 
     placed_labels, labels_list = [], []
-    for idx, row in df_hour.iterrows():
+    
+    # TRIK 1: Potong data dari awal, ambil setiap baris ke-3 saja (ubah angka 3 kalau mau makin renggang)
+    df_label_renggang = df_hour.iloc[::3] 
+    
+    for idx, row in df_label_renggang.iterrows():
         kec = row['predicted_v_max']
+        if pd.isna(kec): continue
+        lat, lon = float(row['lat']), float(row['lon'])
+        
+        # TRIK 2: Besarkan radius radius bentrokan (clash) dari 0.01 menjadi 0.015 atau 0.02
+        if not any(np.sqrt((lat - plat)**2 + (lon - plon)**2) < 0.015 for (plat, plon) in placed_labels):
+            labels_list.append({"lat": lat, "lon": lon, "val": f"{kec:.2f}"})
+            placed_labels.append((lat, lon))
         if pd.isna(kec): continue
         lat, lon = float(row['lat']), float(row['lon'])
         if not any(np.sqrt((lat - plat)**2 + (lon - plon)**2) < 0.01 for (plat, plon) in placed_labels):
