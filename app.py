@@ -808,7 +808,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
                     shift_mbe, shift_rmse, raw_errors_shift = errors.mean(), np.sqrt((errors**2).mean()), errors.tolist()
             
             rekap_prediksi.append({
-                'Tanggal': tanggal_str, 'Shift': shift_nama, f'Prediksi Arus ({METODE_STATISTIK} - {satuan_teks})': baris_max_pred['pred_speed'],
+                'Tanggal': tanggal_str, 'Shift': shift_nama, f'Prediksi Arus ({satuan_teks})': baris_max_pred['pred_speed'],
                 f'MBE ({satuan_teks})': shift_mbe, f'RMSE ({satuan_teks})': shift_rmse, 'Baserun': os.path.basename(filepath),
                 'raw_errors': raw_errors_shift, 'chart_data': chart_data_dict
             })
@@ -839,11 +839,11 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             else:
                 mbe_score, rmse_score, delta_teks_rmse, delta_teks_mbe, color_rmse, color_mbe = 0.0, 0.0, "Menunggu Observasi", "Menunggu Observasi", "off", "off"
 
-            df_verif[f'Prediksi Arus ({METODE_STATISTIK} - {satuan_teks})'] = df_verif[f'Prediksi Arus ({METODE_STATISTIK} - {satuan_teks})'].map('{:.2f}'.format)
+            df_verif[f'Prediksi Arus ({satuan_teks})'] = df_verif[f'Prediksi Arus ({satuan_teks})'].map('{:.2f}'.format)
             for col in [f'Observasi ({satuan_teks})', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})']:
                 df_verif[col] = df_verif[col].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-            df_verif_tampil = df_verif[['Tanggal', 'Shift', f'Prediksi Arus ({METODE_STATISTIK} - {satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
+            df_verif_tampil = df_verif[['Tanggal', 'Shift', f'Prediksi Arus ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
 
             @st.dialog("📈 Grafik Perbandingan Shift", width="large")
             def tampilkan_popup_grafik(tanggal, shift, chart_data):
@@ -872,7 +872,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             st.markdown("---")
             col_pilih1, col_pilih2, empty = st.columns([2, 1, 1])
             with col_pilih1:
-                opsi_pilihan = df_verif['Tanggal'].astype(str) + " - Shift " + df_verif['Shift'].astype(str)
+                opsi_pilihan = df_verif['Tanggal'].astype(str) + " - " + df_verif['Shift'].astype(str)
                 pilihan_shift = st.selectbox("Pilih jadwal grafik perbandingan:", options=opsi_pilihan.tolist(), label_visibility="collapsed")
             with col_pilih2:
                 if st.button("Lihat Grafik", use_container_width=True):
