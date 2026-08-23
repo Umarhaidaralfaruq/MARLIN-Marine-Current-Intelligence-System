@@ -59,7 +59,7 @@ BATAS_AWAS_MS = 2.0
 FAKTOR_KNOT = 1.94384
 
 # 5. METODE STATISTIK PENGAMBILAN DATA SPASIAL
-METODE_STATISTIK = "P95"  # Ubah menjadi "P95" jika ingin menggunakan persentil 95
+METODE_STATISTIK = "MAX"  # Ubah menjadi "P95" jika ingin menggunakan persentil 95
 
 def ambil_index_target(group):
     """Fungsi sentral untuk mengambil index berdasarkan metode statistik yang dipilih."""
