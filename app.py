@@ -483,7 +483,7 @@ with col_map:
         sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
         sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
         triang.set_mask(np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0))
-        custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['blue', 'green', 'yellow', 'orange', 'red'])
+        custom_cmap = LinearSegmentedColormap.from_list("custom_cmap", ['#0000ff', '#00ffff', '#00ff00', '#ffff00', '#ffa500', '#ff0000', '#4b0082'])
     
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.axis('off')
@@ -501,7 +501,7 @@ with col_map:
         plt.close(fig)
         return base64.b64encode(buf.getvalue()).decode('utf-8')
 
-    vmax_dinamis = 3.0 * faktor_konversi
+    vmax_dinamis = 4.0 * faktor_konversi
     image_base64 = generate_map_background(df_hour[['lat', 'lon', 'predicted_v_max']].to_dict('list'), lat_min_data, lat_max_data, lon_min_data, lon_max_data, vmax_dinamis)
 
     placed_labels, labels_list = [], []
