@@ -728,7 +728,7 @@ with st.expander("MODEL VERIFICATION", expanded=False):
             if 'Waktu_UTC' in df_real_raw.columns:
                 df_real_raw['waktu_utc'] = pd.to_datetime(df_real_raw['Waktu_UTC'])
                 df_real_raw['Tanggal'] = df_real_raw['waktu_utc'].dt.strftime('%Y-%m-%d')
-                df_real_raw['Shift'] = df_real_raw['waktu_utc'].dt.hour.apply(lambda h: "Pagi" if h < 12 else "Malam")
+                df_real_raw['Shift'] = df_real_raw['waktu_utc'].dt.hour.apply(lambda h: "Shift Pagi" if h < 12 else "Shift Malam")
                 if satuan_teks == "Knot": df_real_raw['Real_Max_Speed_ms'] *= FAKTOR_KNOT
                 
                 df_real_hourly = df_real_raw[['waktu_utc', 'Real_Max_Speed_ms']].copy()
