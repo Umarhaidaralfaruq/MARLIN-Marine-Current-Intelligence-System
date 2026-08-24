@@ -176,11 +176,21 @@ plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': ['Helvetica
 # ==========================================
 # SETUP HALAMAN WEBSITE
 # ==========================================
-st.set_page_config(page_title="MARLIN Dashboard", page_icon="🌊", layout="wide")
-st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
-
 BASE_DIR = Path(__file__).parent.resolve()
 FOLDER_OUTPUT = BASE_DIR / "Arsip_Prediksi"
+
+logo_filename = "logo_bmkg.png"
+logo_seacast = "logo_bmkg2.png"
+ikon = Image.open(logo_seacast) if os.path.exists(logo_seacast) else (Image.open("logo_bmkg.png") if os.path.exists("logo_bmkg.png") else "🌊")
+
+st.set_page_config(page_title="MARLIN Dashboard", page_icon=ikon, layout="wide")
+st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
+
+def get_base64_logo(img_path):
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode()
+    return None
 
 def get_available_baseruns():
     return sorted(glob.glob(os.path.join(FOLDER_OUTPUT, "prediksi_spasial*.csv")), reverse=True)
@@ -229,11 +239,22 @@ def format_nama_baserun(filepath):
 file_options = {format_nama_baserun(f): f for f in list_of_files}
 
 # ==========================================
-# 1. HEADER & KONTROL DATA
+# 1. HEADER DENGAN LOGO BMKG
 # ==========================================
+logo_base64 = get_base64_logo(logo_seacast)
 col_head1, col_head2 = st.columns([3, 1])
+
 with col_head1:
-    st.markdown("<h1 style='margin:0; padding:0; font-size: 2.2rem;'>MARLIN</h1><p style='margin:0; opacity:0.8;'>Marine Current Intelligence System</p>", unsafe_allow_html=True)
+    if logo_base64:
+        html_header = f"""<div style="display: flex; flex-direction: row; align-items: center; margin-bottom: 5px;">
+        <img src="data:image/png;base64,{logo_base64}" style="height: 60px; width: auto; margin-right: 15px;">
+        <div style="display: flex; flex-direction: column; justify-content: center;">
+        <h1 style="margin: 0; padding: 0; font-size: 2rem; font-weight: bold; line-height: 1.1;">MARLIN</h1>
+        <p style="margin: 0; font-size: 1rem; opacity: 0.8;">Marine Current Intelligence System</p>
+        </div></div>"""
+        st.markdown(html_header, unsafe_allow_html=True)
+    else:
+        st.markdown("## MARLIN \n *Marine Current Intelligence System*")
 
 st.markdown("<br>**Kontrol Data & Pengaturan**", unsafe_allow_html=True)
 col_dc1, col_dc2, col_dc3 = st.columns([2, 1, 1])
@@ -254,7 +275,7 @@ if st.session_state.get('sel_file') != selected_filename or st.session_state.get
     st.rerun()
 
 # ==========================================
-# PERSIAPAN DATA GLOBAL
+# PERSIAPAN DATA GLOBAL & 24 JAM
 # ==========================================
 df_spatial = load_data(file_options[selected_filename])
 faktor_konversi = FAKTOR_KNOT if satuan_pilihan == "Knot" else 1.0
@@ -265,6 +286,14 @@ batas_awas = BATAS_AWAS_MS * faktor_konversi
 df_spatial['predicted_v_max'] *= faktor_konversi
 df_spatial['predicted_u'] *= faktor_konversi
 df_spatial['predicted_v'] *= faktor_konversi
+
+# Perhitungan trend 24 jam untuk grafik
+df_filtered_area_24 = df_spatial[
+    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) &
+    (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)
+]
+idx_target_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(ambil_index_target)
+df_trend_stat = df_filtered_area_24.loc[idx_target_trend_24].reset_index(drop=True)
 
 waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 last_hour = df_spatial['datetime'].max().hour 
@@ -312,17 +341,17 @@ def create_summary_card(title, data):
     return f"""
     <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
-            <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Area {title}</h4>
+            <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Pelabuhan {title}</h4>
             <div style="background-color: {status['bg']}; color: {status['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status['icon']} {status['status']}</div>
         </div>
         <div style="display: flex; gap: 15px;">
             <div style="flex: 1; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 10px;">
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Saat Ini ({data['current_time']})</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Saat Ini ({data['current_time']})</div>
                 <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['current_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
                 <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{curr_alt:.2f} {alt_satuan} • Arah: <b>{data['current_dir']}</b></div>
             </div>
             <div style="flex: 1;">
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Puncak Shift (12 Jam)</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Maksimal - 12 Jam</div>
                 <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['peak_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
                 <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{peak_alt:.2f} {alt_satuan} • Arah: <b>{data['peak_dir']}</b> ({data['peak_time']})</div>
             </div>
@@ -333,7 +362,7 @@ def create_summary_card(title, data):
 # ==========================================
 # PEMBUATAN STRUKTUR TAB
 # ==========================================
-tab1, tab2, tab3 = st.tabs(["📍 Ringkasan & Spasial", "📈 Prakiraan 12 Jam", "✅ Verifikasi Model"])
+tab1, tab2, tab3 = st.tabs(["📍 Ringkasan Operasional", "📈 Prakiraan 12 Jam", "✅ Verifikasi Model"])
 
 # ------------------------------------------
 # TAB 1: RINGKASAN OPERASIONAL & SPASIAL
@@ -474,9 +503,10 @@ with tab2:
     st.markdown("### UNDUH LAPORAN GRAFIK BMKG")
     def create_bmkg_report(df_source, title_text):
         df_plot = df_source.copy()
-        df_plot['datetime_utc'] = df_plot['datetime_wib'] - pd.Timedelta(hours=7)
+        if 'datetime_utc' not in df_plot.columns: df_plot['datetime_utc'] = df_plot['datetime_wib'] - pd.Timedelta(hours=7)
         x_min, x_max = df_plot['datetime_utc'].min() - pd.Timedelta(hours=1), df_plot['datetime_utc'].max() + pd.Timedelta(hours=1)
-        ext_ticks = pd.date_range(start=x_min, end=x_max, freq='h')
+        frekuensi = '2h' if ((x_max - x_min).total_seconds() / 3600) > 15 else 'h'
+        ext_ticks = pd.date_range(start=x_min, end=x_max, freq=frekuensi)
 
         fig_bmkg, ax0 = plt.subplots(figsize=(14, 7), dpi=100)
         fig_bmkg.subplots_adjust(left=0.08, right=0.95, top=0.7, bottom=0.15) 
@@ -500,16 +530,35 @@ with tab2:
         fig_bmkg.text(0.11, 0.95, "Kantor Layanan Informasi Meteorologi Maritim\nKetapang - Gilimanuk\nBanyuwangi", fontsize=12, weight='bold', ha='left', va='top', linespacing=1.4)
         isu_tm = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
         fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {isu_tm.strftime('%H:%M')} WIB, {isu_tm.strftime('%d-%m-%Y')}", fontsize=12, weight='bold', ha='right', va='top')
+        
+        # Mengembalikan fitur logo AnnotationBbox
+        logo_path = BASE_DIR / "Logo_BMKG.png"
+        if not logo_path.exists(): logo_path = BASE_DIR / "logo_bmkg2.png"
+        if not logo_path.exists(): logo_path = BASE_DIR / "logo_bmkg.png"
+        if logo_path.exists():
+            try:
+                ax0.add_artist(AnnotationBbox(OffsetImage(plt.imread(str(logo_path)), zoom=0.08), (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1)))
+            except: pass 
+            
         return fig_bmkg
 
+    # Mengembalikan tombol unduh 12 jam & 24 jam bersampingan
     col_exp1, col_exp2, _ = st.columns([1, 1, 2])
     with col_exp1:
         if st.button("Unduh Grafik 12 Jam", use_container_width=True):
             if not df_shift.empty:
                 f_12 = create_bmkg_report(df_shift, f"Prediksi Arus 12 Jam (Mode: {METODE_STATISTIK})")
-                buf = io.BytesIO(); f_12.savefig(buf, format="png", dpi=150); plt.close(f_12)
-                st.download_button("Simpan Laporan", data=buf.getvalue(), file_name="Grafik_12J.png", mime="image/png", use_container_width=True)
+                buf_12 = io.BytesIO(); f_12.savefig(buf_12, format="png", dpi=150); plt.close(f_12)
+                st.download_button("Klik Untuk Menyimpan (12 Jam)", data=buf_12.getvalue(), file_name="Grafik_12J.png", mime="image/png", use_container_width=True)
             else: st.error("Data 12 Jam belum tersedia.")
+            
+    with col_exp2:
+        if st.button("Unduh Grafik 24 Jam", use_container_width=True):
+            if not df_trend_stat.empty:
+                f_24 = create_bmkg_report(df_trend_stat, f"Prediksi Arus 24 Jam (Mode: {METODE_STATISTIK})")
+                buf_24 = io.BytesIO(); f_24.savefig(buf_24, format="png", dpi=150); plt.close(f_24)
+                st.download_button("Klik Untuk Menyimpan (24 Jam)", data=buf_24.getvalue(), file_name="Grafik_24J.png", mime="image/png", use_container_width=True)
+            else: st.error("Data 24 Jam belum tersedia.")
 
 # ------------------------------------------
 # TAB 3: VERIFIKASI MODEL & ANALISA
