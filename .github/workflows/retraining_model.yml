@@ -1,0 +1,65 @@
+name: Retraining Model Arus Selat Bali
+
+on:
+  # Hanya menggunakan trigger manual (Run Workflow)
+  workflow_dispatch: 
+
+permissions:
+  contents: write
+
+jobs:
+  run-training:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy xarray scipy scikit-learn joblib requests "tensorflow<2.16" matplotlib python-dotenv netCDF4 openpyxl bottleneck
+
+      - name: Download & Extract Dataset Historis (GitHub Releases)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "00 Data"
+          # Unduh file zip dari menu Releases
+          gh release download v1.0-dataset -p "4_dataset_arus.zip" --dir "00 Data"
+          # Ekstrak file nc ke dalam folder 00 Data
+          unzip -o "00 Data/4_dataset_arus.zip" -d "00 Data/"
+
+      - name: Extract Data Arus dan Pasut
+        env:
+          HFRADAR_URL: ${{ secrets.HFRADAR_URL }}
+        run: python "extractdata.py"
+
+      - name: Spatial Pre-processing
+        run: python "Spatial Pre-processing.py"
+
+      - name: MEOF Analysis
+        run: python "MEOF Analysis.py"
+
+      - name: Training
+        run: python "Training.py"
+
+      - name: Reconstruction
+        run: python "reconstruction.py"
+
+      - name: Auto-Commit & Push Model & Artefak Terbaru
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          # Menangkap semua pembaruan artefak model h5, joblib, dan hasil rekonstruksi
+          git add -f "01 Artefak/Aset/*.joblib" 2>/dev/null || true
+          git add -f "01 Artefak/Aset/*.h5" 2>/dev/null || true
+          git add -f *.joblib 2>/dev/null || true
+          git add -f *.h5 2>/dev/null || true
+          git commit -m "Auto-update: Retrained LSTM model, MEOF, dan rekonstruksi terbaru [skip ci]" || exit 0
+          git push origin main
