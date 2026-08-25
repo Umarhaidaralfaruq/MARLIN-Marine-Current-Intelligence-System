@@ -52,7 +52,12 @@ def run_eof_extraction():
     print("="*60)
 
     file_input = PATHS['dataset_arus']
-    if not os.path.exists(file_input): return
+    print(f"🔍 Mencari dataset di: {file_input}")
+
+    if not os.path.exists(file_input):
+        print(f"❌ ERROR: File dataset tidak ditemukan di '{file_input}'!")
+        print(f"📂 Isi folder '00 Data' saat ini: {os.listdir(PATHS['dataset_arus'].parent) if os.path.exists(PATHS['dataset_arus'].parent) else 'Folder tidak ada'}")
+        raise FileNotFoundError(f"File {file_input} wajib ada sebelum EOF Extraction dijalankan.")
 
     # Load Data Pasut (Dengan Interpolasi) JIKA DIAKTIFKAN
     if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
