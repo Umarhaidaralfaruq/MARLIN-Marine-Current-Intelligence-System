@@ -3,8 +3,8 @@ name: Prediksi Operasional Arus Selat Bali
 on:
   schedule:
     # Berjalan otomatis 2 kali sehari (Pukul 06.02 dan 18.02 WIB)
-    - cron: '2 23 * * *' # Jam 06.02 WIB (23:02 UTC)
-    - cron: '2 11 * * *' # Jam 18.02 WIB (11:02 UTC)
+    - cron: '30 22 * * *' 
+    - cron: '30 10 * * *'
     
   # Tombol manual untuk testing
   workflow_dispatch: 
