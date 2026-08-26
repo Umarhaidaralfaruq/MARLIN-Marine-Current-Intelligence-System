@@ -197,7 +197,20 @@ logo_seacast = "logo_bmkg2.png"
 ikon = Image.open(logo_seacast) if os.path.exists(logo_seacast) else (Image.open("logo_bmkg.png") if os.path.exists("logo_bmkg.png") else "🌊")
 
 st.set_page_config(page_title="MARLIN Dashboard", page_icon=ikon, layout="wide")
-st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+        #MainMenu {visibility: hidden;} 
+        footer {visibility: hidden;} 
+        header {visibility: hidden;} 
+        .viewerBadge {display: none !important;}
+        
+        /* Ini kode untuk memangkas jarak atas dan bawah */
+        .block-container {
+            padding-top: 2rem !important; 
+            padding-bottom: 1rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 st_autorefresh(interval=1800000, limit=None, key="auto_refresh_marlin")
 
 def get_base64_logo(img_path):
