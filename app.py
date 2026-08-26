@@ -223,10 +223,10 @@ STATUS_STYLE = {
 for _k, _v in STATUS_STYLE.items(): _v["label"] = f"{_v['icon']} {_k}"
 
 def get_status_arus(speed, batas_sedang, batas_kencang, batas_sangat_kencang):
-    if pd.isna(speed): status = "LEMAH"
-    elif speed > batas_sangat_kencang: status = "SANGAT KENCANG"
-    elif speed >= batas_kencang: status = "KENCANG"
-    elif speed >= batas_sedang: status = "SEDANG"
+    if pd.isna(speed): status = "AMAN"
+    elif speed > batas_sangat_kencang: status = "AWAS"
+    elif speed >= batas_kencang: status = "WASPADA"
+    elif speed >= batas_sedang: status = "SIAGA"
     else: status = "LEMAH"
     return {"status": status, **STATUS_STYLE[status]}
 
