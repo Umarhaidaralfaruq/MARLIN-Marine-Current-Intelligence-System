@@ -44,11 +44,22 @@ KET_LON_MIN, KET_LON_MAX = 114.38673, 114.414975
 GIL_LAT_MIN, GIL_LAT_MAX = -8.21003, -8.16198
 GIL_LON_MIN, GIL_LON_MAX = 114.41354, 114.43416
 
-BATAS_SEDANG_MS = 1.0
-BATAS_KENCANG_MS = 1.5
-BATAS_SANGAT_KENCANG_MS = 2.0
 FAKTOR_KNOT = 1.94384
 METODE_STATISTIK = "MAX"  # "MAX" atau "P95"
+
+# --- KONFIGURASI STATUS, THRESHOLD, DAN GAYA (UBAH DI SINI SAJA) ---
+# Kamu bisa bebas menambah/menghapus/mengubah status di sini.
+# Sistem akan otomatis membaca batas_ms dan mengurutkannya.
+KONFIG_STATUS = {
+    "AWAS":    {"batas_ms": 2.0, "icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
+    "WASPADA": {"batas_ms": 1.5, "icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
+    "SIAGA":   {"batas_ms": 1.0, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
+    "AMAN":    {"batas_ms": 0.0, "icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"} 
+}
+
+# Auto-generate label untuk dipakai di tabel
+for k, v in KONFIG_STATUS.items():
+    v["label"] = f"{v['icon']} {k}"
 
 def ambil_index_target(group):
     if METODE_STATISTIK == "P95":
@@ -214,21 +225,23 @@ def derajat_ke_panah(deg):
 def derajat_ke_utara_selatan(deg):
     return "" if pd.isna(deg) else ("Utara" if deg >= 270 or deg < 90 else "Selatan")
 
-STATUS_STYLE = {
-    "AWAS": {"icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
-    "WASPADA":        {"icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
-    "SIAGA":         {"icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
-    "AMAN":          {"icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"},
-}
-for _k, _v in STATUS_STYLE.items(): _v["label"] = f"{_v['icon']} {_k}"
-
-def get_status_arus(speed, batas_sedang, batas_kencang, batas_sangat_kencang):
-    if pd.isna(speed): status = "AMAN"
-    elif speed > batas_sangat_kencang: status = "AWAS"
-    elif speed >= batas_kencang: status = "WASPADA"
-    elif speed >= batas_sedang: status = "SIAGA"
-    else: status = "LEMAH"
-    return {"status": status, **STATUS_STYLE[status]}
+# --- FUNGSI STATUS DINAMIS ---
+def get_status_arus(speed, faktor_konv):
+    # Cari status terendah sebagai nilai default/fallback (Batas_ms = 0)
+    status_terendah = min(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'])[0]
+    
+    if pd.isna(speed): 
+        return {"status": status_terendah, **KONFIG_STATUS[status_terendah]}
+    
+    # Mengurutkan konfigurasi dari nilai batas tertinggi ke terendah
+    sorted_status = sorted(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'], reverse=True)
+    
+    for nama_status, config in sorted_status:
+        # Pengecekan otomatis mengalikan threshold dengan faktor satuan (Knot/ms)
+        if speed >= (config['batas_ms'] * faktor_konv):
+            return {"status": nama_status, **config}
+            
+    return {"status": status_terendah, **KONFIG_STATUS[status_terendah]}
 
 list_of_files = get_available_baseruns()
 if not list_of_files:
@@ -284,11 +297,6 @@ df_spatial = load_data(file_options[selected_filename])
 faktor_konversi = FAKTOR_KNOT if satuan_pilihan == "Knot" else 1.0
 satuan_teks = satuan_pilihan
 
-# Ambang batas dikali faktor konversi (untuk adaptasi satuan Knot jika dipilih)
-batas_sedang = BATAS_SEDANG_MS * faktor_konversi 
-batas_kencang = BATAS_KENCANG_MS * faktor_konversi
-batas_sangat_kencang = BATAS_SANGAT_KENCANG_MS * faktor_konversi
-
 df_spatial['predicted_v_max'] *= faktor_konversi
 df_spatial['predicted_u'] *= faktor_konversi
 df_spatial['predicted_v'] *= faktor_konversi
@@ -342,7 +350,7 @@ def create_summary_card(title, data):
     alt_satuan = "Knot" if satuan_teks == "m/s" else "m/s"
     f_pembagi = FAKTOR_KNOT if satuan_teks == "m/s" else (1 / FAKTOR_KNOT)
     curr_alt, peak_alt = data['current_speed'] * f_pembagi, data['peak_speed'] * f_pembagi
-    status = get_status_arus(data['current_speed'], batas_sedang, batas_kencang, batas_sangat_kencang)
+    status = get_status_arus(data['current_speed'], faktor_konversi)
     
     return f"""
     <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
@@ -455,17 +463,19 @@ with tab2:
         
         ymax_plot = df_shift['predicted_v_max'].max() + (0.3 * faktor_konversi)
         
-        if ymax_plot >= batas_sedang:
-            fig_shift.add_hline(y=batas_sedang, line_dash="dot", line_color=STATUS_STYLE["SIAGA"]["bg"], annotation_text=f"SIAGA > {batas_sedang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["SIAGA"]["bg"])
-            ymax_plot = max(ymax_plot, batas_sedang + (0.2 * faktor_konversi))
-            
-        if ymax_plot >= batas_kencang:
-            fig_shift.add_hline(y=batas_kencang, line_dash="dash", line_color=STATUS_STYLE["WASPADA"]["bg"], annotation_text=f"WASPADA >= {batas_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["WASPADA"]["bg"])
-            ymax_plot = max(ymax_plot, batas_kencang + (0.2 * faktor_konversi))
-            
-        if ymax_plot >= batas_sangat_kencang:
-            fig_shift.add_hline(y=batas_sangat_kencang, line_dash="solid", line_color=STATUS_STYLE["AWAS"]["bg"], annotation_text=f"AWAS > {batas_sangat_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["AWAS"]["bg"])
-            ymax_plot = max(ymax_plot, batas_sangat_kencang + (0.2 * faktor_konversi))
+        # Gambar garis peringatan dinamis 
+        sorted_thresholds = sorted([item for item in KONFIG_STATUS.items() if item[1]['batas_ms'] > 0], key=lambda x: x[1]['batas_ms'])
+        
+        for i, (nama_status, config) in enumerate(sorted_thresholds):
+            batas_terkonversi = config['batas_ms'] * faktor_konversi
+            if ymax_plot >= batas_terkonversi:
+                dash_style = ["dot", "dash", "solid"][i % 3] # Gaya garis berubah-ubah
+                fig_shift.add_hline(
+                    y=batas_terkonversi, line_dash=dash_style, line_color=config["bg"], 
+                    annotation_text=f"{nama_status} >= {batas_terkonversi:.2f}", 
+                    annotation_position="top left", annotation_font_color=config["bg"]
+                )
+                ymax_plot = max(ymax_plot, batas_terkonversi + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
             margin=dict(l=0, r=0, t=10, b=20), xaxis_title=None, yaxis_title=f"Kecepatan ({satuan_teks})",
@@ -489,15 +499,16 @@ with tab2:
         idx_t = df_area.groupby('datetime_wib').apply(ambil_index_target)
         df_tr = df_area.loc[idx_t].reset_index(drop=True)
         def fmt_speed(val):
-            inf = get_status_arus(val, batas_sedang, batas_kencang, batas_sangat_kencang)
-            return f"{val:.2f}" if inf["status"] == "LEMAH" else f"{val:.2f} {inf['label']}"
+            inf = get_status_arus(val, faktor_konversi)
+            status_terendah = min(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'])[0]
+            return f"{val:.2f}" if inf["status"] == status_terendah else f"{val:.2f} {inf['label']}"
         return pd.DataFrame({'Waktu (WIB)': df_tr['datetime_wib'].dt.strftime('%H:%M'), f'Kecepatan ({satuan_teks})': df_tr['predicted_v_max'].apply(fmt_speed), 'Arah Dominan': df_tr['arah_derajat'].apply(derajat_ke_utara_selatan)})
 
     def style_tabel_peringatan(val):
         if isinstance(val, str):
-            if STATUS_STYLE["AWAS"]["label"] in val: return f'color: {STATUS_STYLE["AWAS"]["bg"]}; font-weight: bold;'
-            if STATUS_STYLE["WASPADA"]["label"] in val: return f'color: {STATUS_STYLE["WASPADA"]["bg"]}; font-weight: bold;'
-            if STATUS_STYLE["SIAGA"]["label"] in val: return f'color: {STATUS_STYLE["SIAGA"]["bg"]}; font-weight: bold;'
+            for nama_status, config in KONFIG_STATUS.items():
+                if config["batas_ms"] > 0 and config["label"] in val:
+                    return f'color: {config["bg"]}; font-weight: bold;'
         return ''
 
     with col_ket_tbl:
@@ -526,7 +537,8 @@ with tab2:
         ax0.set_title(title_text, fontsize=16, pad=60)
         ax0.plot(df_plot['datetime_utc'], df_plot['predicted_v_max'], color='black', linewidth=2, marker='o', markersize=6, markerfacecolor='black', markeredgecolor='white')
         ax0.set_ylabel(f"Kecepatan Arus ({satuan_teks})", fontsize=13, weight='bold')
-        ax0.set_ylim(0, max(batas_awas, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi)))
+        batas_tertinggi = max(KONFIG_STATUS.values(), key=lambda x: x['batas_ms'])['batas_ms'] * faktor_konversi
+        ax0.set_ylim(0, max(batas_tertinggi, df_plot['predicted_v_max'].max() + (0.5 * faktor_konversi)))
         ax0.grid(color='#A9CCE3', linestyle='--', linewidth=0.8); ax0.set_xlim(x_min, x_max)
         ax0.set_xlabel("Waktu (UTC)", fontsize=13, weight='bold', labelpad=10)
         ax0.set_xticks(ext_ticks); ax0.set_xticklabels([t.strftime('%H:%M') for t in ext_ticks], rotation=0, fontsize=11, weight='bold')
