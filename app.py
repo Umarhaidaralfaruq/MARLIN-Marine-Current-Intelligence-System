@@ -495,9 +495,9 @@ with tab2:
 
     def style_tabel_peringatan(val):
         if isinstance(val, str):
-            if STATUS_STYLE["SANGAT KENCANG"]["label"] in val: return f'color: {STATUS_STYLE["SANGAT KENCANG"]["bg"]}; font-weight: bold;'
-            if STATUS_STYLE["KENCANG"]["label"] in val: return f'color: {STATUS_STYLE["KENCANG"]["bg"]}; font-weight: bold;'
-            if STATUS_STYLE["SEDANG"]["label"] in val: return f'color: {STATUS_STYLE["SEDANG"]["bg"]}; font-weight: bold;'
+            if STATUS_STYLE["AWAS"]["label"] in val: return f'color: {STATUS_STYLE["AWAS"]["bg"]}; font-weight: bold;'
+            if STATUS_STYLE["WASPADA"]["label"] in val: return f'color: {STATUS_STYLE["WASPADA"]["bg"]}; font-weight: bold;'
+            if STATUS_STYLE["SIAGA"]["label"] in val: return f'color: {STATUS_STYLE["SIAGA"]["bg"]}; font-weight: bold;'
         return ''
 
     with col_ket_tbl:
