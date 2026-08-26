@@ -649,9 +649,9 @@ with tab3:
             if len(valid_data) > 0:
                 all_err = np.array([e for err_lst in valid_data['raw_errors'] if isinstance(err_lst, list) for e in err_lst])
                 mbe_sc, rmse_sc = (all_err.mean(), np.sqrt((all_err**2).mean())) if len(all_err) > 0 else (0.0, 0.0)
-                dt_rmse, cr_rmse = ("Baik", "normal") if rmse_sc <= 0.4 else ("Waspada Error", "inverse")
-                if mbe_sc > 0.1: dt_mbe, cr_mbe = "Underestimate", "off"
-                elif mbe_sc < -0.1: dt_mbe, cr_mbe = "Overestimate", "off"
+                dt_rmse, cr_rmse = ("Akurasi Sangat Baik", "normal") if rmse_sc <= 0.4 else ("Waspada Error", "inverse")
+                if mbe_sc > 0.1: dt_mbe, cr_mbe = "Cenderung Underestimate", "off"
+                elif mbe_sc < -0.1: dt_mbe, cr_mbe = "Cenderung Overestimate", "off"
                 else: dt_mbe, cr_mbe = "Sangat Presisi", "normal"
             else: mbe_sc, rmse_sc, dt_rmse, dt_mbe, cr_rmse, cr_mbe = 0.0, 0.0, "N/A", "N/A", "off", "off"
 
