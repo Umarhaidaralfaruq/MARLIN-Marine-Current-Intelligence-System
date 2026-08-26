@@ -31,6 +31,7 @@ import streamlit.components.v1 as components
 from scipy.ndimage import gaussian_filter
 from PIL import Image, ImageFilter
 from plotly.subplots import make_subplots
+from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
 # [BLOK KONFIGURASI GLOBAL] 
@@ -51,9 +52,9 @@ METODE_STATISTIK = "MAX"  # "MAX" atau "P95"
 # Kamu bisa bebas menambah/menghapus/mengubah status di sini.
 # Sistem akan otomatis membaca batas_ms dan mengurutkannya.
 KONFIG_STATUS = {
-    "AWAS":    {"batas_ms": 2.0, "icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
-    "WASPADA": {"batas_ms": 1.5, "icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
-    "SIAGA":   {"batas_ms": 1.0, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
+    "AWAS":    {"batas_ms": 2.5, "icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
+    "WASPADA": {"batas_ms": 2.0, "icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
+    "SIAGA":   {"batas_ms": 1.5, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
     "AMAN":    {"batas_ms": 0.0, "icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"} 
 }
 
@@ -197,6 +198,7 @@ ikon = Image.open(logo_seacast) if os.path.exists(logo_seacast) else (Image.open
 
 st.set_page_config(page_title="MARLIN Dashboard", page_icon=ikon, layout="wide")
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} .viewerBadge {display: none !important;}</style>""", unsafe_allow_html=True)
+st_autorefresh(interval=1800000, limit=None, key="auto_refresh_marlin")
 
 def get_base64_logo(img_path):
     if os.path.exists(img_path):
