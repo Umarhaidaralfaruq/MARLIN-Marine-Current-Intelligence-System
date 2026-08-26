@@ -456,15 +456,15 @@ with tab2:
         ymax_plot = df_shift['predicted_v_max'].max() + (0.3 * faktor_konversi)
         
         if ymax_plot >= batas_sedang:
-            fig_shift.add_hline(y=batas_sedang, line_dash="dot", line_color=STATUS_STYLE["SEDANG"]["bg"], annotation_text=f"Sedang > {batas_sedang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["SEDANG"]["bg"])
+            fig_shift.add_hline(y=batas_sedang, line_dash="dot", line_color=STATUS_STYLE["SIAGA"]["bg"], annotation_text=f"SIAGA > {batas_sedang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["SEDANG"]["bg"])
             ymax_plot = max(ymax_plot, batas_sedang + (0.2 * faktor_konversi))
             
         if ymax_plot >= batas_kencang:
-            fig_shift.add_hline(y=batas_kencang, line_dash="dash", line_color=STATUS_STYLE["KENCANG"]["bg"], annotation_text=f"Kencang >= {batas_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["KENCANG"]["bg"])
+            fig_shift.add_hline(y=batas_kencang, line_dash="dash", line_color=STATUS_STYLE["WASPADA"]["bg"], annotation_text=f"WASPADA >= {batas_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["KENCANG"]["bg"])
             ymax_plot = max(ymax_plot, batas_kencang + (0.2 * faktor_konversi))
             
         if ymax_plot >= batas_sangat_kencang:
-            fig_shift.add_hline(y=batas_sangat_kencang, line_dash="solid", line_color=STATUS_STYLE["SANGAT KENCANG"]["bg"], annotation_text=f"Sangat Kencang > {batas_sangat_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["SANGAT KENCANG"]["bg"])
+            fig_shift.add_hline(y=batas_sangat_kencang, line_dash="solid", line_color=STATUS_STYLE["AWAS"]["bg"], annotation_text=f"AWAS > {batas_sangat_kencang:.2f}", annotation_position="top left", annotation_font_color=STATUS_STYLE["SANGAT KENCANG"]["bg"])
             ymax_plot = max(ymax_plot, batas_sangat_kencang + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
