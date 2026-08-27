@@ -80,7 +80,7 @@ MODEL_CONFIG = {
     'output_window': 24,  # Memprediksi 24 jam ke depan
     'min_seq_len': 96,    # Syarat panjang segmen minimal sebelum dipotong window
     'min_segmen_len': 48, # Syarat panjang minimal pembuatan segmen
-    'max_save_nan': 3,     # Syarat panjang maksimal untuk jam kosong
+    'max_save_nan': 5,     # Syarat panjang maksimal untuk jam kosong
     'ocean_threshold': 0.5,
     
     # Parameter Arsitektur Neural Network
