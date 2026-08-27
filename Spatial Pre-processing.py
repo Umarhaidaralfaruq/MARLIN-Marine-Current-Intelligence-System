@@ -162,9 +162,10 @@ def run_data_preparation():
     # Tambahkan parameter max_gap agar gap yang lebih besar dari limit tidak disentuh sama sekali
     ds_filled = ds.interpolate_na(
         dim='time', 
-        method='linear', 
+        method='polynomial', 
         limit=MODEL_CONFIG['max_save_nan'],
-        max_gap=f"{MODEL_CONFIG['max_save_nan']}h"  # '3h' (3 jam)
+        max_gap=f"{MODEL_CONFIG['max_save_nan']}h",
+        order=3
     )
 
     print("📉 7. Menghitung Anomali Spasial (Mean-Centering Bebas Leakage)...")
