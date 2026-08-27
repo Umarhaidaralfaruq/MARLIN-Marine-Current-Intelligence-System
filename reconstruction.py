@@ -63,6 +63,61 @@ def inverse_scale_dynamic(y_data, scaler_obj, total_scale_cols, n_target_cols):
     unscaled = scaler_obj.inverse_transform(dummy)
     return unscaled[:, :n_target_cols].reshape(n_samples, out_len, n_target_cols)
 
+def plot_pca_spatial_loadings():
+    print("\n🎨 Menggambar Peta Area Koordinat PCA (Spatial Loadings)...")
+    
+    # 1. Load Info Spasial
+    ds_mean_u = xr.open_dataset(PATHS['spatial_mean_u'])
+    lats, lons = ds_mean_u.lat.values, ds_mean_u.lon.values
+    n_lat, n_lon = len(lats), len(lons)
+    valid_mask = ds_mean_u['u'].notnull().values.flatten()
+    Lon, Lat = np.meshgrid(lons, lats)
+    
+    # 2. Load Model PCA U dan V
+    pca_u = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_u_model.joblib'))
+    pca_v = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_v_model.joblib'))
+    
+    # Kita plot 2 Mode pertama saja (Paling dominan)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True, sharey=True)
+    fig.suptitle("Visualisasi Area Pengaruh PCA (EOF Spatial Loadings)\nMode 1 & Mode 2", fontsize=16, fontweight='bold')
+    
+    for i, mode in enumerate([0, 1]): # Index 0 untuk Mode 1, Index 1 untuk Mode 2
+        # Ambil bobot spasial dari atribut components_
+        bobot_u_1d = pca_u.components_[mode]
+        bobot_v_1d = pca_v.components_[mode]
+        
+        # Kembalikan ke 2D
+        def to_2d(data_1d):
+            base = np.full(n_lat * n_lon, np.nan)
+            base[valid_mask] = data_1d
+            return base.reshape(n_lat, n_lon)
+            
+        map_u = to_2d(bobot_u_1d)
+        map_v = to_2d(bobot_v_1d)
+        
+        # Plot U di kolom kiri, V di kolom kanan
+        for j, (comp_map, title) in enumerate(zip([map_u, map_v], ['Komponen U (Timur-Barat)', 'Komponen V (Utara-Selatan)'])):
+            ax = axes[i, j]
+            # Pakai colormap bwr (Blue-White-Red) biar area negatif(biru) dan positif(merah) kelihatan jelas
+            max_val = np.nanmax(np.abs(comp_map))
+            contour = ax.contourf(Lon, Lat, comp_map, cmap='bwr', levels=np.linspace(-max_val, max_val, 20))
+            
+            var_explained = pca_u.explained_variance_ratio_[mode]*100 if j==0 else pca_v.explained_variance_ratio_[mode]*100
+            ax.set_title(f"Mode {mode+1} - {title}\n(Variansi: {var_explained:.1f}%)", fontsize=12)
+            
+            if i == 1: ax.set_xlabel('Longitude')
+            if j == 0: ax.set_ylabel('Latitude')
+            fig.colorbar(contour, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, "pca_spatial_loadings.png")
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"💾 Peta PCA Loadings tersimpan di: {save_path}")
+    plt.show()
+
 def run_visual_test():
     print("\n" + "="*60)
     print("🗺️ FASE 5: REKONSTRUKSI SPASIAL & VISUAL TEST")
@@ -864,6 +919,7 @@ if __name__ == "__main__":
     # Jalankan simulasi secara otomatis pakai batas tanggal tersebut
     # (Kalau mau dipersingkat, bisa diganti manual misal start_date="2026-02-05", dst)
     run_period_simulation(start_date=tgl_awal, end_date=tgl_akhir)
+    plot_pca_spatial_loadings()
     
     #run_cross_resample_simulation(start_date=tgl_awal, end_date=tgl_akhir)
 
