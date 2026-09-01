@@ -2,10 +2,7 @@ name: Prediksi Operasional Arus Selat Bali
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '2 23 * * *' # Berjalan pada 23:02 UTC (06:02 WIB)
-    - cron: '2 11 * * *' # Berjalan pada 11:02 UTC (18:02 WIB)
-
+  
 permissions:
   contents: write
 
