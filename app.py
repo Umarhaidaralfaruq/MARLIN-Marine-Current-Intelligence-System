@@ -119,8 +119,8 @@ HTML_TEMPLATE = """
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
             velocityScale: 0.020,            
-            particleAge: 300,           
-            particleMultiplier: 0.002, 
+            particleAge: 100,           
+            particleMultiplier: 0.001, 
             colorScale: ['#ffffff']        
         });
         velocityLayer.addTo(map);
