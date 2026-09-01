@@ -120,7 +120,7 @@ HTML_TEMPLATE = """
             maxVelocity: __MAX_VELOCITY__,
             velocityScale: 0.015,            
             particleAge: 300,           
-            particleMultiplier: 0.004, 
+            particleMultiplier: 0.001, 
             colorScale: ['#ffffff']        
         });
         velocityLayer.addTo(map);
