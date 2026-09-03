@@ -403,10 +403,12 @@ tab1, tab2, tab3 = st.tabs(["📍 Ringkasan Operasional", "📈 Prakiraan 12 Jam
 with tab1:
     col_sum_ket, col_sum_gil = st.columns(2)
     with col_sum_ket:
-        data_ket = get_summary_area_data(df_spatial, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX)
+        # Gunakan Offset 7 untuk WIB
+        data_ket = get_summary_area_data(df_spatial, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX, tz_offset=7, tz_label="WIB")
         st.markdown(create_summary_card("Ketapang", data_ket), unsafe_allow_html=True)
     with col_sum_gil:
-        data_gil = get_summary_area_data(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX)
+        # Gunakan Offset 8 untuk WITA
+        data_gil = get_summary_area_data(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
         st.markdown(create_summary_card("Gilimanuk", data_gil), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
