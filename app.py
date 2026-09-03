@@ -118,9 +118,9 @@ HTML_TEMPLATE = """
             displayOptions: { velocityType: 'Kecepatan Arus', displayPosition: 'bottomleft', displayEmptyString: 'Tidak ada data' },
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
-            velocityScale: 0.015,         
-            particleAge: 300,             
-            particleMultiplier: 0.002,    // Dibuat cukup padat agar glow menyatu
+            velocityScale: 0.02,         
+            particleAge: 100,             
+            particleMultiplier: 0.001,    // Dibuat cukup padat agar glow menyatu
             colorScale: ['#ffffff']       // Tetap putih murni
         });
         velocityLayer.addTo(map);
