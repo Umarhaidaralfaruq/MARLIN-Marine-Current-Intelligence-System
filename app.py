@@ -118,8 +118,8 @@ HTML_TEMPLATE = """
             displayOptions: { velocityType: 'Kecepatan Arus', displayPosition: 'bottomleft', displayEmptyString: 'Tidak ada data' },
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
-            velocityScale: 0.020,            
-            particleAge: 100,           
+            velocityScale: 0.030,            
+            particleAge: 200,           
             particleMultiplier: 0.001, 
             colorScale: ['#ffffff']        
         });
