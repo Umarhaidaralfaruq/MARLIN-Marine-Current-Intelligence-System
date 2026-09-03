@@ -30,6 +30,9 @@ jobs:
           HFRADAR_URL: ${{ secrets.HFRADAR_URL }}
         run: python extractdata.py
 
+      - name: Cek Isi File Error
+        run: cat "00 Data/1_Hasil_HFRadar_SelatBali_Ketapang.nc" | head -n 50
+
       - name: Run 2 - Spatial Pre-processing
         run: python "Spatial Pre-processing.py"
 
