@@ -411,20 +411,21 @@ with tab1:
         data_gil = get_summary_area_data(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
         st.markdown(create_summary_card("Gilimanuk", data_gil), unsafe_allow_html=True)
 
-    st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
+st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
     
     # Ambil daftar waktu unik dan tentukan default-nya (pembulatan ke jam terdekat)
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
     waktu_sekarang_str = waktu_sekarang_wib.round('h').strftime('%Y-%m-%d %H:%M')
     
-    # Buat session_state key dinamis berdasarkan file agar tidak error saat file diganti
+    # Fungsi pembantu untuk mencari index jam saat ini
+    def get_current_time_idx():
+        return waktu_unik.index(waktu_sekarang_str) if waktu_sekarang_str in waktu_unik else len(waktu_unik) - 1
+
+    # Buat session_state key dinamis berdasarkan file
     state_key = f"waktu_idx_{selected_filename}"
     
     if state_key not in st.session_state:
-        if waktu_sekarang_str in waktu_unik:
-            st.session_state[state_key] = waktu_unik.index(waktu_sekarang_str)
-        else:
-            st.session_state[state_key] = len(waktu_unik) - 1 # Default ke data terakhir jika jam saat ini tidak ada
+        st.session_state[state_key] = get_current_time_idx()
 
     current_idx = st.session_state[state_key]
 
@@ -449,7 +450,12 @@ with tab1:
     bulan_indo = {1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MEI', 6: 'JUN', 7: 'JUL', 8: 'AGU', 9: 'SEP', 10: 'OKT', 11: 'NOV', 12: 'DES'}
     
     with col_label:
-        st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 6px; border-radius: 4px; font-weight: bold; font-size: 14px;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 6px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
+        
+        # Tombol akan otomatis 'disabled' jika layar sudah menampilkan waktu saat ini
+        if st.button("🔄 Kembali ke Waktu Saat Ini", disabled=(current_idx == get_current_time_idx()), use_container_width=True):
+            st.session_state[state_key] = get_current_time_idx()
+            st.rerun()
     
     # --- LANJUTAN FILTER DATA ---
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
