@@ -33,7 +33,7 @@ def proses_hf_radar():
     print("🌊 MULAI PROSES AKUISISI HF RADAR (DOWNLOAD & CONCAT)")
     print("="*50)
 
-    url_hf = (HFRADAR_URL)
+    url_hf = HFRADAR_URL
     all_files = []
 
     # ---------------------------------------------------------------------------
@@ -41,7 +41,11 @@ def proses_hf_radar():
     # ---------------------------------------------------------------------------
     try:
         print("📥 1. Mengunduh file terbaru dari BMKG...")
+        
+        # Buat instance scraper
         scraper = cloudscraper.create_scraper()
+        
+        # Headers tambahan (opsional)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -49,19 +53,29 @@ def proses_hf_radar():
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1'
         }
-        response = scraper.get(url_hf, headers=headers, timeout=60)
+        
+        # PENTING: Gunakan scraper.get, BUKAN requests.get
+        response = scraper.get(url_hf, headers=headers, stream=True, timeout=120)
         response.raise_for_status()
+
+        content_type = response.headers.get('Content-Type', '')
         
-        with open(NC_LATEST_FILE, "wb") as file:
-            file.write(response.content)
+        # Perbaikan Indentasi
+        if 'text/html' in content_type:
+            print("❌ Error: Server malah mengirim halaman web/HTML, bukan file data. Kemungkinan terkena blokir atau butuh login.")
+        else:
+            with open(NC_LATEST_FILE, "wb") as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
             
-        # Penanganan nama file jika menggunakan pathlib atau string biasa
-        nama_file = NC_LATEST_FILE.name if hasattr(NC_LATEST_FILE, 'name') else os.path.basename(NC_LATEST_FILE)
-        print(f"✅ File berhasil disimpan di: {nama_file}")
-        
-        # Tambahkan file yang baru diunduh ke antrean proses
-        all_files.append(str(NC_LATEST_FILE))
-        
+            # Penanganan nama file jika menggunakan pathlib atau string biasa
+            nama_file = NC_LATEST_FILE.name if hasattr(NC_LATEST_FILE, 'name') else os.path.basename(NC_LATEST_FILE)
+            print(f"✅ File berhasil disimpan di: {nama_file}")
+            
+            # Tambahkan file yang baru diunduh ke antrean proses
+            all_files.append(str(NC_LATEST_FILE))
+            
     except Exception as error:
         print(f"❌ Gagal mengunduh file terbaru (Melanjutkan dengan file lokal): {error}")
 
@@ -73,4 +87,3 @@ if __name__ == "__main__":
     print("🚀 MENJALANKAN PIPELINE DATA COLLECTOR...")
     proses_hf_radar()
     print("\n🏁 SEMUA PROSES AKUISISI DATA SELESAI!")
-
