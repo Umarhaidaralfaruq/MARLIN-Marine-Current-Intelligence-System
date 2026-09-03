@@ -86,6 +86,15 @@ HTML_TEMPLATE = """
         body { margin: 0; padding: 0; }
         #map { width: 100vw; height: 100vh; }
         .custom-div-icon { background: transparent; border: none; }
+        
+        /* Meredupkan peta satelit agar efek glow lebih kontras */
+        .leaflet-tile-pane { filter: brightness(40%) contrast(120%); }
+        
+        /* Menambahkan efek pendar (glow) putih berlapis pada partikel arus */
+        .leaflet-overlay-pane canvas {
+            filter: drop-shadow(0px 0px 2px rgba(255, 255, 255, 0.9)) 
+                    drop-shadow(0px 0px 5px rgba(255, 255, 255, 0.6));
+        }
     </style>
 </head>
 <body>
@@ -120,8 +129,8 @@ HTML_TEMPLATE = """
             maxVelocity: __MAX_VELOCITY__,
             velocityScale: 0.015,         
             particleAge: 300,             
-            particleMultiplier: 0.004,    // Dinaikkan dari 0.004 agar partikel lebih padat dan terang
-            colorScale: ["#00ffff", "#00ff00", "#ffff00", "#ff3399"] // Palet warna neon menyala
+            particleMultiplier: 0.004,    // Dibuat cukup padat agar glow menyatu
+            colorScale: ['#ffffff']       // Tetap putih murni
         });
         velocityLayer.addTo(map);
 
