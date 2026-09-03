@@ -118,10 +118,10 @@ HTML_TEMPLATE = """
             displayOptions: { velocityType: 'Kecepatan Arus', displayPosition: 'bottomleft', displayEmptyString: 'Tidak ada data' },
             data: __DATA_JSON__,
             maxVelocity: __MAX_VELOCITY__,
-            velocityScale: 0.030,            
-            particleAge: 100,           
-            particleMultiplier: 0.001, 
-            colorScale: ['#ffffff']        
+            velocityScale: 0.015,         
+            particleAge: 300,             
+            particleMultiplier: 0.004,    // Dinaikkan dari 0.004 agar partikel lebih padat dan terang
+            colorScale: ["#00ffff", "#00ff00", "#ffff00", "#ff3399"] // Palet warna neon menyala
         });
         velocityLayer.addTo(map);
 
