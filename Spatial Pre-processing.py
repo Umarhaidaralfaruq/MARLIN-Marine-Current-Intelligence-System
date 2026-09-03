@@ -101,6 +101,15 @@ def run_data_preparation():
         if not os.path.exists(f): continue
         try:
             # Coba buka dengan engine h5netcdf terlebih dahulu
+            # Cek ukuran file
+            ukuran_kb = os.path.getsize(f) / 1024
+            print(f"📊 Ukuran file {os.path.basename(f)}: {ukuran_kb:.2f} KB")
+            
+            # Intip 5 baris pertama jika ukurannya sangat kecil (< 50 KB)
+            if ukuran_kb < 50:
+                with open(f, 'r', encoding='utf-8', errors='ignore') as text_file:
+                    print("👀 Isi file sebenarnya:\n", text_file.read(200))
+                    
             ds_temp = xr.open_dataset(f, engine='h5netcdf')[['u', 'v']].load()
             datasets_list.append(ds_temp)
         except ValueError:
