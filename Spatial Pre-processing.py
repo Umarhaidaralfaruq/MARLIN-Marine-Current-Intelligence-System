@@ -100,14 +100,22 @@ def run_data_preparation():
     for f in all_files:
         if not os.path.exists(f): continue
         try:
-            # Load ke RAM biar kalkulasi cepet & gak kena error chunk Dask
-            ds_temp = xr.open_dataset(f, engine='netcdf4')[['u', 'v']].load()
+            # Coba buka dengan engine h5netcdf terlebih dahulu
+            ds_temp = xr.open_dataset(f, engine='h5netcdf')[['u', 'v']].load()
             datasets_list.append(ds_temp)
-        except Exception:
-            print(f"⚠️ SKIP File rusak/korup: {os.path.basename(f)}")
+        except ValueError:
+            try:
+                # Fallback jika format NetCDF3 klasik
+                ds_temp = xr.open_dataset(f, engine='scipy')[['u', 'v']].load()
+                datasets_list.append(ds_temp)
+            except Exception as e:
+                print(f"⚠️ SKIP File gagal di-fallback: {os.path.basename(f)} | Penyebab: {e}")
+        except Exception as e:
+            # Print error asli agar kita tahu file benar-benar rusak atau masalah dependensi
+            print(f"⚠️ SKIP File bermasalah: {os.path.basename(f)} | Penyebab: {e}")
             
     if len(datasets_list) == 0:
-        print("❌ Tidak ada file NetCDF yang bisa dibuka.")
+        print("❌ Tidak ada file NetCDF yang bisa dibuka. Coba periksa ukuran file tersebut.")
         return None
 
     try:
