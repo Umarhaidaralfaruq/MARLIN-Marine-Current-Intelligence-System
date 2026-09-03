@@ -510,8 +510,24 @@ with tab2:
         waktu_max = df_shift.loc[df_shift['predicted_v_max'].idxmax(), 'datetime_wib'].strftime('%H:%M WIB')
         arah_dom = df_shift['arah_derajat'].apply(derajat_ke_utara_selatan).mode()[0]
         
-        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH — 12 JAM KEDEPAN (WIB)</div>", unsafe_allow_html=True)
-        st.info(f"💡 **Ringkasan:** Kecepatan maksimum dalam 12 jam ke depan diprediksi mencapai **{max_spd:.2f} {satuan_teks}** pada pukul **{waktu_max}**, dengan arah arus dominan bergerak ke **{arah_dom}**.")
+        # Ambil status bahaya untuk kecepatan maksimum
+        status_max = get_status_arus(max_spd, faktor_konversi)
+        
+        # Format HTML Ringkasan (Style sama dengan Tab 1)
+        html_ringkasan = f"""
+        <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
+                <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Prakiraan 12 Jam Kedepan (WIB)</h4>
+                <div style="background-color: {status_max['bg']}; color: {status_max['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status_max['icon']} POTENSI {status_max['status']}</div>
+            </div>
+            <div style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
+                Kecepatan arus laut diprediksi mencapai puncaknya pada <b style="color: #f8fafc;">{waktu_max}</b> dengan kecepatan maksimum <b style="color: #f8fafc; font-size: 1.2rem;">{max_spd:.2f} {satuan_teks}</b>. Secara umum, pergerakan arus dominan menuju ke arah <b style="color: #f8fafc; text-transform: uppercase;">{arah_dom}</b>.
+            </div>
+        </div>
+        """
+        
+        st.markdown(html_ringkasan, unsafe_allow_html=True)
+        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH</div>", unsafe_allow_html=True)
         
         fig_shift = go.Figure()
         fig_shift.add_trace(go.Scatter(
