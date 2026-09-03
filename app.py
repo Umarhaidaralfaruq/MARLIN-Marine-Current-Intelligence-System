@@ -365,48 +365,28 @@ def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset=
     }
 
 def create_summary_card(title, data):
-    if not data: 
-        # Penanganan empty state agar desain tidak rusak jika data kosong
-        return """
-        <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); display: flex; justify-content: center; align-items: center; min-height: 140px;">
-            <span style="color: #64748b; font-style: italic;">Data tidak tersedia</span>
-        </div>
-        """
-
+    if not data: return f"<div>Data {title} tidak tersedia</div>"
     alt_satuan = "Knot" if satuan_teks == "m/s" else "m/s"
     f_pembagi = FAKTOR_KNOT if satuan_teks == "m/s" else (1 / FAKTOR_KNOT)
-    
-    curr_alt = data['current_speed'] * f_pembagi
-    peak_alt = data['peak_speed'] * f_pembagi
-    
-    # Ambil status untuk masing-masing kecepatan
-    status_curr = get_status_arus(data['current_speed'], faktor_konversi)
-    status_peak = get_status_arus(data['peak_speed'], faktor_konversi)
-    
-    # Tentukan warna teks angka (Putih jika AMAN, warna peringatan jika bahaya)
-    color_curr = "#f8fafc" if status_curr['status'] == "AMAN" else status_curr['bg']
-    color_peak = "#f8fafc" if status_peak['status'] == "AMAN" else status_peak['bg']
+    curr_alt, peak_alt = data['current_speed'] * f_pembagi, data['peak_speed'] * f_pembagi
+    status = get_status_arus(data['current_speed'], faktor_konversi)
     
     return f"""
     <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
             <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Pelabuhan {title}</h4>
-            <div style="background-color: {status_curr['bg']}; color: {status_curr['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status_curr['icon']} {status_curr['status']}</div>
+            <div style="background-color: {status['bg']}; color: {status['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status['icon']} {status['status']}</div>
         </div>
         <div style="display: flex; gap: 15px;">
             <div style="flex: 1; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 10px;">
-                <div style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Saat Ini ({data['current_time']})</div>
-                <div style="color: {color_curr}; font-size: 1.8rem; font-weight: bold; line-height: 1;">
-                    {data['current_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
-                </div>
-                <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 5px;">{curr_alt:.2f} {alt_satuan} • Arah: <b>{data['current_dir']}</b></div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Saat Ini ({data['current_time']})</div>
+                <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['current_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{curr_alt:.2f} {alt_satuan} • Arah: <b>{data['current_dir']}</b></div>
             </div>
             <div style="flex: 1;">
-                <div style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Maksimal - 12 Jam</div>
-                <div style="color: {color_peak}; font-size: 1.8rem; font-weight: bold; line-height: 1;">
-                    {data['peak_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
-                </div>
-                <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 5px;">{peak_alt:.2f} {alt_satuan} • Arah: <b>{data['peak_dir']}</b> ({data['peak_time']})</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Maksimal - 12 Jam</div>
+                <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['peak_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{peak_alt:.2f} {alt_satuan} • Arah: <b>{data['peak_dir']}</b> ({data['peak_time']})</div>
             </div>
         </div>
     </div>
@@ -432,17 +412,46 @@ with tab1:
         st.markdown(create_summary_card("Gilimanuk", data_gil), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
-    st.markdown("<style>.stSlider, .stSlider div, .stSlider span, .stSlider p { color: transparent !important; } .stSlider [data-testid='stThumbValue'], .stSlider [data-testid='stTickBarMin'], .stSlider [data-testid='stTickBarMax'], .stSlider [data-testid='stTickBar'] { display: none !important; opacity: 0 !important; }</style>", unsafe_allow_html=True)
     
+    # Ambil daftar waktu unik dan tentukan default-nya (pembulatan ke jam terdekat)
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
     waktu_sekarang_str = waktu_sekarang_wib.round('h').strftime('%Y-%m-%d %H:%M')
-    waktu_default = waktu_sekarang_str if waktu_sekarang_str in waktu_unik else waktu_unik[-1]
+    
+    # Buat session_state key dinamis berdasarkan file agar tidak error saat file diganti
+    state_key = f"waktu_idx_{selected_filename}"
+    
+    if state_key not in st.session_state:
+        if waktu_sekarang_str in waktu_unik:
+            st.session_state[state_key] = waktu_unik.index(waktu_sekarang_str)
+        else:
+            st.session_state[state_key] = len(waktu_unik) - 1 # Default ke data terakhir jika jam saat ini tidak ada
 
-    selected_time_str = st.select_slider("Waktu Prediksi", options=waktu_unik, value=waktu_default, label_visibility="collapsed")
+    current_idx = st.session_state[state_key]
+
+    # --- KONTROL TOMBOL WAKTU ---
+    col_prev, col_label, col_next = st.columns([1, 2, 1])
+    
+    with col_prev:
+        if st.button("⬅️ Waktu Sebelumnya", disabled=(current_idx == 0), use_container_width=True):
+            st.session_state[state_key] -= 1
+            st.rerun()
+            
+    with col_next:
+        if st.button("Selanjutnya ➡️", disabled=(current_idx == len(waktu_unik) - 1), use_container_width=True):
+            st.session_state[state_key] += 1
+            st.rerun()
+
+    # Ambil string waktu terpilih berdasarkan index
+    selected_time_str = waktu_unik[st.session_state[state_key]]
+    
+    # Format label waktu di tengah
     dt_obj = datetime.strptime(selected_time_str, '%Y-%m-%d %H:%M')
     bulan_indo = {1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MEI', 6: 'JUN', 7: 'JUL', 8: 'AGU', 9: 'SEP', 10: 'OKT', 11: 'NOV', 12: 'DES'}
-    st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 4px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
     
+    with col_label:
+        st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 6px; border-radius: 4px; font-weight: bold; font-size: 14px;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
+    
+    # --- LANJUTAN FILTER DATA ---
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
