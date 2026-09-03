@@ -801,4 +801,4 @@ with tab3:
                 if st.button("Lihat Grafik", use_container_width=True):
                     idx = opsi_shift.tolist().index(pil)
                     popup_grafik(df_verif.iloc[idx]['Tanggal'], df_verif.iloc[idx]['Shift'], df_verif.iloc[idx]['chart_data'])
-    else: st.warning("Belum ada data rekap.")
+        else: st.warning("Belum ada data rekap.")
