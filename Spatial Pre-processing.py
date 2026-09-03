@@ -110,7 +110,7 @@ def run_data_preparation():
                 with open(f, 'r', encoding='utf-8', errors='ignore') as text_file:
                     print("👀 Isi file sebenarnya:\n", text_file.read(200))
                     
-            ds_temp = xr.open_dataset(f, engine='h5netcdf')[['u', 'v']].load()
+            ds_temp = xr.open_dataset(f, engine='netcdf4')[['u', 'v']].load()
             datasets_list.append(ds_temp)
         except ValueError:
             try:
