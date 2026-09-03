@@ -505,23 +505,28 @@ else:
 # ------------------------------------------
 with tab2:
     if not df_shift.empty:
-        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH — 12 JAM KEDEPAN</div>", unsafe_allow_html=True)
+        # 1. Menghitung Ringkasan Teks
+        max_spd = df_shift['predicted_v_max'].max()
+        waktu_max = df_shift.loc[df_shift['predicted_v_max'].idxmax(), 'datetime_wib'].strftime('%H:%M WIB')
+        arah_dom = df_shift['arah_derajat'].apply(derajat_ke_utara_selatan).mode()[0]
+        
+        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH — 12 JAM KEDEPAN (WIB)</div>", unsafe_allow_html=True)
+        st.info(f"💡 **Ringkasan:** Kecepatan maksimum dalam 12 jam ke depan diprediksi mencapai **{max_spd:.2f} {satuan_teks}** pada pukul **{waktu_max}**, dengan arah arus dominan bergerak ke **{arah_dom}**.")
+        
         fig_shift = go.Figure()
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], y=df_shift['predicted_v_max'], mode='lines+markers', name='Prediksi Arus',
             line=dict(color='#0d6efd', width=3), marker=dict(size=8, color='#0d6efd', line=dict(color='white', width=1)),
-            customdata=df_shift['arah_panah'], hovertemplate="<b>%{x}</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
+            customdata=df_shift['arah_panah'], hovertemplate="<b>%{x} WIB</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
         ))
         
         ymax_plot = df_shift['predicted_v_max'].max() + (0.3 * faktor_konversi)
-        
-        # Gambar garis peringatan dinamis 
         sorted_thresholds = sorted([item for item in KONFIG_STATUS.items() if item[1]['batas_ms'] > 0], key=lambda x: x[1]['batas_ms'])
         
         for i, (nama_status, config) in enumerate(sorted_thresholds):
             batas_terkonversi = config['batas_ms'] * faktor_konversi
             if ymax_plot >= batas_terkonversi:
-                dash_style = ["dot", "dash", "solid"][i % 3] # Gaya garis berubah-ubah
+                dash_style = ["dot", "dash", "solid"][i % 3] 
                 fig_shift.add_hline(
                     y=batas_terkonversi, line_dash=dash_style, line_color=config["bg"], 
                     annotation_text=f"{nama_status} >= {batas_terkonversi:.2f}", 
@@ -530,7 +535,7 @@ with tab2:
                 ymax_plot = max(ymax_plot, batas_terkonversi + (0.2 * faktor_konversi))
 
         fig_shift.update_layout(
-            margin=dict(l=0, r=0, t=10, b=20), xaxis_title=None, yaxis_title=f"Kecepatan ({satuan_teks})",
+            margin=dict(l=0, r=0, t=10, b=20), xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})",
             yaxis=dict(range=[0, ymax_plot]), height=380, showlegend=False, hovermode="x unified",
             hoverlabel=dict(bgcolor="#1e293b", font_color="#f8fafc", bordercolor="#334155"),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
@@ -542,19 +547,31 @@ with tab2:
         st.info("Data prediksi untuk shift ini belum tersedia.")
 
     st.divider()
-    st.markdown("### DETAIL KONDISI PELABUHAN")
+    
+    # 2. TABEL KESELURUHAN DATA DENGAN ZONA WAKTU DINAMIS
+    st.markdown("**DETAIL KONDISI PELABUHAN (KESELURUHAN PREDIKSI)**")
     col_ket_tbl, col_gil_tbl = st.columns(2)
 
-    def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max):
+    def buat_tabel_area(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset, tz_label):
         df_area = df_raw[(df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) & (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)]
         if df_area.empty: return pd.DataFrame()
+        
         idx_t = df_area.groupby('datetime_wib').apply(ambil_index_target)
         df_tr = df_area.loc[idx_t].reset_index(drop=True)
+        
+        # Konversi waktu berdasarkan offset yang diinput
+        df_tr['waktu_lokal'] = df_tr['datetime'] + pd.Timedelta(hours=tz_offset)
+        
         def fmt_speed(val):
             inf = get_status_arus(val, faktor_konversi)
             status_terendah = min(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'])[0]
             return f"{val:.2f}" if inf["status"] == status_terendah else f"{val:.2f} {inf['label']}"
-        return pd.DataFrame({'Waktu (WIB)': df_tr['datetime_wib'].dt.strftime('%H:%M'), f'Kecepatan ({satuan_teks})': df_tr['predicted_v_max'].apply(fmt_speed), 'Arah Dominan': df_tr['arah_derajat'].apply(derajat_ke_utara_selatan)})
+            
+        return pd.DataFrame({
+            f'Waktu ({tz_label})': df_tr['waktu_lokal'].dt.strftime('%H:%M'), 
+            f'Kecepatan ({satuan_teks})': df_tr['predicted_v_max'].apply(fmt_speed), 
+            'Arah Dominan': df_tr['arah_derajat'].apply(derajat_ke_utara_selatan)
+        })
 
     def style_tabel_peringatan(val):
         if isinstance(val, str):
@@ -564,16 +581,22 @@ with tab2:
         return ''
 
     with col_ket_tbl:
-        st.markdown("**Area Pelabuhan Ketapang**")
-        tb_ket = buat_tabel_area(df_shift_raw, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX)
-        if not tb_ket.empty: st.dataframe(tb_ket.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
-        else: st.caption("Data Ketapang tidak tersedia.")
+        st.markdown("**Area Pelabuhan Ketapang (WIB)**")
+        # Menggunakan df_spatial (keseluruhan data) bukan df_shift_raw
+        tb_ket = buat_tabel_area(df_spatial, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX, tz_offset=7, tz_label="WIB")
+        if not tb_ket.empty: 
+            st.dataframe(tb_ket.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
+        else: 
+            st.caption("Data Ketapang tidak tersedia.")
 
     with col_gil_tbl:
-        st.markdown("**Area Pelabuhan Gilimanuk**")
-        tb_gil = buat_tabel_area(df_shift_raw, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX)
-        if not tb_gil.empty: st.dataframe(tb_gil.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
-        else: st.caption("Data Gilimanuk tidak tersedia.")
+        st.markdown("**Area Pelabuhan Gilimanuk (WITA)**")
+        # Menggunakan df_spatial (keseluruhan data) dan offset 8 untuk WITA
+        tb_gil = buat_tabel_area(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
+        if not tb_gil.empty: 
+            st.dataframe(tb_gil.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
+        else: 
+            st.caption("Data Gilimanuk tidak tersedia.")
 
     st.divider()
     st.markdown("### UNDUH GRAFIK")
