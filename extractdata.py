@@ -49,7 +49,7 @@ def proses_hf_radar():
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1'
         }
-        response = requests.get(url_hf, headers=headers, timeout=60, verify=False)
+        response = scraper.get(url_hf, headers=headers, timeout=60, verify=False)
         response.raise_for_status()
         
         with open(NC_LATEST_FILE, "wb") as file:
