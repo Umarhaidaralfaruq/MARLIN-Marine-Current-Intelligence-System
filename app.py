@@ -417,44 +417,40 @@ with tab1:
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
     waktu_sekarang_str = waktu_sekarang_wib.round('h').strftime('%Y-%m-%d %H:%M')
     
-    # Fungsi pembantu untuk mencari index jam saat ini
     def get_current_time_idx():
         return waktu_unik.index(waktu_sekarang_str) if waktu_sekarang_str in waktu_unik else len(waktu_unik) - 1
 
-    # Buat session_state key dinamis berdasarkan file
     state_key = f"waktu_idx_{selected_filename}"
-    
     if state_key not in st.session_state:
         st.session_state[state_key] = get_current_time_idx()
 
     current_idx = st.session_state[state_key]
 
-    # --- KONTROL TOMBOL WAKTU ---
-    col_prev, col_label, col_next = st.columns([1, 2, 1])
+    # --- KONTROL TOMBOL WAKTU (Rasio Disesuaikan) ---
+    col_prev, col_reset, col_label, col_next = st.columns([3, 1, 5, 4])
     
     with col_prev:
         if st.button("⬅️ Waktu Sebelumnya", disabled=(current_idx == 0), use_container_width=True):
             st.session_state[state_key] -= 1
             st.rerun()
             
-    with col_next:
-        if st.button("Selanjutnya ➡️", disabled=(current_idx == len(waktu_unik) - 1), use_container_width=True):
-            st.session_state[state_key] += 1
+    with col_reset:
+        # Disisipkan dengan rasio 1, menggunakan ikon agar estetik, dilengkapi tooltip
+        if st.button("🔄", help="Kembali ke Waktu Saat Ini", disabled=(current_idx == get_current_time_idx()), use_container_width=True):
+            st.session_state[state_key] = get_current_time_idx()
             st.rerun()
 
     # Ambil string waktu terpilih berdasarkan index
     selected_time_str = waktu_unik[st.session_state[state_key]]
     
-    # Format label waktu di tengah
-    dt_obj = datetime.strptime(selected_time_str, '%Y-%m-%d %H:%M')
-    bulan_indo = {1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MEI', 6: 'JUN', 7: 'JUL', 8: 'AGU', 9: 'SEP', 10: 'OKT', 11: 'NOV', 12: 'DES'}
-    
     with col_label:
-        st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 6px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
-        
-        # Tombol akan otomatis 'disabled' jika layar sudah menampilkan waktu saat ini
-        if st.button("🔄 Kembali ke Waktu Saat Ini", disabled=(current_idx == get_current_time_idx()), use_container_width=True):
-            st.session_state[state_key] = get_current_time_idx()
+        dt_obj = datetime.strptime(selected_time_str, '%Y-%m-%d %H:%M')
+        bulan_indo = {1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MEI', 6: 'JUN', 7: 'JUL', 8: 'AGU', 9: 'SEP', 10: 'OKT', 11: 'NOV', 12: 'DES'}
+        st.markdown(f"<div style='text-align: center; background-color: rgba(128, 128, 128, 0.1); padding: 6px; border-radius: 4px; font-weight: bold; font-size: 14px; margin-bottom: 5px; height: 38px; display: flex; align-items: center; justify-content: center;'>⏱️ {dt_obj.day:02d} {bulan_indo[dt_obj.month]} {dt_obj.year} • {dt_obj.strftime('%H:%M')} WIB</div>", unsafe_allow_html=True)
+            
+    with col_next:
+        if st.button("Selanjutnya ➡️", disabled=(current_idx == len(waktu_unik) - 1), use_container_width=True):
+            st.session_state[state_key] += 1
             st.rerun()
     
     # --- LANJUTAN FILTER DATA ---
