@@ -335,7 +335,7 @@ with col_head2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Fungsi Ambil Data Area Spesifik
-def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max):
+def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset=7, tz_label="WIB"):
     df_area = df_raw[(df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) & (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)]
     if df_area.empty: return None
     
@@ -351,13 +351,17 @@ def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max):
     
     baris_max = df_shift.loc[df_shift['predicted_v_max'].idxmax()] if not df_shift.empty else baris_saat_ini
     
+    # Format waktu dinamis sesuai zona yang diinput
+    waktu_current_lokal = baris_saat_ini['datetime'] + pd.Timedelta(hours=tz_offset)
+    waktu_max_lokal = baris_max['datetime'] + pd.Timedelta(hours=tz_offset)
+    
     return {
         'current_speed': baris_saat_ini['predicted_v_max'],
         'current_dir': derajat_ke_utara_selatan(baris_saat_ini['arah_derajat']) or "-",
-        'current_time': baris_saat_ini['datetime_wib'].strftime('%H:%M WIB'),
+        'current_time': waktu_current_lokal.strftime(f'%H:%M {tz_label}'),
         'peak_speed': baris_max['predicted_v_max'],
         'peak_dir': derajat_ke_utara_selatan(baris_max['arah_derajat']) or "-",
-        'peak_time': baris_max['datetime_wib'].strftime('%H:%M WIB')
+        'peak_time': waktu_max_lokal.strftime(f'%H:%M {tz_label}')
     }
 
 def create_summary_card(title, data):
@@ -409,7 +413,7 @@ with tab1:
     st.markdown("<style>.stSlider, .stSlider div, .stSlider span, .stSlider p { color: transparent !important; } .stSlider [data-testid='stThumbValue'], .stSlider [data-testid='stTickBarMin'], .stSlider [data-testid='stTickBarMax'], .stSlider [data-testid='stTickBar'] { display: none !important; opacity: 0 !important; }</style>", unsafe_allow_html=True)
     
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
-    waktu_sekarang_str = waktu_sekarang_wib.floor('h').strftime('%Y-%m-%d %H:%M')
+    waktu_sekarang_str = waktu_sekarang_wib.round('h').strftime('%Y-%m-%d %H:%M')
     waktu_default = waktu_sekarang_str if waktu_sekarang_str in waktu_unik else waktu_unik[-1]
 
     selected_time_str = st.select_slider("Waktu Prediksi", options=waktu_unik, value=waktu_default, label_visibility="collapsed")
