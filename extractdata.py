@@ -13,6 +13,7 @@ import glob
 import numpy as np
 import pandas as pd
 import xarray as xr
+import cloudscraper
 from datetime import datetime, timedelta
 
 from config import (
@@ -40,11 +41,15 @@ def proses_hf_radar():
     # ---------------------------------------------------------------------------
     try:
         print("📥 1. Mengunduh file terbaru dari BMKG...")
+        scraper = cloudscraper.create_scraper()
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         }
-        response = requests.get(url_hf, headers=headers, timeout=120)
-        #response = requests.get(url_hf)
+        response = requests.get(url_hf, headers=headers, timeout=60, verify=False)
         response.raise_for_status()
         
         with open(NC_LATEST_FILE, "wb") as file:
