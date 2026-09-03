@@ -685,7 +685,6 @@ with tab3:
         path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
         df_real_hourly, df_real_agg = pd.DataFrame(), pd.DataFrame()
         
-        # Menggunakan try-except untuk Fault Tolerance
         if path_verif_csv.exists():
             try:
                 df_rr = pd.read_csv(path_verif_csv)
@@ -695,21 +694,12 @@ with tab3:
                     df_rr['Shift'] = df_rr['waktu_utc'].dt.hour.apply(lambda h: "Shift Pagi" if h < 12 else "Shift Malam")
                     if satuan_teks == "Knot": df_rr['Real_Max_Speed_ms'] *= FAKTOR_KNOT
                     
-                    # Deteksi kolom arah observasi (sesuaikan string 'Arah_Derajat' dengan nama kolom di CSV kamu)
-                    kolom_arah_obs = 'Arah_Derajat' if 'Arah_Derajat' in df_rr.columns else None
-                    
                     df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms']].copy()
                     idx_m = df_rr.groupby(['Tanggal', 'Shift'])['Real_Max_Speed_ms'].idxmax()
                     
-                    cols_max = ['Tanggal', 'Shift', 'waktu_utc', 'Real_Max_Speed_ms']
-                    if kolom_arah_obs: cols_max.append(kolom_arah_obs)
-                    
-                    df_real_max = df_rr.loc[idx_m, cols_max].copy()
+                    df_real_max = df_rr.loc[idx_m, ['Tanggal', 'Shift', 'waktu_utc', 'Real_Max_Speed_ms']].copy()
                     df_real_max['Waktu_Max_Real'] = (df_real_max['waktu_utc'] + pd.Timedelta(hours=7)).dt.strftime('%H:%M WIB')
                     df_real_max.rename(columns={'Real_Max_Speed_ms': 'Real_Max_Speed_Max'}, inplace=True)
-                    
-                    if kolom_arah_obs: df_real_max.rename(columns={kolom_arah_obs: 'Arah_Obs_Deg'}, inplace=True)
-                    else: df_real_max['Arah_Obs_Deg'] = np.nan
                     
                     df_real_agg = pd.merge(df_real_max, df_rr.groupby(['Tanggal', 'Shift']).size().reset_index(name='Jumlah_Jam'), on=['Tanggal', 'Shift'])
                     df_real_agg = df_real_agg[df_real_agg['Jumlah_Jam'] >= 6].copy()
@@ -743,7 +733,6 @@ with tab3:
             rekap_prediksi.append({
                 'Tanggal': df_ts['datetime'].dt.strftime('%Y-%m-%d').mode()[0], 'Shift': shft_nm, 
                 f'Prediksi ({satuan_teks})': baris_max_pred['pred_speed'],
-                'Arah_Pred_Deg': baris_max_pred['arah_derajat'], # Ekstrak arah prediksi
                 f'MBE ({satuan_teks})': s_mbe, f'RMSE ({satuan_teks})': s_rmse, 'Baserun': os.path.basename(filepath),
                 'raw_errors': r_err, 'chart_data': chrt_dict
             })
@@ -751,21 +740,17 @@ with tab3:
         df_rekap_pred = pd.DataFrame(rekap_prediksi)
 
         if not df_rekap_pred.empty and not df_real_agg.empty:
-            df_verif = pd.merge(df_rekap_pred, df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Waktu_Max_Real', 'Arah_Obs_Deg', 'Kualitas_Data']], on=['Tanggal', 'Shift'], how='left')
-            df_verif.loc[df_verif['Real_Max_Speed_Max'].isna(), [f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Waktu_Max_Real', 'Arah_Obs_Deg']] = np.nan
+            df_verif = pd.merge(df_rekap_pred, df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Waktu_Max_Real', 'Kualitas_Data']], on=['Tanggal', 'Shift'], how='left')
+            df_verif.loc[df_verif['Real_Max_Speed_Max'].isna(), [f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Waktu_Max_Real']] = np.nan
         else:
             df_verif = df_rekap_pred.copy() if not df_rekap_pred.empty else pd.DataFrame()
             if not df_verif.empty: 
-                df_verif['Real_Max_Speed_Max'], df_verif['Waktu_Max_Real'], df_verif['Arah_Obs_Deg'], df_verif['Kualitas_Data'] = np.nan, np.nan, np.nan, "Tidak Ada Data CSV"
+                df_verif['Real_Max_Speed_Max'], df_verif['Waktu_Max_Real'], df_verif['Kualitas_Data'] = np.nan, np.nan, "Tidak Ada Data CSV"
 
         if not df_verif.empty:
             df_verif.rename(columns={'Real_Max_Speed_Max': f'Observasi ({satuan_teks})', 'Waktu_Max_Real': 'Waktu Puncak', 'Kualitas_Data': 'Ketersediaan Data'}, inplace=True)
             df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
             df_verif['Waktu Puncak'] = df_verif['Waktu Puncak'].fillna("-")
-            
-            # Konversi derajat ke string (Utara/Selatan)
-            df_verif['Arah Prediksi'] = df_verif['Arah_Pred_Deg'].apply(lambda x: derajat_ke_utara_selatan(x) if pd.notnull(x) else "-")
-            df_verif['Arah Observasi'] = df_verif['Arah_Obs_Deg'].apply(lambda x: derajat_ke_utara_selatan(x) if pd.notnull(x) else "-")
             
             df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
 
@@ -783,8 +768,8 @@ with tab3:
             for c in [f'Observasi ({satuan_teks})', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})']:
                 df_verif[c] = df_verif[c].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-            # Menambahkan kolom Arah Prediksi dan Arah Observasi ke output Tabel
-            df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', 'Arah Prediksi', f'Observasi ({satuan_teks})', 'Arah Observasi', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
+            # Menampilkan kembali kolom yang asli tanpa arah
+            df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
 
             col_v1, col_v2, col_v3 = st.columns(3)
             with col_v1: st.metric("Shift Available", f"{len(valid_data)}", f"Total {len(df_verif)}")
@@ -816,4 +801,4 @@ with tab3:
                 if st.button("Lihat Grafik", use_container_width=True):
                     idx = opsi_shift.tolist().index(pil)
                     popup_grafik(df_verif.iloc[idx]['Tanggal'], df_verif.iloc[idx]['Shift'], df_verif.iloc[idx]['chart_data'])
-        else: st.warning("Belum ada data rekap.")
+    else: st.warning("Belum ada data rekap.")
