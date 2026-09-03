@@ -411,7 +411,7 @@ with tab1:
         data_gil = get_summary_area_data(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
         st.markdown(create_summary_card("Gilimanuk", data_gil), unsafe_allow_html=True)
 
-st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
     
     # Ambil daftar waktu unik dan tentukan default-nya (pembulatan ke jam terdekat)
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
