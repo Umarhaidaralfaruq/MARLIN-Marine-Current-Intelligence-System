@@ -365,28 +365,48 @@ def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset=
     }
 
 def create_summary_card(title, data):
-    if not data: return f"<div>Data {title} tidak tersedia</div>"
+    if not data: 
+        # Penanganan empty state agar desain tidak rusak jika data kosong
+        return """
+        <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); display: flex; justify-content: center; align-items: center; min-height: 140px;">
+            <span style="color: #64748b; font-style: italic;">Data tidak tersedia</span>
+        </div>
+        """
+
     alt_satuan = "Knot" if satuan_teks == "m/s" else "m/s"
     f_pembagi = FAKTOR_KNOT if satuan_teks == "m/s" else (1 / FAKTOR_KNOT)
-    curr_alt, peak_alt = data['current_speed'] * f_pembagi, data['peak_speed'] * f_pembagi
-    status = get_status_arus(data['current_speed'], faktor_konversi)
+    
+    curr_alt = data['current_speed'] * f_pembagi
+    peak_alt = data['peak_speed'] * f_pembagi
+    
+    # Ambil status untuk masing-masing kecepatan
+    status_curr = get_status_arus(data['current_speed'], faktor_konversi)
+    status_peak = get_status_arus(data['peak_speed'], faktor_konversi)
+    
+    # Tentukan warna teks angka (Putih jika AMAN, warna peringatan jika bahaya)
+    color_curr = "#f8fafc" if status_curr['status'] == "AMAN" else status_curr['bg']
+    color_peak = "#f8fafc" if status_peak['status'] == "AMAN" else status_peak['bg']
     
     return f"""
     <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
             <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Pelabuhan {title}</h4>
-            <div style="background-color: {status['bg']}; color: {status['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status['icon']} {status['status']}</div>
+            <div style="background-color: {status_curr['bg']}; color: {status_curr['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status_curr['icon']} {status_curr['status']}</div>
         </div>
         <div style="display: flex; gap: 15px;">
             <div style="flex: 1; border-right: 1px solid rgba(148,163,184,0.2); padding-right: 10px;">
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Saat Ini ({data['current_time']})</div>
-                <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['current_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{curr_alt:.2f} {alt_satuan} • Arah: <b>{data['current_dir']}</b></div>
+                <div style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Saat Ini ({data['current_time']})</div>
+                <div style="color: {color_curr}; font-size: 1.8rem; font-weight: bold; line-height: 1;">
+                    {data['current_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 5px;">{curr_alt:.2f} {alt_satuan} • Arah: <b>{data['current_dir']}</b></div>
             </div>
             <div style="flex: 1;">
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Maksimal - 12 Jam</div>
-                <div style="color: #f8fafc; font-size: 1.8rem; font-weight: bold; line-height: 1;">{data['peak_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span></div>
-                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">{peak_alt:.2f} {alt_satuan} • Arah: <b>{data['peak_dir']}</b> ({data['peak_time']})</div>
+                <div style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 5px;">Kecepatan Maksimal - 12 Jam</div>
+                <div style="color: {color_peak}; font-size: 1.8rem; font-weight: bold; line-height: 1;">
+                    {data['peak_speed']:.2f} <span style="font-size: 1rem; color: #94a3b8; font-weight: normal;">{satuan_teks}</span>
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.85rem; margin-top: 5px;">{peak_alt:.2f} {alt_satuan} • Arah: <b>{data['peak_dir']}</b> ({data['peak_time']})</div>
             </div>
         </div>
     </div>
