@@ -539,7 +539,7 @@ with tab2:
         else: st.caption("Data Gilimanuk tidak tersedia.")
 
     st.divider()
-    st.markdown("### UNDUH LAPORAN GRAFIK BMKG")
+    st.markdown("### UNDUH GRAFIK")
     def create_bmkg_report(df_source, title_text):
         df_plot = df_source.copy()
         if 'datetime_utc' not in df_plot.columns: df_plot['datetime_utc'] = df_plot['datetime_wib'] - pd.Timedelta(hours=7)
