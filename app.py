@@ -689,11 +689,6 @@ with tab3:
             try:
                 df_rr = pd.read_csv(path_verif_csv)
                 
-                # 1. FILTER JAM DENGAN KUALITAS DATA BURUK (<50%)
-                # Membuang baris yang di kolom 'Kualitas_Data' mengandung teks '<50%'
-                if 'Kualitas_Data' in df_rr.columns:
-                    df_rr = df_rr[~df_rr['Kualitas_Data'].str.contains('<50%', na=False, regex=False)].copy()
-
                 if 'Waktu_UTC' in df_rr.columns:
                     df_rr['waktu_utc'] = pd.to_datetime(df_rr['Waktu_UTC'])
                     df_rr['Tanggal'] = df_rr['waktu_utc'].dt.strftime('%Y-%m-%d')
@@ -707,13 +702,12 @@ with tab3:
                     df_real_max['Waktu_Max_Real'] = (df_real_max['waktu_utc'] + pd.Timedelta(hours=7)).dt.strftime('%H:%M WIB')
                     df_real_max.rename(columns={'Real_Max_Speed_ms': 'Real_Max_Speed_Max'}, inplace=True)
                     
-                    # 2. FILTER KEUTUHAN SHIFT (Hanya menghitung jam yang lolos filter kualitas)
                     df_real_agg = pd.merge(df_real_max, df_rr.groupby(['Tanggal', 'Shift']).size().reset_index(name='Jumlah_Jam'), on=['Tanggal', 'Shift'])
+                    # Tetap mempertahankan syarat minimal 6 jam data untuk merekap 1 shift
                     df_real_agg = df_real_agg[df_real_agg['Jumlah_Jam'] >= 6].copy()
                     df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(lambda j: ">75% (Sangat Baik)" if j >= 9 else "50% - 75% (Cukup)")
             except Exception as e:
                 st.error(f"⚠️ Gagal memuat file observasi: {e}")
-
         rekap_prediksi = []
         for filepath in list_of_files:
             df_temp = load_data(filepath)
