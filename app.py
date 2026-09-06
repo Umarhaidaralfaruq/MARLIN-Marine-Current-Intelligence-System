@@ -580,9 +580,9 @@ with tab2:
             mid_time = x0 + (x1 - x0) / 2
             fig_shift.add_annotation(
                 x=mid_time,
-                y=1.02, # Posisikan di atas grafik
-                yref="paper", # Referensi posisi ke ukuran frame keseluruhan
-                text=f"Maks: <b>{max_v_chunk:.2f}</b><br>{dom_dir_chunk}",
+                y=1.05, 
+                yref="paper", 
+                text=f"Maks: <b>{max_v_chunk:.2f} {satuan_teks}</b><br>{dom_dir_chunk}", # <-- UBAH BAGIAN INI
                 showarrow=False,
                 font=dict(size=11, color="#cbd5e1"),
                 yanchor="bottom"
