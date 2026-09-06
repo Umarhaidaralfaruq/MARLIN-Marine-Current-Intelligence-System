@@ -33,30 +33,8 @@ from PIL import Image, ImageFilter
 from plotly.subplots import make_subplots
 from streamlit_autorefresh import st_autorefresh
 
-# ==========================================
-# [BLOK KONFIGURASI GLOBAL] 
-# ==========================================
-AREA_LAT_MIN, AREA_LAT_MAX = -8.209161, -8.160084
-AREA_LON_MIN, AREA_LON_MAX = 114.387089, 114.435215
-
-KET_LAT_MIN, KET_LAT_MAX = -8.209161, -8.151693
-KET_LON_MIN, KET_LON_MAX = 114.38673, 114.414975
-
-GIL_LAT_MIN, GIL_LAT_MAX = -8.21003, -8.16198
-GIL_LON_MIN, GIL_LON_MAX = 114.41354, 114.43416
-
-FAKTOR_KNOT = 1.94384
-METODE_STATISTIK = "MAX"  # "MAX" atau "P95"
-
-# --- KONFIGURASI STATUS, THRESHOLD, DAN GAYA (UBAH DI SINI SAJA) ---
-# Kamu bisa bebas menambah/menghapus/mengubah status di sini.
-# Sistem akan otomatis membaca batas_ms dan mengurutkannya.
-KONFIG_STATUS = {
-    "AWAS":    {"batas_ms": 2.5, "icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
-    "WASPADA": {"batas_ms": 2.0, "icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
-    "SIAGA":   {"batas_ms": 1.5, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
-    "AMAN":    {"batas_ms": 0.0, "icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"} 
-}
+# --- IMPORT KONFIGURASI GLOBAL ---
+from config import *
 
 # Auto-generate label untuk dipakai di tabel
 for k, v in KONFIG_STATUS.items():
@@ -153,12 +131,12 @@ HTML_TEMPLATE = """
 def konversi_ke_velocity_json(df_hour):
     lo1, lo2 = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     la1, la2 = float(df_hour['lat'].max()), float(df_hour['lat'].min()) 
-    nx, ny = 60, 60
+    nx, ny = GRID_NX, GRID_NY
     grid_lon, grid_lat = np.linspace(lo1, lo2, nx), np.linspace(la1, la2, ny) 
     dx, dy = (lo2 - lo1) / (nx - 1), (la1 - la2) / (ny - 1) 
     
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-    batas_resolusi = 0.011
+    batas_resolusi = BATAS_RESOLUSI
     x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
     sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
     sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
@@ -189,8 +167,7 @@ plt.rcParams.update({'font.family': 'sans-serif', 'font.sans-serif': ['Helvetica
 # ==========================================
 # SETUP HALAMAN WEBSITE
 # ==========================================
-BASE_DIR = Path(__file__).parent.resolve()
-FOLDER_OUTPUT = BASE_DIR / "Arsip_Prediksi"
+FOLDER_OUTPUT = PATHS["OUTPUT_PRED"]
 
 logo_filename = "logo_bmkg.png"
 logo_seacast = "logo_bmkg2.png"
@@ -211,7 +188,7 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-st_autorefresh(interval=1800000, limit=None, key="auto_refresh_marlin")
+st_autorefresh(interval=REFRESH_INTERVAL_MS, limit=None, key="auto_refresh_marlin")
 
 def get_base64_logo(img_path):
     if os.path.exists(img_path):
@@ -242,17 +219,14 @@ def derajat_ke_utara_selatan(deg):
 
 # --- FUNGSI STATUS DINAMIS ---
 def get_status_arus(speed, faktor_konv):
-    # Cari status terendah sebagai nilai default/fallback (Batas_ms = 0)
     status_terendah = min(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'])[0]
     
     if pd.isna(speed): 
         return {"status": status_terendah, **KONFIG_STATUS[status_terendah]}
     
-    # Mengurutkan konfigurasi dari nilai batas tertinggi ke terendah
     sorted_status = sorted(KONFIG_STATUS.items(), key=lambda x: x[1]['batas_ms'], reverse=True)
     
     for nama_status, config in sorted_status:
-        # Pengecekan otomatis mengalikan threshold dengan faktor satuan (Knot/ms)
         if speed >= (config['batas_ms'] * faktor_konv):
             return {"status": nama_status, **config}
             
@@ -316,7 +290,6 @@ df_spatial['predicted_v_max'] *= faktor_konversi
 df_spatial['predicted_u'] *= faktor_konversi
 df_spatial['predicted_v'] *= faktor_konversi
 
-# Perhitungan trend 24 jam untuk grafik
 df_filtered_area_24 = df_spatial[
     (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) &
     (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)
@@ -334,7 +307,6 @@ with col_head2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Fungsi Ambil Data Area Spesifik
 def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset=7, tz_label="WIB"):
     df_area = df_raw[(df_raw['lat'] >= lat_min) & (df_raw['lat'] <= lat_max) & (df_raw['lon'] >= lon_min) & (df_raw['lon'] <= lon_max)]
     if df_area.empty: return None
@@ -351,7 +323,6 @@ def get_summary_area_data(df_raw, lat_min, lat_max, lon_min, lon_max, tz_offset=
     
     baris_max = df_shift.loc[df_shift['predicted_v_max'].idxmax()] if not df_shift.empty else baris_saat_ini
     
-    # Format waktu dinamis sesuai zona yang diinput
     waktu_current_lokal = baris_saat_ini['datetime'] + pd.Timedelta(hours=tz_offset)
     waktu_max_lokal = baris_max['datetime'] + pd.Timedelta(hours=tz_offset)
     
@@ -403,17 +374,14 @@ tab1, tab2, tab3 = st.tabs(["📍 Ringkasan Operasional", "📈 Prakiraan 12 Jam
 with tab1:
     col_sum_ket, col_sum_gil = st.columns(2)
     with col_sum_ket:
-        # Gunakan Offset 7 untuk WIB
         data_ket = get_summary_area_data(df_spatial, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX, tz_offset=7, tz_label="WIB")
         st.markdown(create_summary_card("Ketapang", data_ket), unsafe_allow_html=True)
     with col_sum_gil:
-        # Gunakan Offset 8 untuk WITA
         data_gil = get_summary_area_data(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
         st.markdown(create_summary_card("Gilimanuk", data_gil), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 5px; font-weight: bold; margin-top: 10px;'>PETA SPASIAL ARUS SELAT BALI</div>", unsafe_allow_html=True)
     
-    # Ambil daftar waktu unik dan tentukan default-nya (pembulatan ke jam terdekat)
     waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
     waktu_sekarang_str = waktu_sekarang_wib.round('h').strftime('%Y-%m-%d %H:%M')
     
@@ -426,7 +394,6 @@ with tab1:
 
     current_idx = st.session_state[state_key]
 
-    # --- KONTROL TOMBOL WAKTU (Rasio Disesuaikan) ---
     col_prev, col_reset, col_label, col_next = st.columns([3, 1, 5, 4])
     
     with col_prev:
@@ -435,12 +402,10 @@ with tab1:
             st.rerun()
             
     with col_reset:
-        # Disisipkan dengan rasio 1, menggunakan ikon agar estetik, dilengkapi tooltip
         if st.button("🔄", help="Kembali ke Waktu Saat Ini", disabled=(current_idx == get_current_time_idx()), use_container_width=True):
             st.session_state[state_key] = get_current_time_idx()
             st.rerun()
 
-    # Ambil string waktu terpilih berdasarkan index
     selected_time_str = waktu_unik[st.session_state[state_key]]
     
     with col_label:
@@ -453,7 +418,6 @@ with tab1:
             st.session_state[state_key] += 1
             st.rerun()
     
-    # --- LANJUTAN FILTER DATA ---
     df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == selected_time_str]
     lon_min_data, lon_max_data = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min_data, lat_max_data = float(df_hour['lat'].min()), float(df_hour['lat'].max())
@@ -463,7 +427,7 @@ with tab1:
         df_h = pd.DataFrame(df_hour_json)
         triang = tri.Triangulation(df_h['lon'], df_h['lat'])
         x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
-        mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > 0.011 for i in range(3)], axis=0)
+        mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > BATAS_RESOLUSI for i in range(3)], axis=0)
         triang.set_mask(mask)
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.axis('off'); ax.set_xlim(lon_min, lon_max); ax.set_ylim(lat_min, lat_max)
@@ -482,7 +446,7 @@ with tab1:
     for _, row in df_hour.iloc[::3].iterrows():
         kec, lat, lon = row['predicted_v_max'], float(row['lat']), float(row['lon'])
         if pd.isna(kec): continue
-        if not any(np.sqrt((lat - plat)**2 + (lon - plon)**2) < 0.015 for (plat, plon) in placed_labels):
+        if not any(np.sqrt((lat - plat)**2 + (lon - plon)**2) < JARAK_LABEL_PETA for (plat, plon) in placed_labels):
             labels_list.append({"lat": lat, "lon": lon, "val": f"{kec:.2f}"}); placed_labels.append((lat, lon))
 
     html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour)).replace("__LABELS_JSON__", json.dumps(labels_list)).replace("__IMAGE_BASE64__", image_base64).replace("__LAT_MIN__", str(lat_min_data)).replace("__LON_MIN__", str(lon_min_data)).replace("__LAT_MAX__", str(lat_max_data)).replace("__LON_MAX__", str(lon_max_data)).replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi)).replace("__SATUAN__", satuan_teks).replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}").replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}").replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}").replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
@@ -505,15 +469,12 @@ else:
 # ------------------------------------------
 with tab2:
     if not df_shift.empty:
-        # 1. Menghitung Ringkasan Teks
         max_spd = df_shift['predicted_v_max'].max()
         waktu_max = df_shift.loc[df_shift['predicted_v_max'].idxmax(), 'datetime_wib'].strftime('%H:%M WIB')
         arah_dom = df_shift['arah_derajat'].apply(derajat_ke_utara_selatan).mode()[0]
         
-        # Ambil status bahaya untuk kecepatan maksimum
         status_max = get_status_arus(max_spd, faktor_konversi)
         
-        # Format HTML Ringkasan (Style sama dengan Tab 1)
         html_ringkasan = f"""
         <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
@@ -564,7 +525,6 @@ with tab2:
 
     st.divider()
     
-    # 2. TABEL KESELURUHAN DATA DENGAN ZONA WAKTU DINAMIS
     st.markdown("**DETAIL KONDISI PELABUHAN (KESELURUHAN PREDIKSI)**")
     col_ket_tbl, col_gil_tbl = st.columns(2)
 
@@ -575,7 +535,6 @@ with tab2:
         idx_t = df_area.groupby('datetime_wib').apply(ambil_index_target)
         df_tr = df_area.loc[idx_t].reset_index(drop=True)
         
-        # Konversi waktu berdasarkan offset yang diinput
         df_tr['waktu_lokal'] = df_tr['datetime'] + pd.Timedelta(hours=tz_offset)
         
         def fmt_speed(val):
@@ -598,7 +557,6 @@ with tab2:
 
     with col_ket_tbl:
         st.markdown("**Area Pelabuhan Ketapang (WIB)**")
-        # Menggunakan df_spatial (keseluruhan data) bukan df_shift_raw
         tb_ket = buat_tabel_area(df_spatial, KET_LAT_MIN, KET_LAT_MAX, KET_LON_MIN, KET_LON_MAX, tz_offset=7, tz_label="WIB")
         if not tb_ket.empty: 
             st.dataframe(tb_ket.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
@@ -607,7 +565,6 @@ with tab2:
 
     with col_gil_tbl:
         st.markdown("**Area Pelabuhan Gilimanuk (WITA)**")
-        # Menggunakan df_spatial (keseluruhan data) dan offset 8 untuk WITA
         tb_gil = buat_tabel_area(df_spatial, GIL_LAT_MIN, GIL_LAT_MAX, GIL_LON_MIN, GIL_LON_MAX, tz_offset=8, tz_label="WITA")
         if not tb_gil.empty: 
             st.dataframe(tb_gil.style.map(style_tabel_peringatan, subset=[f'Kecepatan ({satuan_teks})']), hide_index=True, use_container_width=True)
@@ -647,10 +604,9 @@ with tab2:
         isu_tm = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
         fig_bmkg.text(0.95, 0.95, f"Dikeluarkan pada {isu_tm.strftime('%H:%M')} WIB, {isu_tm.strftime('%d-%m-%Y')}", fontsize=12, weight='bold', ha='right', va='top')
         
-        # Mengembalikan fitur logo AnnotationBbox
-        logo_path = BASE_DIR / "Logo_BMKG.png"
-        if not logo_path.exists(): logo_path = BASE_DIR / "logo_bmkg2.png"
-        if not logo_path.exists(): logo_path = BASE_DIR / "logo_bmkg.png"
+        logo_path = Path(__file__).resolve().parent / "Logo_BMKG.png"
+        if not logo_path.exists(): logo_path = Path(__file__).resolve().parent / "logo_bmkg2.png"
+        if not logo_path.exists(): logo_path = Path(__file__).resolve().parent / "logo_bmkg.png"
         if logo_path.exists():
             try:
                 ax0.add_artist(AnnotationBbox(OffsetImage(plt.imread(str(logo_path)), zoom=0.08), (0.02, 0.97), xycoords='figure fraction', frameon=False, box_alignment=(0, 1)))
@@ -658,7 +614,6 @@ with tab2:
             
         return fig_bmkg
 
-    # Mengembalikan tombol unduh 12 jam & 24 jam bersampingan
     col_exp1, col_exp2, _ = st.columns([1, 1, 2])
     with col_exp1:
         if st.button("Unduh Grafik 12 Jam", use_container_width=True):
@@ -682,7 +637,7 @@ with tab2:
 with tab3:
     st.markdown("### Akurasi & Validasi Model")
     with st.spinner("Merekap riwayat validasi HF Radar..."):
-        path_verif_csv = BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv" 
+        path_verif_csv = PATHS["Verif_12jam"] 
         df_real_hourly, df_real_agg = pd.DataFrame(), pd.DataFrame()
         
         if path_verif_csv.exists():
@@ -703,7 +658,6 @@ with tab3:
                     df_real_max.rename(columns={'Real_Max_Speed_ms': 'Real_Max_Speed_Max'}, inplace=True)
                     
                     df_real_agg = pd.merge(df_real_max, df_rr.groupby(['Tanggal', 'Shift']).size().reset_index(name='Jumlah_Jam'), on=['Tanggal', 'Shift'])
-                    # Tetap mempertahankan syarat minimal 6 jam data untuk merekap 1 shift
                     df_real_agg = df_real_agg[df_real_agg['Jumlah_Jam'] >= 6].copy()
                     df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(lambda j: ">75% (Sangat Baik)" if j >= 9 else "50% - 75% (Cukup)")
             except Exception as e:
@@ -769,7 +723,6 @@ with tab3:
             for c in [f'Observasi ({satuan_teks})', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})']:
                 df_verif[c] = df_verif[c].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-            # Menampilkan kembali kolom yang asli tanpa arah
             df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
 
             col_v1, col_v2, col_v3 = st.columns(3)
