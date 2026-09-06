@@ -503,14 +503,33 @@ with tab2:
         """
         
         st.markdown(html_ringkasan, unsafe_allow_html=True)
-        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH</div>", unsafe_allow_html=True)        
+        
+        # --- KONTROL PENGELOMPOKAN WAKTU GRAFIK ---
+        col_g1, col_g2 = st.columns([3, 1])
+        with col_g1:
+            st.markdown(f"<div style='margin-top: 10px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH</div>", unsafe_allow_html=True)
+        with col_g2:
+            # Ambil index default dari config.py
+            idx_default = CHART_GROUPING_OPTIONS.index(CHART_GROUPING_DEFAULT) if CHART_GROUPING_DEFAULT in CHART_GROUPING_OPTIONS else 0
+            
+            interval_jam = st.selectbox(
+                "Kelompokkan Background:", 
+                options=CHART_GROUPING_OPTIONS, 
+                index=idx_default, 
+                format_func=lambda x: f"Per {x} Jam",
+                label_visibility="collapsed"
+            )
+            
         fig_shift = go.Figure()
+        
+        # 1. Plot Garis Arus Utama (Titik data per jam tetap ada)
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], y=df_shift['predicted_v_max'], mode='lines+markers', name='Prediksi Arus',
             line=dict(color='#0d6efd', width=3), marker=dict(size=8, color='#0d6efd', line=dict(color='white', width=1)),
             customdata=df_shift['arah_panah'], hovertemplate="<b>%{x} WIB</b><br>Kecepatan: %{y:.2f} " + satuan_teks + "<br>Arah: %{customdata}<extra></extra>"
         ))
         
+        # 2. Plot Garis Threshold Status
         ymax_plot = df_shift['predicted_v_max'].max() + (0.3 * faktor_konversi)
         sorted_thresholds = sorted([item for item in KONFIG_STATUS.items() if item[1]['batas_ms'] > 0], key=lambda x: x[1]['batas_ms'])
         
@@ -525,9 +544,50 @@ with tab2:
                 )
                 ymax_plot = max(ymax_plot, batas_terkonversi + (0.2 * faktor_konversi))
 
+        # 3. Logika Pengelompokan (Background & Label Kelompok)
+        warna_bg = ['rgba(255, 255, 255, 0.05)', 'rgba(0, 0, 0, 0)'] # Warna selang-seling
+        n_data = len(df_shift)
+        
+        for i in range(0, n_data, interval_jam):
+            chunk = df_shift.iloc[i:i+interval_jam]
+            if chunk.empty: continue
+            
+            # Cari Max & Arah Dominan per kelompok
+            max_v_chunk = chunk['predicted_v_max'].max()
+            mode_arah_chunk = chunk['arah_derajat'].apply(derajat_ke_utara_selatan).mode()
+            dom_dir_chunk = mode_arah_chunk[0] if not mode_arah_chunk.empty else "-"
+            
+            # Tentukan batas X awal dan akhir untuk blok background (+/- 30 menit agar blok menyambung)
+            x0 = chunk['datetime_wib'].iloc[0] - pd.Timedelta(minutes=30)
+            x1 = chunk['datetime_wib'].iloc[-1] + pd.Timedelta(minutes=30)
+            
+            # Tambahkan kotak background
+            color_idx = (i // interval_jam) % 2
+            fig_shift.add_vrect(
+                x0=x0, x1=x1,
+                fillcolor=warna_bg[color_idx],
+                opacity=1,
+                layer="below",
+                line_width=0,
+            )
+            
+            # Tambahkan Teks Info Kelompok di atas grafik
+            mid_time = x0 + (x1 - x0) / 2
+            fig_shift.add_annotation(
+                x=mid_time,
+                y=1.02, # Posisikan di atas grafik
+                yref="paper", # Referensi posisi ke ukuran frame keseluruhan
+                text=f"Maks: <b>{max_v_chunk:.2f}</b><br>{dom_dir_chunk}",
+                showarrow=False,
+                font=dict(size=11, color="#cbd5e1"),
+                yanchor="bottom"
+            )
+
+        # 4. Update Layout
         fig_shift.update_layout(
-            margin=dict(l=0, r=0, t=10, b=20), xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})",
-            yaxis=dict(range=[0, ymax_plot]), height=380, showlegend=False, hovermode="x unified",
+            margin=dict(l=0, r=0, t=50, b=20), # Tambah margin top (t=50) agar teks kelompok tidak terpotong
+            xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})",
+            yaxis=dict(range=[0, ymax_plot]), height=420, showlegend=False, hovermode="x unified",
             hoverlabel=dict(bgcolor="#1e293b", font_color="#f8fafc", bordercolor="#334155"),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
@@ -537,8 +597,7 @@ with tab2:
     else:
         st.info("Data prediksi untuk shift ini belum tersedia.")
 
-    st.divider()
-    
+    st.divider()    
     st.markdown("**DETAIL KONDISI PELABUHAN (KESELURUHAN PREDIKSI)**")
     col_ket_tbl, col_gil_tbl = st.columns(2)
 
