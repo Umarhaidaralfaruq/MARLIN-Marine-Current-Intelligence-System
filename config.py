@@ -163,3 +163,9 @@ KONFIG_STATUS = {
     "SIAGA":   {"batas_ms": 1.5, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
     "AMAN":    {"batas_ms": 0.0, "icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"} 
 }
+
+# =============================================================================
+# 11. KONFIGURASI GRAFIK & UI (DASHBOARD)
+# =============================================================================
+CHART_GROUPING_OPTIONS = [2, 3, 4, 6]  # Pilihan rentang jam di dropdown
+CHART_GROUPING_DEFAULT = 3             # Nilai default awal (harus ada di dalam list di atas)
