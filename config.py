@@ -8,7 +8,6 @@ load_dotenv()
 # =============================================================================
 # 1. PENGATURAN DIREKTORI (FOLDERS) UTAMA
 # =============================================================================
-# Gunakan Pathlib agar aman digunakan di Windows maupun Mac/Linux
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "00 Data"
 ARTEFAK_DIR = BASE_DIR / "01 Artefak"
@@ -18,9 +17,8 @@ VALIDASI_DIR = BASE_DIR / "02 Hasil Validasi"
 HF_RADAR_DIR = Path(r"D:\10 HF Radar NetCDF4")
 LOGBOOK_DIR = Path(r"D:\ProgramKantor\Penyeberangan_Ketapang-Gilimanuk\2_Logbook_HFRadar_Ketapang-Gilimanuk")
 
-# Buat folder jika belum ada (Auto-create saat config di-load)
 for folder in [DATA_DIR, ARTEFAK_DIR, PREDIKSI_DIR, VALIDASI_DIR, PREDIKSI_DIR / "Arsip_Prediksi", PREDIKSI_DIR / "Plot Spasial"]:
-    folder.mkdir(parents=True, exist_ok=True) # <-- Indentasi sudah diperbaiki di sini
+    folder.mkdir(parents=True, exist_ok=True) 
 
 # =============================================================================
 # 2. PENGATURAN PATH FILE SPESIFIK
@@ -70,31 +68,42 @@ AWS_PASSWORD = os.getenv("AWS_PASSWORD")
 AWS_START_DEFAULT = datetime(2025, 7, 7)
 
 # =============================================================================
+# 4. KOORDINAT AREA (DASHBOARD)
+# =============================================================================
+# Area Utama
+AREA_LAT_MIN, AREA_LAT_MAX = -8.209161, -8.160084
+AREA_LON_MIN, AREA_LON_MAX = 114.387089, 114.435215
+
+# Pelabuhan Ketapang
+KET_LAT_MIN, KET_LAT_MAX = -8.209161, -8.151693
+KET_LON_MIN, KET_LON_MAX = 114.38673, 114.414975
+
+# Pelabuhan Gilimanuk
+GIL_LAT_MIN, GIL_LAT_MAX = -8.21003, -8.16198
+GIL_LON_MIN, GIL_LON_MAX = 114.41354, 114.43416
+
+# =============================================================================
 # 5. HYPERPARAMETER MODEL
 # =============================================================================
 MODEL_CONFIG = {
-    # Parameter Dimensi
     'train_split_ratio': 0.8,
     'n_modes' : 2,
-    'input_window': 48,   # Membaca data histori 48 jam (2 hari)
-    'output_window': 24,  # Memprediksi 24 jam ke depan
-    'min_seq_len': 96,    # Syarat panjang segmen minimal sebelum dipotong window
-    'min_segmen_len': 48, # Syarat panjang minimal pembuatan segmen
-    'max_save_nan': 5,     # Syarat panjang maksimal untuk jam kosong
+    'input_window': 48,
+    'output_window': 24, 
+    'min_seq_len': 96,    
+    'min_segmen_len': 48, 
+    'max_save_nan': 5,     
     'ocean_threshold': 0.5,
     
-    # Parameter Arsitektur Neural Network
     'lstm_units': 256,
     'dropout_rate': 0.2,
     'dense_units': 256,
     
-    # [BARU] Parameter Training (Kompilasi & Fit)
     'learning_rate': 0.001,
-    'loss_function': 'mse',          # Typo 'mse' kita perbaiki di sini!
+    'loss_function': 'mse',          
     'epochs': 200,
     'batch_size': 32,
     
-    # [BARU] Parameter Callbacks
     'early_stop_patience': 15,
     'reduce_lr_patience': 4,
     'reduce_lr_factor': 0.5,
@@ -105,35 +114,52 @@ MODEL_CONFIG = {
 # 6. PANEL KONTROL EKSPERIMEN FITUR (PREPROCESSING)
 # =============================================================================
 FEATURE_TOGGLES = {
-    'ENABLE_TIME_FEATURES': False,   # Waktu astronomis (Sin/Cos Jam)
-    'ENABLE_TARGET_FEATURES': True,  # Menggunakan masa lalu PC1-PC5 sebagai input
-    'ENABLE_WATER_LEVEL': False,     # Data elevasi pasut
-    'ENABLE_WIND': False,            # Data angin komponen U & V
+    'ENABLE_TIME_FEATURES': False,   
+    'ENABLE_TARGET_FEATURES': True,  
+    'ENABLE_WATER_LEVEL': False,     
+    'ENABLE_WIND': False,            
 }
 
 # =============================================================================
 # 7. PANEL KONTROL SPATIAL PREPROCESSING
 # =============================================================================
 SPATIAL_CONFIG = {
-    'RESAMPLE_METHOD': 'max_amplitude',  # Opsi yang tersedia: 'mean', 'max_amplitude', 'p95'
-    'RESAMPLE_FREQ': '1H',     # Resolusi waktu (contoh: '1H' untuk 1 jam)
+    'RESAMPLE_METHOD': 'max_amplitude',  
+    'RESAMPLE_FREQ': '1H',     
 }
+
+# =============================================================================
+# 8. PARAMETER KALKULASI & SISTEM (DASHBOARD)
+# =============================================================================
+FAKTOR_KNOT = 1.94384
+METODE_STATISTIK = "MAX"  # Opsi: "MAX" atau "P95"
+REFRESH_INTERVAL_MS = 1800000
 
 # =============================================================================
 # 9. KONFIGURASI VISUALISASI & EVALUASI SPASIAL
 # =============================================================================
 VISUAL_CONFIG = {
-    # Jam ke-berapa di masa depan yang mau di-plot di quiver plot (0 = jam ke-1)
-    # Kita buat default 5 (artinya jam ke-6 masa depan)
     'plot_target_hour_idx': 5, 
     
-    # Batas Maksimum Skala Warna di Gambar (Colorbar Maks)
-    'max_val_mae_speed': 1.0,      # m/s
-    'max_val_rmse_speed': 1.0,     # m/s
-    'max_val_rmse_dir': 90,        # derajat
+    'max_val_mae_speed': 1.0,      
+    'max_val_rmse_speed': 1.0,     
+    'max_val_rmse_dir': 90,        
     
-    # Garis Batas Toleransi (Dashed Blue Line di Peta)
-    'threshold_mae_speed': 0.3,    # m/s
-    'threshold_rmse_speed': 0.4,   # m/s
-    'threshold_rmse_dir': 45,      # derajat
+    'threshold_mae_speed': 0.3,    
+    'threshold_rmse_speed': 0.4,   
+    'threshold_rmse_dir': 45,      
+}
+
+# =============================================================================
+# 10. KONFIGURASI DASHBOARD & PETA (STATUS THRESHOLD)
+# =============================================================================
+GRID_NX, GRID_NY = 60, 60
+BATAS_RESOLUSI = 0.011
+JARAK_LABEL_PETA = 0.015
+
+KONFIG_STATUS = {
+    "AWAS":    {"batas_ms": 2.5, "icon": "🔴", "bg": "#dc3545", "text_color": "#ffffff"},
+    "WASPADA": {"batas_ms": 2.0, "icon": "🟠", "bg": "#fd7e14", "text_color": "#ffffff"},
+    "SIAGA":   {"batas_ms": 1.5, "icon": "🟡", "bg": "#ffc107", "text_color": "#000000"},
+    "AMAN":    {"batas_ms": 0.0, "icon": "🟢", "bg": "#28a745", "text_color": "#ffffff"} 
 }
