@@ -10,3 +10,4 @@ scipy
 Pillow
 streamlit-autorefresh
 cloudscraper
+dotenv
