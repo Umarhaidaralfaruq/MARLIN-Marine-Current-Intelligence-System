@@ -475,10 +475,20 @@ with tab2:
         
         status_max = get_status_arus(max_spd, faktor_konversi)
         
-        # Ekstrak waktu mulai dan selesai langsung dari data (format HH.MM)
-        jam_mulai = df_shift['datetime_wib'].min().strftime('%H.%M')
-        jam_selesai = df_shift['datetime_wib'].max().strftime('%H.%M')
-        teks_waktu_dinamis = f"Prakiraan berlaku pada pukul {jam_mulai} - {jam_selesai} WIB"
+        # Ekstrak waktu dan tanggal mulai/selesai
+        waktu_awal = df_shift['datetime_wib'].min()
+        waktu_akhir = df_shift['datetime_wib'].max()
+        
+        jam_mulai = waktu_awal.strftime('%H.%M')
+        jam_selesai = waktu_akhir.strftime('%H.%M')
+        tgl_mulai = waktu_awal.strftime('%d-%m-%Y')
+        tgl_selesai = waktu_akhir.strftime('%d-%m-%Y')
+        
+        # Logika teks dinamis (jika melewati tengah malam vs hari yang sama)
+        if tgl_mulai == tgl_selesai:
+            teks_waktu_dinamis = f"Prakiraan Berlaku: {tgl_mulai}, Pukul {jam_mulai} - {jam_selesai} WIB"
+        else:
+            teks_waktu_dinamis = f"Prakiraan Berlaku: {tgl_mulai} ({jam_mulai} WIB) s.d. {tgl_selesai} ({jam_selesai} WIB)"
         
         html_ringkasan = f"""
         <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
@@ -493,8 +503,7 @@ with tab2:
         """
         
         st.markdown(html_ringkasan, unsafe_allow_html=True)
-        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH</div>", unsafe_allow_html=True)
-        
+        st.markdown(f"<div style='margin-bottom: 5px; font-weight: bold;'>GRAFIK KECEPATAN & ARAH</div>", unsafe_allow_html=True)        
         fig_shift = go.Figure()
         fig_shift.add_trace(go.Scatter(
             x=df_shift['datetime_wib'], y=df_shift['predicted_v_max'], mode='lines+markers', name='Prediksi Arus',
