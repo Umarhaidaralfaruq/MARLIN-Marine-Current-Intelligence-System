@@ -593,7 +593,7 @@ with tab2:
         )
         fig_shift.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
         fig_shift.update_xaxes(showgrid=False, showspikes=True, spikecolor="#94a3b8", spikethickness=1, spikedash="dash")
-        st.plotly_chart(fig_shift, use_container_width=True)
+        st.plotly_chart(fig_shift, use_container_width=True, config={'displayModeBar': False})
     else:
         st.info("Data prediksi untuk shift ini belum tersedia.")
 
