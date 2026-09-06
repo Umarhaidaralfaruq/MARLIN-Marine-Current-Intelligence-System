@@ -475,10 +475,15 @@ with tab2:
         
         status_max = get_status_arus(max_spd, faktor_konversi)
         
+        # Ekstrak waktu mulai dan selesai langsung dari data (format HH.MM)
+        jam_mulai = df_shift['datetime_wib'].min().strftime('%H.%M')
+        jam_selesai = df_shift['datetime_wib'].max().strftime('%H.%M')
+        teks_waktu_dinamis = f"Prakiraan berlaku pada pukul {jam_mulai} - {jam_selesai} WIB"
+        
         html_ringkasan = f"""
         <div style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.7) 100%); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; margin-bottom: 12px;">
-                <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">Prakiraan 12 Jam Kedepan (WIB)</h4>
+                <h4 style="color: #cbd5e1; margin: 0; font-size: 1rem; font-weight: 600; text-transform: uppercase;">{teks_waktu_dinamis}</h4>
                 <div style="background-color: {status_max['bg']}; color: {status_max['text_color']}; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">{status_max['icon']} POTENSI {status_max['status']}</div>
             </div>
             <div style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
