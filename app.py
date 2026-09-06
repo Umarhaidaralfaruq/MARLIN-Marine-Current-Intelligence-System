@@ -291,7 +291,7 @@ df_spatial['predicted_u'] *= faktor_konversi
 df_spatial['predicted_v'] *= faktor_konversi
 
 df_filtered_area_24 = df_spatial[
-    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) &
+    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX)
     (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)
 ]
 idx_target_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(ambil_index_target)
@@ -301,9 +301,26 @@ waktu_sekarang_wib = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hour
 last_hour = df_spatial['datetime'].max().hour 
 start_hour_utc, end_hour_utc, shift_name_global = (12, 24, "Shift Malam") if last_hour < 12 else (0, 12, "Shift Pagi")
 
+# --- PINDAHKAN FILTER DATA 12 JAM KE SINI ---
+mask_shift = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
+df_shift_raw = df_spatial.loc[mask_shift & (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) & (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)]
+
+if not df_shift_raw.empty:
+    idx_target_shift = df_shift_raw.groupby('datetime_wib').apply(ambil_index_target)
+    df_shift = df_shift_raw.loc[idx_target_shift].reset_index(drop=True)
+    df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
+    
+    # Logika status update berdasarkan jam selesai prakiraan 12 Jam
+    waktu_akhir_shift = df_shift['datetime_wib'].max()
+    is_update = waktu_sekarang_wib <= waktu_akhir_shift
+else:
+    df_shift = pd.DataFrame()
+    is_update = False
+
 with col_head2:
-    selisih_jam = (waktu_sekarang_wib - (df_spatial['datetime_wib'].min() - pd.Timedelta(hours=1))).total_seconds() / 3600
-    st.markdown(f"<div style='text-align: right; font-weight: bold; color: {'#28a745' if selisih_jam <= 24 else '#dc3545'};'>{'🟢 DATA UPDATE' if selisih_jam <= 24 else '🔴 TIDAK UPDATE'}</div>", unsafe_allow_html=True)
+    teks_status = '🟢 DATA UPDATE' if is_update else '🔴 TIDAK UPDATE'
+    warna_status = '#28a745' if is_update else '#dc3545'
+    st.markdown(f"<div style='text-align: right; font-weight: bold; color: {warna_status};'>{teks_status}</div>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -451,18 +468,6 @@ with tab1:
 
     html_siap_render = HTML_TEMPLATE.replace("__DATA_JSON__", konversi_ke_velocity_json(df_hour)).replace("__LABELS_JSON__", json.dumps(labels_list)).replace("__IMAGE_BASE64__", image_base64).replace("__LAT_MIN__", str(lat_min_data)).replace("__LON_MIN__", str(lon_min_data)).replace("__LAT_MAX__", str(lat_max_data)).replace("__LON_MAX__", str(lon_max_data)).replace("__MAX_VELOCITY__", str(8.0 * faktor_konversi)).replace("__SATUAN__", satuan_teks).replace("__LEG_1__", f"{round(1.0 * faktor_konversi)}").replace("__LEG_2__", f"{round(2.0 * faktor_konversi)}").replace("__LEG_3__", f"{round(3.0 * faktor_konversi)}").replace("__LEG_4__", f"{round(4.0 * faktor_konversi)}")
     components.html(html_siap_render, height=550)
-
-# ------------------------------------------
-# DATA PRAKIRAAN 12 JAM (DIBUTUHKAN TAB 2 & 3)
-# ------------------------------------------
-mask_shift = (df_spatial['datetime'].dt.hour >= start_hour_utc) & (df_spatial['datetime'].dt.hour < end_hour_utc)
-df_shift_raw = df_spatial.loc[mask_shift & (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) & (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)]
-if not df_shift_raw.empty:
-    idx_target_shift = df_shift_raw.groupby('datetime_wib').apply(ambil_index_target)
-    df_shift = df_shift_raw.loc[idx_target_shift].reset_index(drop=True)
-    df_shift['arah_panah'] = df_shift['arah_derajat'].apply(derajat_ke_panah)
-else:
-    df_shift = pd.DataFrame()
 
 # ------------------------------------------
 # TAB 2: PRAKIRAAN & PERENCANAAN 12 JAM
