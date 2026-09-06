@@ -291,7 +291,7 @@ df_spatial['predicted_u'] *= faktor_konversi
 df_spatial['predicted_v'] *= faktor_konversi
 
 df_filtered_area_24 = df_spatial[
-    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX)
+    (df_spatial['lat'] >= AREA_LAT_MIN) & (df_spatial['lat'] <= AREA_LAT_MAX) &
     (df_spatial['lon'] >= AREA_LON_MIN) & (df_spatial['lon'] <= AREA_LON_MAX)
 ]
 idx_target_trend_24 = df_filtered_area_24.groupby('datetime_wib').apply(ambil_index_target)
