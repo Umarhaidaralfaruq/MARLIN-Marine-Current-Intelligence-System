@@ -728,18 +728,36 @@ with tab3:
                     df_rr['Shift'] = df_rr['waktu_utc'].dt.hour.apply(lambda h: "Shift Pagi" if h < 12 else "Shift Malam")
                     if satuan_teks == "Knot": df_rr['Real_Max_Speed_ms'] *= FAKTOR_KNOT
                     
-                    df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms']].copy()
-                    idx_m = df_rr.groupby(['Tanggal', 'Shift'])['Real_Max_Speed_ms'].idxmax()
+                    df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']].copy()
                     
-                    df_real_max = df_rr.loc[idx_m, ['Tanggal', 'Shift', 'waktu_utc', 'Real_Max_Speed_ms']].copy()
-                    df_real_max['Waktu_Max_Real'] = (df_real_max['waktu_utc'] + pd.Timedelta(hours=7)).dt.strftime('%H:%M WIB')
-                    df_real_max.rename(columns={'Real_Max_Speed_ms': 'Real_Max_Speed_Max'}, inplace=True)
-                    
-                    df_real_agg = pd.merge(df_real_max, df_rr.groupby(['Tanggal', 'Shift']).size().reset_index(name='Jumlah_Jam'), on=['Tanggal', 'Shift'])
-                    df_real_agg = df_real_agg[df_real_agg['Jumlah_Jam'] >= 6].copy()
-                    df_real_agg['Kualitas_Data'] = df_real_agg['Jumlah_Jam'].apply(lambda j: ">75% (Sangat Baik)" if j >= 9 else "50% - 75% (Cukup)")
+                    # 1 & 2. Hitung Nilai Max & Arah Dominan HANYA dari timeframe yang "Lulus"
+                    agg_list = []
+                    for (tgl, shf), group in df_rr.groupby(['Tanggal', 'Shift']):
+                        lulus_group = group[group['Kualitas_Data'] == 'Lulus']
+                        
+                        if not lulus_group.empty:
+                            idx_max = lulus_group['Real_Max_Speed_ms'].idxmax()
+                            max_spd = lulus_group.loc[idx_max, 'Real_Max_Speed_ms']
+                            wkt_max = (lulus_group.loc[idx_max, 'waktu_utc'] + pd.Timedelta(hours=7)).strftime('%H:%M WIB')
+                            
+                            arah_mode = lulus_group['Arah_Derajat'].mode()
+                            arah_dom = derajat_ke_utara_selatan(arah_mode[0]) if not arah_mode.empty else "-"
+                            status_kualitas = "Memenuhi Syarat"
+                        else:
+                            max_spd, wkt_max, arah_dom = np.nan, "-", "-"
+                            status_kualitas = "Data Lulus Kurang"
+                            
+                        agg_list.append({
+                            'Tanggal': tgl, 'Shift': shf,
+                            'Real_Max_Speed_Max': max_spd,
+                            'Waktu_Max_Real': wkt_max,
+                            'Arah_Dom_Real': arah_dom,
+                            'Status_Validasi': status_kualitas
+                        })
+                    df_real_agg = pd.DataFrame(agg_list)
             except Exception as e:
                 st.error(f"⚠️ Gagal memuat file observasi: {e}")
+                
         rekap_prediksi = []
         for filepath in list_of_files:
             df_temp = load_data(filepath)
@@ -756,8 +774,14 @@ with tab3:
             s_mbe, s_rmse, r_err, chrt_dict = np.nan, np.nan, [], {}
             
             if not df_real_hourly.empty:
-                df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms']], left_on='datetime', right_on='waktu_utc', how='left')
-                chrt_dict = {'waktu': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(), 'prediksi': df_chrt['pred_speed'].tolist(), 'observasi': df_chrt['Real_Max_Speed_ms'].tolist()}
+                df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']], left_on='datetime', right_on='waktu_utc', how='left')
+                # 3 & 4. Simpan status Lulus di dictionary untuk grafik, hitung RMSE/MBE pakai SEMUA data (dropna)
+                chrt_dict = {
+                    'waktu': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(), 
+                    'prediksi': df_chrt['pred_speed'].tolist(), 
+                    'observasi': df_chrt['Real_Max_Speed_ms'].tolist(),
+                    'status': df_chrt['Kualitas_Data'].fillna('Tidak Lulus').tolist()
+                }
                 df_mgd = df_chrt.dropna(subset=['Real_Max_Speed_ms', 'pred_speed'])
                 if not df_mgd.empty:
                     err = df_mgd['Real_Max_Speed_ms'] - df_mgd['pred_speed']
@@ -773,17 +797,18 @@ with tab3:
         df_rekap_pred = pd.DataFrame(rekap_prediksi)
 
         if not df_rekap_pred.empty and not df_real_agg.empty:
-            df_verif = pd.merge(df_rekap_pred, df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Waktu_Max_Real', 'Kualitas_Data']], on=['Tanggal', 'Shift'], how='left')
-            df_verif.loc[df_verif['Real_Max_Speed_Max'].isna(), [f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Waktu_Max_Real']] = np.nan
+            df_verif = pd.merge(df_rekap_pred, df_real_agg[['Tanggal', 'Shift', 'Real_Max_Speed_Max', 'Waktu_Max_Real', 'Arah_Dom_Real', 'Status_Validasi']], on=['Tanggal', 'Shift'], how='left')
+            df_verif.loc[df_verif['Real_Max_Speed_Max'].isna(), [f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Waktu_Max_Real', 'Arah_Dom_Real']] = np.nan
         else:
             df_verif = df_rekap_pred.copy() if not df_rekap_pred.empty else pd.DataFrame()
             if not df_verif.empty: 
-                df_verif['Real_Max_Speed_Max'], df_verif['Waktu_Max_Real'], df_verif['Kualitas_Data'] = np.nan, np.nan, "Tidak Ada Data CSV"
+                df_verif['Real_Max_Speed_Max'], df_verif['Waktu_Max_Real'], df_verif['Arah_Dom_Real'], df_verif['Status_Validasi'] = np.nan, np.nan, "-", "Tidak Ada Data CSV"
 
         if not df_verif.empty:
-            df_verif.rename(columns={'Real_Max_Speed_Max': f'Observasi ({satuan_teks})', 'Waktu_Max_Real': 'Waktu Puncak', 'Kualitas_Data': 'Ketersediaan Data'}, inplace=True)
-            df_verif['Ketersediaan Data'] = df_verif['Ketersediaan Data'].fillna("Data Tidak/Belum Tersedia")
+            df_verif.rename(columns={'Real_Max_Speed_Max': f'Observasi ({satuan_teks})', 'Waktu_Max_Real': 'Waktu Puncak', 'Arah_Dom_Real': 'Arah Dominan'}, inplace=True)
+            df_verif['Status_Validasi'] = df_verif['Status_Validasi'].fillna("Menunggu Data")
             df_verif['Waktu Puncak'] = df_verif['Waktu Puncak'].fillna("-")
+            df_verif['Arah Dominan'] = df_verif['Arah Dominan'].fillna("-")
             
             df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
 
@@ -801,7 +826,8 @@ with tab3:
             for c in [f'Observasi ({satuan_teks})', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})']:
                 df_verif[c] = df_verif[c].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-            df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Ketersediaan Data']]
+            # Tampilkan Arah Dominan di tabel
+            df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', 'Arah Dominan', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Status_Validasi']]
 
             col_v1, col_v2, col_v3 = st.columns(3)
             with col_v1: st.metric("Shift Available", f"{len(valid_data)}", f"Total {len(df_verif)}")
@@ -810,20 +836,38 @@ with tab3:
 
             def clr_avail(val):
                 if isinstance(val, str):
-                    if 'Sangat Baik' in val: return 'color: #28a745;'
-                    if 'Cukup' in val: return 'color: #ffc107;'
-                    if 'Menunggu' in val or 'Tidak' in val: return 'color: #dc3545;'
+                    if 'Memenuhi' in val: return 'color: #28a745; font-weight: bold;'
+                    if 'Kurang' in val or 'Tidak' in val: return 'color: #dc3545;'
                 return ''
 
-            st.dataframe(df_v_show.style.map(clr_avail, subset=['Ketersediaan Data']), use_container_width=True, hide_index=True)
+            st.dataframe(df_v_show.style.map(clr_avail, subset=['Status_Validasi']), use_container_width=True, hide_index=True)
             
             @st.dialog("📈 Grafik Perbandingan Shift", width="large")
             def popup_grafik(tgl, shf, cd):
                 if not cd or 'waktu' not in cd: return st.warning("Data observasi tidak tersedia.")
                 fg = go.Figure()
-                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['prediksi'], mode='lines+markers', name='Model', line=dict(color='blue', width=2)))
-                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['observasi'], mode='lines+markers', name='HF Radar', line=dict(color='red', width=2)))
-                fg.update_layout(title=f"{tgl} | {shf}", xaxis_title="Waktu", yaxis_title=satuan_teks, hovermode="x unified")
+                
+                # Garis Prediksi
+                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
+                
+                # Garis Base Observasi (Tipis menyambungkan semua titik)
+                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['observasi'], mode='lines', name='Trend Radar', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dot'), showlegend=False))
+                
+                # Plot Pembeda Titik Lulus vs Tidak Lulus
+                w_lulus, obs_lulus, w_tdk, obs_tdk = [], [], [], []
+                for w, o, s in zip(cd['waktu'], cd['observasi'], cd['status']):
+                    if pd.isna(o): continue
+                    if s == 'Lulus':
+                        w_lulus.append(w); obs_lulus.append(o)
+                    else:
+                        w_tdk.append(w); obs_tdk.append(o)
+                
+                if w_lulus:
+                    fg.add_trace(go.Scatter(x=w_lulus, y=obs_lulus, mode='markers', name='Radar (Lulus)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
+                if w_tdk:
+                    fg.add_trace(go.Scatter(x=w_tdk, y=obs_tdk, mode='markers', name='Radar (Tidak Lulus)', marker=dict(color='#dc3545', size=8, symbol='x')))
+
+                fg.update_layout(title=f"Validasi: {tgl} | {shf}", xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})", hovermode="x unified")
                 st.plotly_chart(fg, use_container_width=True)
 
             col_p1, col_p2, _ = st.columns([2, 1, 1])
