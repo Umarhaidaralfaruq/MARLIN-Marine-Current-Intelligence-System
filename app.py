@@ -718,6 +718,12 @@ with tab3:
         path_verif_csv = PATHS["Verif_12jam"] 
         df_real_hourly, df_real_agg = pd.DataFrame(), pd.DataFrame()
         
+        # Helper untuk membalik arah observasi (Mirroring)
+        def mirror_arah(arah_str):
+            if arah_str == "Utara": return "Selatan"
+            if arah_str == "Selatan": return "Utara"
+            return arah_str
+
         if path_verif_csv.exists():
             try:
                 df_rr = pd.read_csv(path_verif_csv)
@@ -730,10 +736,10 @@ with tab3:
                     
                     df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']].copy()
                     
-                    # 1 & 2. Hitung Nilai Max & Arah Dominan HANYA dari timeframe yang "Lulus"
                     agg_list = []
                     for (tgl, shf), group in df_rr.groupby(['Tanggal', 'Shift']):
-                        lulus_group = group[group['Kualitas_Data'] == 'Lulus']
+                        # Toleransi kata Lulus dari file lama agar tidak error
+                        lulus_group = group[group['Kualitas_Data'].isin(['Memenuhi', 'Lulus'])]
                         
                         if not lulus_group.empty:
                             idx_max = lulus_group['Real_Max_Speed_ms'].idxmax()
@@ -741,11 +747,12 @@ with tab3:
                             wkt_max = (lulus_group.loc[idx_max, 'waktu_utc'] + pd.Timedelta(hours=7)).strftime('%H:%M WIB')
                             
                             arah_mode = lulus_group['Arah_Derajat'].mode()
-                            arah_dom = derajat_ke_utara_selatan(arah_mode[0]) if not arah_mode.empty else "-"
+                            arah_dom_asli = derajat_ke_utara_selatan(arah_mode[0]) if not arah_mode.empty else "-"
+                            arah_dom = mirror_arah(arah_dom_asli) # Terapkan Mirroring
                             status_kualitas = "Memenuhi Syarat"
                         else:
                             max_spd, wkt_max, arah_dom = np.nan, "-", "-"
-                            status_kualitas = "Data Lulus Kurang"
+                            status_kualitas = "Data Kurang"
                             
                         agg_list.append({
                             'Tanggal': tgl, 'Shift': shf,
@@ -775,12 +782,11 @@ with tab3:
             
             if not df_real_hourly.empty:
                 df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']], left_on='datetime', right_on='waktu_utc', how='left')
-                # 3 & 4. Simpan status Lulus di dictionary untuk grafik, hitung RMSE/MBE pakai SEMUA data (dropna)
                 chrt_dict = {
                     'waktu': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(), 
                     'prediksi': df_chrt['pred_speed'].tolist(), 
                     'observasi': df_chrt['Real_Max_Speed_ms'].tolist(),
-                    'status': df_chrt['Kualitas_Data'].fillna('Tidak Lulus').tolist()
+                    'status': df_chrt['Kualitas_Data'].fillna('Tidak Memenuhi').tolist()
                 }
                 df_mgd = df_chrt.dropna(subset=['Real_Max_Speed_ms', 'pred_speed'])
                 if not df_mgd.empty:
@@ -826,7 +832,6 @@ with tab3:
             for c in [f'Observasi ({satuan_teks})', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})']:
                 df_verif[c] = df_verif[c].apply(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '-')
 
-            # Tampilkan Arah Dominan di tabel
             df_v_show = df_verif[['Tanggal', 'Shift', f'Prediksi ({satuan_teks})', f'Observasi ({satuan_teks})', 'Waktu Puncak', 'Arah Dominan', f'MBE ({satuan_teks})', f'RMSE ({satuan_teks})', 'Status_Validasi']]
 
             col_v1, col_v2, col_v3 = st.columns(3)
@@ -850,22 +855,19 @@ with tab3:
                 # Garis Prediksi
                 fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
                 
-                # Garis Base Observasi (Tipis menyambungkan semua titik)
-                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['observasi'], mode='lines', name='Trend Radar', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dot'), showlegend=False))
-                
-                # Plot Pembeda Titik Lulus vs Tidak Lulus
+                # Plot Pembeda Titik Memenuhi vs Tidak Memenuhi
                 w_lulus, obs_lulus, w_tdk, obs_tdk = [], [], [], []
                 for w, o, s in zip(cd['waktu'], cd['observasi'], cd['status']):
                     if pd.isna(o): continue
-                    if s == 'Lulus':
+                    if s in ['Memenuhi', 'Lulus']:
                         w_lulus.append(w); obs_lulus.append(o)
                     else:
                         w_tdk.append(w); obs_tdk.append(o)
                 
                 if w_lulus:
-                    fg.add_trace(go.Scatter(x=w_lulus, y=obs_lulus, mode='markers', name='Radar (Lulus)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
+                    fg.add_trace(go.Scatter(x=w_lulus, y=obs_lulus, mode='markers', name='Radar (Memenuhi)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
                 if w_tdk:
-                    fg.add_trace(go.Scatter(x=w_tdk, y=obs_tdk, mode='markers', name='Radar (Tidak Lulus)', marker=dict(color='#dc3545', size=8, symbol='x')))
+                    fg.add_trace(go.Scatter(x=w_tdk, y=obs_tdk, mode='markers', name='Radar (Tidak Memenuhi)', marker=dict(color='#dc3545', size=8, symbol='x')))
 
                 fg.update_layout(title=f"Validasi: {tgl} | {shf}", xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})", hovermode="x unified")
                 st.plotly_chart(fg, use_container_width=True)
