@@ -734,7 +734,6 @@ with tab3:
                     df_rr['Shift'] = df_rr['waktu_utc'].dt.hour.apply(lambda h: "Shift Pagi" if h < 12 else "Shift Malam")
                     if satuan_teks == "Knot": df_rr['Real_Max_Speed_ms'] *= FAKTOR_KNOT
                     
-                    # Tambahkan pembacaan Arah_Derajat untuk di-passing ke Grafik
                     df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']].copy()
                     if 'Arah_Derajat' in df_rr.columns:
                         df_real_hourly['Arah_Derajat'] = df_rr['Arah_Derajat']
@@ -743,7 +742,6 @@ with tab3:
                     
                     agg_list = []
                     for (tgl, shf), group in df_rr.groupby(['Tanggal', 'Shift']):
-                        # Toleransi kata Lulus & Memenuhi
                         lulus_group = group[group['Kualitas_Data'].isin(['Memenuhi', 'Lulus'])]
                         
                         if not lulus_group.empty:
@@ -751,9 +749,12 @@ with tab3:
                             max_spd = lulus_group.loc[idx_max, 'Real_Max_Speed_ms']
                             wkt_max = (lulus_group.loc[idx_max, 'waktu_utc'] + pd.Timedelta(hours=7)).strftime('%H:%M WIB')
                             
-                            arah_mode = lulus_group['Arah_Derajat'].mode()
-                            arah_dom_asli = derajat_ke_utara_selatan(arah_mode[0]) if not arah_mode.empty else "-"
-                            arah_dom = mirror_arah(arah_dom_asli) # Terapkan Mirroring
+                            # PERBAIKAN: Konversi derajat ke kategori (Utara/Selatan) DULU, baru cari Modus-nya
+                            kategori_arah = lulus_group['Arah_Derajat'].apply(derajat_ke_utara_selatan)
+                            arah_mode = kategori_arah.mode()
+                            arah_dom_asli = arah_mode[0] if not arah_mode.empty else "-"
+                            
+                            arah_dom = mirror_arah(arah_dom_asli) if arah_dom_asli != "-" else "-"
                             status_kualitas = "Memenuhi Syarat"
                         else:
                             max_spd, wkt_max, arah_dom = np.nan, "-", "-"
@@ -788,7 +789,6 @@ with tab3:
             if not df_real_hourly.empty:
                 df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data', 'Arah_Derajat']], left_on='datetime', right_on='waktu_utc', how='left')
                 
-                # Simpan Waktu Asli (Datetime) untuk X-Axis Plotly agar add_vrect akurat
                 chrt_dict = {
                     'waktu_dt': df_chrt['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(), 
                     'waktu_label': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(),
@@ -873,7 +873,7 @@ with tab3:
                 # Garis Prediksi Utama
                 fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
                 
-                # Garis Trend Radar (Garis Tipis, legend disembunyikan)
+                # Garis Trend Radar (Garis Tipis menyambungkan semua titik)
                 fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['observasi'], mode='lines', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dot'), showlegend=False, hoverinfo='skip'))
                 
                 # Pembeda Titik Radar: Memenuhi vs Tidak Memenuhi
@@ -885,7 +885,6 @@ with tab3:
                 if not df_tdk.empty:
                     fg.add_trace(go.Scatter(x=df_tdk['waktu_dt'], y=df_tdk['observasi'], mode='markers', name='Radar (Tidak Memenuhi)', marker=dict(color='#dc3545', size=8, symbol='x')))
 
-                # Background Warna dan Anotasi Kelompok (Seperti Tab 2)
                 interval_jam = CHART_GROUPING_DEFAULT if 'CHART_GROUPING_DEFAULT' in globals() else 3
                 warna_bg = ['rgba(255, 255, 255, 0.05)', 'rgba(0, 0, 0, 0)']
                 
@@ -897,7 +896,6 @@ with tab3:
                     chunk = df_chart.iloc[i:i+interval_jam]
                     if chunk.empty: continue
                     
-                    # Hitung max dan arah dominan HANYA dari observasi yang memenuhi
                     chunk_memenuhi = chunk[chunk['status'].isin(['Memenuhi', 'Lulus'])].dropna(subset=['observasi'])
                     
                     if not chunk_memenuhi.empty:
@@ -918,22 +916,22 @@ with tab3:
                     mid_time = x0 + (x1 - x0) / 2
                     teks_label = f"Maks Obs: <b>{max_v_chunk:.2f} {satuan_teks}</b><br>{dom_dir_chunk}" if not pd.isna(max_v_chunk) else "Data Tidak<br>Memenuhi"
                     
+                    # PERBAIKAN: Posisi anotasi dinaikkan (y=1.12) agar tidak menabrak judul
                     fg.add_annotation(
-                        x=mid_time, y=1.05, yref="paper",
+                        x=mid_time, y=1.12, yref="paper",
                         text=teks_label,
                         showarrow=False, font=dict(size=11, color="#cbd5e1"), yanchor="bottom"
                     )
 
                 fg.update_layout(
-                    title=f"Validasi: {tgl} | {shf}", 
+                    title=dict(text=f"Validasi: {tgl} | {shf}", y=0.98, x=0.01), # PERBAIKAN: Posisi judul diturunkan sedikit
                     xaxis_title="Waktu (WIB)", 
                     yaxis_title=f"Kecepatan ({satuan_teks})", 
                     hovermode="x unified",
                     yaxis=dict(range=[0, ymax_plot]),
-                    margin=dict(t=80) # Ruang ekstra untuk teks atas
+                    margin=dict(t=120) # PERBAIKAN: Ruang atas (top margin) diperlebar drastis
                 )
                 
-                # Format Axis X kembali menjadi Jam (HH:MM)
                 fg.update_xaxes(tickformat="%H:%M")
                 st.plotly_chart(fg, use_container_width=True)
 
