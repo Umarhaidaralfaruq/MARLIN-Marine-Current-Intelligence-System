@@ -734,11 +734,16 @@ with tab3:
                     df_rr['Shift'] = df_rr['waktu_utc'].dt.hour.apply(lambda h: "Shift Pagi" if h < 12 else "Shift Malam")
                     if satuan_teks == "Knot": df_rr['Real_Max_Speed_ms'] *= FAKTOR_KNOT
                     
+                    # Tambahkan pembacaan Arah_Derajat untuk di-passing ke Grafik
                     df_real_hourly = df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']].copy()
+                    if 'Arah_Derajat' in df_rr.columns:
+                        df_real_hourly['Arah_Derajat'] = df_rr['Arah_Derajat']
+                    else:
+                        df_real_hourly['Arah_Derajat'] = np.nan
                     
                     agg_list = []
                     for (tgl, shf), group in df_rr.groupby(['Tanggal', 'Shift']):
-                        # Toleransi kata Lulus dari file lama agar tidak error
+                        # Toleransi kata Lulus & Memenuhi
                         lulus_group = group[group['Kualitas_Data'].isin(['Memenuhi', 'Lulus'])]
                         
                         if not lulus_group.empty:
@@ -781,12 +786,16 @@ with tab3:
             s_mbe, s_rmse, r_err, chrt_dict = np.nan, np.nan, [], {}
             
             if not df_real_hourly.empty:
-                df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data']], left_on='datetime', right_on='waktu_utc', how='left')
+                df_chrt = pd.merge(df_stat[['datetime', 'datetime_wib', 'pred_speed']], df_real_hourly[['waktu_utc', 'Real_Max_Speed_ms', 'Kualitas_Data', 'Arah_Derajat']], left_on='datetime', right_on='waktu_utc', how='left')
+                
+                # Simpan Waktu Asli (Datetime) untuk X-Axis Plotly agar add_vrect akurat
                 chrt_dict = {
-                    'waktu': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(), 
+                    'waktu_dt': df_chrt['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(), 
+                    'waktu_label': df_chrt['datetime_wib'].dt.strftime('%H:%M').tolist(),
                     'prediksi': df_chrt['pred_speed'].tolist(), 
                     'observasi': df_chrt['Real_Max_Speed_ms'].tolist(),
-                    'status': df_chrt['Kualitas_Data'].fillna('Tidak Memenuhi').tolist()
+                    'status': df_chrt['Kualitas_Data'].fillna('Tidak Memenuhi').tolist(),
+                    'arah_obs': df_chrt['Arah_Derajat'].tolist()
                 }
                 df_mgd = df_chrt.dropna(subset=['Real_Max_Speed_ms', 'pred_speed'])
                 if not df_mgd.empty:
@@ -849,27 +858,83 @@ with tab3:
             
             @st.dialog("📈 Grafik Perbandingan Shift", width="large")
             def popup_grafik(tgl, shf, cd):
-                if not cd or 'waktu' not in cd: return st.warning("Data observasi tidak tersedia.")
+                if not cd or 'waktu_dt' not in cd: return st.warning("Data observasi tidak tersedia.")
+                
+                df_chart = pd.DataFrame({
+                    'waktu_dt': pd.to_datetime(cd['waktu_dt']),
+                    'prediksi': cd['prediksi'],
+                    'observasi': cd['observasi'],
+                    'status': cd['status'],
+                    'arah_obs': cd['arah_obs']
+                })
+                
                 fg = go.Figure()
                 
-                # Garis Prediksi
-                fg.add_trace(go.Scatter(x=cd['waktu'], y=cd['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
+                # Garis Prediksi Utama
+                fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
                 
-                # Plot Pembeda Titik Memenuhi vs Tidak Memenuhi
-                w_lulus, obs_lulus, w_tdk, obs_tdk = [], [], [], []
-                for w, o, s in zip(cd['waktu'], cd['observasi'], cd['status']):
-                    if pd.isna(o): continue
-                    if s in ['Memenuhi', 'Lulus']:
-                        w_lulus.append(w); obs_lulus.append(o)
-                    else:
-                        w_tdk.append(w); obs_tdk.append(o)
+                # Garis Trend Radar (Garis Tipis, legend disembunyikan)
+                fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['observasi'], mode='lines', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dot'), showlegend=False, hoverinfo='skip'))
                 
-                if w_lulus:
-                    fg.add_trace(go.Scatter(x=w_lulus, y=obs_lulus, mode='markers', name='Radar (Memenuhi)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
-                if w_tdk:
-                    fg.add_trace(go.Scatter(x=w_tdk, y=obs_tdk, mode='markers', name='Radar (Tidak Memenuhi)', marker=dict(color='#dc3545', size=8, symbol='x')))
+                # Pembeda Titik Radar: Memenuhi vs Tidak Memenuhi
+                df_memenuhi = df_chart[df_chart['status'].isin(['Memenuhi', 'Lulus'])]
+                df_tdk = df_chart[~df_chart['status'].isin(['Memenuhi', 'Lulus'])]
+                
+                if not df_memenuhi.empty:
+                    fg.add_trace(go.Scatter(x=df_memenuhi['waktu_dt'], y=df_memenuhi['observasi'], mode='markers', name='Radar (Memenuhi)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
+                if not df_tdk.empty:
+                    fg.add_trace(go.Scatter(x=df_tdk['waktu_dt'], y=df_tdk['observasi'], mode='markers', name='Radar (Tidak Memenuhi)', marker=dict(color='#dc3545', size=8, symbol='x')))
 
-                fg.update_layout(title=f"Validasi: {tgl} | {shf}", xaxis_title="Waktu (WIB)", yaxis_title=f"Kecepatan ({satuan_teks})", hovermode="x unified")
+                # Background Warna dan Anotasi Kelompok (Seperti Tab 2)
+                interval_jam = CHART_GROUPING_DEFAULT if 'CHART_GROUPING_DEFAULT' in globals() else 3
+                warna_bg = ['rgba(255, 255, 255, 0.05)', 'rgba(0, 0, 0, 0)']
+                
+                ymax_val = df_chart[['prediksi', 'observasi']].max().max()
+                if pd.isna(ymax_val): ymax_val = 1.0
+                ymax_plot = ymax_val + (0.5 * faktor_konversi)
+
+                for i in range(0, len(df_chart), interval_jam):
+                    chunk = df_chart.iloc[i:i+interval_jam]
+                    if chunk.empty: continue
+                    
+                    # Hitung max dan arah dominan HANYA dari observasi yang memenuhi
+                    chunk_memenuhi = chunk[chunk['status'].isin(['Memenuhi', 'Lulus'])].dropna(subset=['observasi'])
+                    
+                    if not chunk_memenuhi.empty:
+                        max_v_chunk = chunk_memenuhi['observasi'].max()
+                        mode_arah_chunk = chunk_memenuhi['arah_obs'].apply(derajat_ke_utara_selatan).mode()
+                        arah_dom_asli = mode_arah_chunk[0] if not mode_arah_chunk.empty else "-"
+                        dom_dir_chunk = mirror_arah(arah_dom_asli) if arah_dom_asli != "-" else "-"
+                    else:
+                        max_v_chunk = np.nan
+                        dom_dir_chunk = "-"
+                        
+                    x0 = chunk['waktu_dt'].iloc[0] - pd.Timedelta(minutes=30)
+                    x1 = chunk['waktu_dt'].iloc[-1] + pd.Timedelta(minutes=30)
+                    
+                    color_idx = (i // interval_jam) % 2
+                    fg.add_vrect(x0=x0, x1=x1, fillcolor=warna_bg[color_idx], opacity=1, layer="below", line_width=0)
+                    
+                    mid_time = x0 + (x1 - x0) / 2
+                    teks_label = f"Maks Obs: <b>{max_v_chunk:.2f} {satuan_teks}</b><br>{dom_dir_chunk}" if not pd.isna(max_v_chunk) else "Data Tidak<br>Memenuhi"
+                    
+                    fg.add_annotation(
+                        x=mid_time, y=1.05, yref="paper",
+                        text=teks_label,
+                        showarrow=False, font=dict(size=11, color="#cbd5e1"), yanchor="bottom"
+                    )
+
+                fg.update_layout(
+                    title=f"Validasi: {tgl} | {shf}", 
+                    xaxis_title="Waktu (WIB)", 
+                    yaxis_title=f"Kecepatan ({satuan_teks})", 
+                    hovermode="x unified",
+                    yaxis=dict(range=[0, ymax_plot]),
+                    margin=dict(t=80) # Ruang ekstra untuk teks atas
+                )
+                
+                # Format Axis X kembali menjadi Jam (HH:MM)
+                fg.update_xaxes(tickformat="%H:%M")
                 st.plotly_chart(fg, use_container_width=True)
 
             col_p1, col_p2, _ = st.columns([2, 1, 1])
