@@ -167,8 +167,20 @@ def ekstrak_max_1_jam():
     if output_csv.exists():
         print("📂 Menggabungkan dengan database CSV historis...")
         df_old = pd.read_csv(output_csv)
+        
+        # --- TAMBAHAN UNTUK MENYERAGAMKAN DATA LAMA ---
+        mapping_kualitas = {
+            ">75% (Sangat Baik)": "Lulus",
+            "50% - 75% (Cukup)": "Lulus",
+            "<50% (Kurang)": "Tidak Lulus",
+            "Tidak Valid": "Tidak Lulus"
+        }
+        df_old['Kualitas_Data'] = df_old['Kualitas_Data'].replace(mapping_kualitas)
+        # ----------------------------------------------
+
         df_final = pd.concat([df_old, df_baru], ignore_index=True)
         
+        # Hapus duplikat waktu dengan menimpa data terlama
         df_final = df_final.drop_duplicates(subset=['Waktu_UTC'], keep='last')
         df_final = df_final.sort_values(by=['Waktu_UTC']).reset_index(drop=True)
     else:
