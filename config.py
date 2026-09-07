@@ -169,3 +169,11 @@ KONFIG_STATUS = {
 # =============================================================================
 CHART_GROUPING_OPTIONS = [2, 3, 4, 6]  # Pilihan rentang jam di dropdown
 CHART_GROUPING_DEFAULT = 3             # Nilai default awal (harus ada di dalam list di atas)
+
+# =============================================================================
+# 12. KONFIGURASI VALIDASI OTOMATIS
+# =============================================================================
+VALIDATION_CONFIG = {
+    'window_hours': 3,          # Berapa jam per kelompok timeframe
+    'threshold_percent': 0.5    # Persentase minimal kelulusan (0.5 = 50%)
+}
