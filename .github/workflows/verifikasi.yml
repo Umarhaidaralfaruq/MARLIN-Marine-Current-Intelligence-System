@@ -1,4 +1,4 @@
-name: Prediksi Operasional Arus Selat Bali
+name: Verifikasi Arus Selat Bali
 
 on:
   workflow_dispatch:
