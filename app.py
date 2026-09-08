@@ -742,20 +742,17 @@ with tab3:
                     
                     agg_list = []
                     for (tgl, shf), group in df_rr.groupby(['Tanggal', 'Shift']):
-                        lulus_group = group[group['Kualitas_Data'].isin(['Memenuhi', 'Lulus'])]
-                        
-                        if not lulus_group.empty:
-                            idx_max = lulus_group['Real_Max_Speed_ms'].idxmax()
-                            max_spd = lulus_group.loc[idx_max, 'Real_Max_Speed_ms']
-                            wkt_max = (lulus_group.loc[idx_max, 'waktu_utc'] + pd.Timedelta(hours=7)).strftime('%H:%M WIB')
+                        if not group.empty:
+                            idx_max = group['Real_Max_Speed_ms'].idxmax()
+                            max_spd = group.loc[idx_max, 'Real_Max_Speed_ms']
+                            wkt_max = (group.loc[idx_max, 'waktu_utc'] + pd.Timedelta(hours=7)).strftime('%H:%M WIB')
                             
-                            # PERBAIKAN: Konversi derajat ke kategori (Utara/Selatan) DULU, baru cari Modus-nya
-                            kategori_arah = lulus_group['Arah_Derajat'].apply(derajat_ke_utara_selatan)
+                            kategori_arah = group['Arah_Derajat'].apply(derajat_ke_utara_selatan)
                             arah_mode = kategori_arah.mode()
                             arah_dom_asli = arah_mode[0] if not arah_mode.empty else "-"
                             
                             arah_dom = mirror_arah(arah_dom_asli) if arah_dom_asli != "-" else "-"
-                            status_kualitas = "Memenuhi Syarat"
+                            status_kualitas = "Tersedia"
                         else:
                             max_spd, wkt_max, arah_dom = np.nan, "-", "-"
                             status_kualitas = "Data Kurang"
@@ -850,7 +847,7 @@ with tab3:
 
             def clr_avail(val):
                 if isinstance(val, str):
-                    if 'Memenuhi' in val: return 'color: #28a745; font-weight: bold;'
+                    if 'Tersedia' in val or 'Memenuhi' in val: return 'color: #28a745; font-weight: bold;'
                     if 'Kurang' in val or 'Tidak' in val: return 'color: #dc3545;'
                 return ''
 
@@ -873,18 +870,9 @@ with tab3:
                 # Garis Prediksi Utama
                 fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['prediksi'], mode='lines+markers', name='Model (Prediksi)', line=dict(color='#0d6efd', width=2)))
                 
-                # Garis Trend Radar (Garis Tipis menyambungkan semua titik)
-                fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['observasi'], mode='lines', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dot'), showlegend=False, hoverinfo='skip'))
+                # Garis Trend Radar 
+                fg.add_trace(go.Scatter(x=df_chart['waktu_dt'], y=df_chart['observasi'], mode='lines+markers', line=dict(color='red', width=2), name='Radar Observasi'))
                 
-                # Pembeda Titik Radar: Memenuhi vs Tidak Memenuhi
-                df_memenuhi = df_chart[df_chart['status'].isin(['Memenuhi', 'Lulus'])]
-                df_tdk = df_chart[~df_chart['status'].isin(['Memenuhi', 'Lulus'])]
-                
-                if not df_memenuhi.empty:
-                    fg.add_trace(go.Scatter(x=df_memenuhi['waktu_dt'], y=df_memenuhi['observasi'], mode='markers', name='Radar (Memenuhi)', marker=dict(color='#28a745', size=10, symbol='circle', line=dict(color='white', width=1))))
-                if not df_tdk.empty:
-                    fg.add_trace(go.Scatter(x=df_tdk['waktu_dt'], y=df_tdk['observasi'], mode='markers', name='Radar (Tidak Memenuhi)', marker=dict(color='#dc3545', size=8, symbol='x')))
-
                 interval_jam = CHART_GROUPING_DEFAULT if 'CHART_GROUPING_DEFAULT' in globals() else 3
                 warna_bg = ['rgba(255, 255, 255, 0.05)', 'rgba(0, 0, 0, 0)']
                 
@@ -896,11 +884,11 @@ with tab3:
                     chunk = df_chart.iloc[i:i+interval_jam]
                     if chunk.empty: continue
                     
-                    chunk_memenuhi = chunk[chunk['status'].isin(['Memenuhi', 'Lulus'])].dropna(subset=['observasi'])
+                    chunk_obs = chunk.dropna(subset=['observasi'])
                     
-                    if not chunk_memenuhi.empty:
-                        max_v_chunk = chunk_memenuhi['observasi'].max()
-                        mode_arah_chunk = chunk_memenuhi['arah_obs'].apply(derajat_ke_utara_selatan).mode()
+                    if not chunk_obs.empty:
+                        max_v_chunk = chunk_obs['observasi'].max()
+                        mode_arah_chunk = chunk_obs['arah_obs'].apply(derajat_ke_utara_selatan).mode()
                         arah_dom_asli = mode_arah_chunk[0] if not mode_arah_chunk.empty else "-"
                         dom_dir_chunk = mirror_arah(arah_dom_asli) if arah_dom_asli != "-" else "-"
                     else:
@@ -916,7 +904,6 @@ with tab3:
                     mid_time = x0 + (x1 - x0) / 2
                     teks_label = f"Maks Obs: <b>{max_v_chunk:.2f} {satuan_teks}</b><br>{dom_dir_chunk}" if not pd.isna(max_v_chunk) else "Data Tidak<br>Memenuhi"
                     
-                    # PERBAIKAN: Posisi anotasi dinaikkan (y=1.12) agar tidak menabrak judul
                     fg.add_annotation(
                         x=mid_time, y=1.12, yref="paper",
                         text=teks_label,
@@ -924,12 +911,12 @@ with tab3:
                     )
 
                 fg.update_layout(
-                    title=dict(text=f"Validasi: {tgl} | {shf}", y=0.98, x=0.01), # PERBAIKAN: Posisi judul diturunkan sedikit
+                    title=dict(text=f"Validasi: {tgl} | {shf}", y=0.98, x=0.01),
                     xaxis_title="Waktu (WIB)", 
                     yaxis_title=f"Kecepatan ({satuan_teks})", 
                     hovermode="x unified",
                     yaxis=dict(range=[0, ymax_plot]),
-                    margin=dict(t=120) # PERBAIKAN: Ruang atas (top margin) diperlebar drastis
+                    margin=dict(t=120) 
                 )
                 
                 fg.update_xaxes(tickformat="%H:%M")
