@@ -34,9 +34,25 @@ def filter_temporal_iqr(da):
     return da.where(is_normal)
 
 def resample_velocity(ds, method='max_amplitude', freq='1H', u_var='u', v_var='v'):
+    
+    # ==========================================
+    # 1. HITUNG JUMLAH REKAMAN ASLI PER JAM
+    # ==========================================
+    # Buat array 1D berisi angka 1 untuk setiap timestep mentah
+    dummy_counts = xr.DataArray(np.ones(len(ds.time)), coords=[ds.time], dims=['time'])
+    
+    # Hitung total kemunculan data mentah per blok waktu resample (misal per 1 Jam)
+    time_records_count = dummy_counts.resample(time=freq).sum()
+    
+    # Tetapkan batas minimal (Misal minimal butuh 3 atau 4 data dari total 6 data 10-menitan)
+    # Bisa juga dimasukkan ke SPATIAL_CONFIG['min_temporal_records']
+    MIN_TEMPORAL_RECORDS = SPATIAL_CONFIG.get('min_temporal_records', 3)
+    # ==========================================
+
+    # 2. LAKUKAN PROSES RESAMPLE SEPERTI BIASA
     if method == 'mean':
         print(f"🔄 Resample ({freq}) menggunakan metode: MEAN")
-        return ds.resample(time=freq).mean()
+        ds_resampled = ds.resample(time=freq).mean()
         
     elif method == 'max_amplitude':
         print(f"🔄 Resample ({freq}) menggunakan metode: MAX AMPLITUDE (Vector-Preserving)")
@@ -45,25 +61,32 @@ def resample_velocity(ds, method='max_amplitude', freq='1H', u_var='u', v_var='v
             if len(subset_ds.time) == 0:
                 return subset_ds
                 
-            # 1. Hitung amplitudo
             speed = np.sqrt(subset_ds[u_var]**2 + subset_ds[v_var]**2)
-            
-            # 2. PERBAIKAN: Isi NaN dengan -1 sementara agar argmax tidak error di area daratan
             idx = speed.fillna(-1.0).argmax(dim='time')
-            
-            # 3. Potong dataset
             return subset_ds.isel(time=idx)
             
-        return ds.resample(time=freq).map(_get_vector_at_max_speed)
+        ds_resampled = ds.resample(time=freq).map(_get_vector_at_max_speed)
         
     elif method == 'p95':
         print(f"🔄 Resample ({freq}) menggunakan metode: P95 (95th Percentile Extreme)")
         ds_p95 = ds.resample(time=freq).quantile(0.95).drop_vars('quantile', errors='ignore')
         ds_p05 = ds.resample(time=freq).quantile(0.05).drop_vars('quantile', errors='ignore')
-        return xr.where(abs(ds_p05) > abs(ds_p95), ds_p05, ds_p95)
+        ds_resampled = xr.where(abs(ds_p05) > abs(ds_p95), ds_p05, ds_p95)
         
     else:
-        raise ValueError(f"Metode '{method}' tidak didukung. Pilih 'mean', 'max_amplitude', atau 'p95'.")
+        raise ValueError(f"Metode '{method}' tidak didukung.")
+
+    # ==========================================
+    # 3. TERAPKAN MASKING BERDASARKAN SYARAT TEMPORAL
+    # ==========================================
+    # Grid yang jumlah rekaman aslinya kurang dari batas akan otomatis diubah jadi NaN
+    ds_resampled = ds_resampled.where(time_records_count >= MIN_TEMPORAL_RECORDS)
+    
+    dropped_hours = int((time_records_count < MIN_TEMPORAL_RECORDS).sum())
+    if dropped_hours > 0:
+        print(f"⚖️ Menganulir {dropped_hours} jam hasil resample karena rekaman data mentah < {MIN_TEMPORAL_RECORDS}.")
+
+    return ds_resampled
 
 def run_data_preparation():
     print("\n" + "="*50)
@@ -151,6 +174,28 @@ def run_data_preparation():
             print(f"✂️ CUTOFF: Data jam {waktu_terakhir.hour}:00 dibuang karena tidak penuh (hanya sampai menit {waktu_terakhir.minute}).")
         # ==========================================
 
+        # ==========================================
+        # TREATMENT: SPATIAL THRESHOLD PER TIMESTEP
+        # ==========================================
+        # Asumsi dimensi spasial bernama 'lat' dan 'lon' (sesuaikan jika 'x'/'y')
+        spatial_dims = [dim for dim in ds.dims if dim != 'time']
+        
+        # Hitung total grid yang berisi angka (bukan NaN) di setiap timestep
+        valid_points_per_time = ds['u'].notnull().sum(dim=spatial_dims)
+        
+        # Tetapkan batas minimal dari config (misal minimal 200 titik grid per timestep)
+        MIN_VALID_POINTS = SPATIAL_CONFIG.get('min_spatial_points_per_timestep', 200)
+        
+        # Filter timestep yang memenuhi syarat
+        valid_time_mask = valid_points_per_time >= MIN_VALID_POINTS
+        
+        dropped_timesteps = int((~valid_time_mask).sum())
+        if dropped_timesteps > 0:
+            print(f"✂️ Membuang {dropped_timesteps} timestep karena titik spasial valid < {MIN_VALID_POINTS}.")
+        
+        # Update dataset hanya dengan waktu yang valid
+        ds = ds.sel(time=valid_time_mask)
+
         # Setelah bersih, baru dilakukan resample
         ds = resample_velocity(
             ds, 
@@ -208,7 +253,7 @@ def run_data_preparation():
     u_mean.to_netcdf(PATHS['spatial_mean_u'], mode='w')
     v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
     
-    print("🧼 8. Imputasi Akhir (Sisa NaN > {MODEL_CONFIG['max_save_nan']} Jam menjadi 0.0 murni)...")
+    print(f"🧼 8. Imputasi Akhir (Sisa NaN > {MODEL_CONFIG['max_save_nan']} Jam menjadi 0.0 murni)...")
     # Merubah sisa celah waktu yang besar menjadi netral (0.0) untuk PCA
     ds_final = ds_anom.fillna(0.0)
 
