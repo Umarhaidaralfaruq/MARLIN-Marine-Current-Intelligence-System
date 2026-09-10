@@ -126,8 +126,8 @@ FEATURE_TOGGLES = {
 SPATIAL_CONFIG = {
     'RESAMPLE_METHOD': 'max_amplitude',  
     'RESAMPLE_FREQ': '1H',
-    'min_spatial_points_per_timestep': 200,  # Batas minimal titik grid valid (bukan NaN) per 10-menitan
-    'min_temporal_records': 3,               # Batas minimal frekuensi data mentah yang harus ada dalam 1 jam
+    'min_spatial_percent_from_avg': 0.5,     # Batas minimal 50% dari rata-rata titik valid
+    'min_temporal_records': 3,               
 }
 
 # =============================================================================
