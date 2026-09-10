@@ -18,29 +18,32 @@ echo -------------------------------------------------
 echo [3/3] Mengeksekusi Script Python...
 echo -------------------------------------------------
 
-REM echo =^> Extract Data Arus dan Pasut
-REM python "extractdata.py"
+echo =^> Extract Data Arus dan Pasut
+python "extractdata.py"
 
-REM echo =^> Spatial Pre-processing
-REM python "Spatial Pre-processing.py"
+echo =^> Spatial Pre-processing
+python "Spatial Pre-processing.py"
 
-REM echo =^> MEOF Analysis
-REM python "MEOF Analysis.py"
+echo =^> MEOF Analysis
+python "MEOF Analysis.py"
 
-REM echo =^> Training
-REM python "Training.py"
+echo =^> Training
+python "Training.py"
 
-REM echo =^> Reconstruction
-REM python "reconstruction.py"
+echo =^> Reconstruction
+python "reconstruction.py"
 
-echo =^> Mengunggah Model Baru ke GitHub...
-git add "01 Artefak/Aset/*.joblib"
-git add "01 Artefak/Aset/*.h5"
-git add *.joblib
-git add *.h5
-git commit -m "Update model LSTM dan PCA terbaru hasil eksperimen lokal"
-git push origin main
-echo =^> Selesai! Model siap digunakan oleh Robot GitHub besok pagi!
+REM echo =^> cek_nc
+REM python "cek_nc.py"
+
+REM echo =^> Mengunggah Model Baru ke GitHub...
+REM git add "01 Artefak/Aset/*.joblib"
+REM git add "01 Artefak/Aset/*.h5"
+REM git add *.joblib
+REM git add *.h5
+REM git commit -m "Update model LSTM dan PCA terbaru hasil eksperimen lokal"
+REM git push origin main
+REM echo =^> Selesai! Model siap digunakan oleh Robot GitHub besok pagi!
 
 echo.
 echo =================================================

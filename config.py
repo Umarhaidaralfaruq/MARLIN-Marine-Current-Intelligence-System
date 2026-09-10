@@ -93,7 +93,7 @@ MODEL_CONFIG = {
     'min_seq_len': 96,    
     'min_segmen_len': 48, 
     'max_save_nan': 5,     
-    'ocean_threshold': 0.5,
+    'ocean_threshold': 0.2,
     
     'lstm_units': 256,
     'dropout_rate': 0.2,

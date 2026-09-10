@@ -177,21 +177,27 @@ def run_data_preparation():
         # ==========================================
         # TREATMENT: SPATIAL THRESHOLD PER TIMESTEP
         # ==========================================
-        # Asumsi dimensi spasial bernama 'lat' dan 'lon' (sesuaikan jika 'x'/'y')
         spatial_dims = [dim for dim in ds.dims if dim != 'time']
         
-        # Hitung total grid yang berisi angka (bukan NaN) di setiap timestep
+        # 1. Hitung total grid yang berisi angka di setiap timestep (otomatis tanpa daratan)
         valid_points_per_time = ds['u'].notnull().sum(dim=spatial_dims)
         
-        # Tetapkan batas minimal dari config (misal minimal 200 titik grid per timestep)
-        MIN_VALID_POINTS = SPATIAL_CONFIG.get('min_spatial_points_per_timestep', 200)
+        # 2. Hitung rata-rata ketersediaan titik data di seluruh waktu
+        rata_rata_titik = valid_points_per_time.mean().item()
         
-        # Filter timestep yang memenuhi syarat
+        # 3. Tentukan batas minimal berdasarkan persentase dari config
+        persentase_batas = SPATIAL_CONFIG.get('min_spatial_percent_from_avg', 0.5)
+        MIN_VALID_POINTS = int(rata_rata_titik * persentase_batas)
+        
+        print(f"📊 Rata-rata titik data per timestep : {rata_rata_titik:.0f} titik")
+        print(f"🎯 Batas minimal spasial ({persentase_batas*100}%)   : {MIN_VALID_POINTS} titik")
+        
+        # 4. Filter dan terapkan
         valid_time_mask = valid_points_per_time >= MIN_VALID_POINTS
         
         dropped_timesteps = int((~valid_time_mask).sum())
         if dropped_timesteps > 0:
-            print(f"✂️ Membuang {dropped_timesteps} timestep karena titik spasial valid < {MIN_VALID_POINTS}.")
+            print(f"✂️ Membuang {dropped_timesteps} timestep karena data spasial rusak (di bawah batas minimal).")
         
         # Update dataset hanya dengan waktu yang valid
         ds = ds.sel(time=valid_time_mask)
