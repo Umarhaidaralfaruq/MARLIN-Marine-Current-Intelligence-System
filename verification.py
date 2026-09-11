@@ -10,6 +10,7 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 from scipy import stats
+from scipy.stats import circmean # Tambahan pustaka untuk menghitung rata-rata arah/derajat
 
 # Tambahkan VALIDATION_CONFIG di import
 from config import PATHS, VALIDASI_DIR, VALIDATION_CONFIG 
@@ -59,7 +60,7 @@ def ekstrak_max_1_jam():
     
     list_df_10m = []
     
-    print("⏱️ Mengekstrak nilai P95 (Kecepatan) & Modus (Arah) per 10 menit...")
+    print("⏱️ Mengekstrak nilai P95 (Kecepatan) & Circular Mean (Arah) per 10 menit...")
     for f in all_files:
         if not os.path.exists(f): continue
         try:
@@ -95,7 +96,8 @@ def ekstrak_max_1_jam():
             for t_idx in range(uvdir_flat.shape[0]):
                 arr_clean = uvdir_flat[t_idx][~np.isnan(uvdir_flat[t_idx])]
                 if len(arr_clean) > 0:
-                    val = float(stats.mode(arr_clean, keepdims=True)[0][0])
+                    # PERUBAHAN: Menggunakan circular mean untuk arah sirkular 0-360 derajat
+                    val = float(circmean(arr_clean, high=360, low=0))
                 else:
                     val = np.nan
                 modes_10m.append(val)
@@ -118,15 +120,16 @@ def ekstrak_max_1_jam():
     df_all = pd.concat(list_df_10m)
     df_all = df_all[~df_all.index.duplicated(keep='last')].sort_index()
     
-    def get_mode(x):
+    # PERUBAHAN: Fungsi agregasi dari mode ke circular mean
+    def get_circular_mean(x):
         x = x.dropna()
         if len(x) > 0:
-            return float(stats.mode(x, keepdims=True)[0][0])
+            return float(circmean(x, high=360, low=0))
         return np.nan
 
     df_1jam = df_all.resample('1H').agg(
         Real_Max_Speed_ms=('Real_Max_Speed_ms', 'max'),
-        Arah_Derajat=('Arah_Derajat', get_mode),
+        Arah_Derajat=('Arah_Derajat', get_circular_mean), # Panggil fungsi baru
         Jumlah_Data=('Real_Max_Speed_ms', 'count')
     ).reset_index()
     

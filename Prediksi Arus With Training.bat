@@ -33,17 +33,25 @@ python "Training.py"
 echo =^> Reconstruction
 python "reconstruction.py"
 
-REM echo =^> cek_nc
-REM python "cek_nc.py"
+echo =^> cek_nc
+python "cek_nc.py"
 
-REM echo =^> Mengunggah Model Baru ke GitHub...
-REM git add "01 Artefak/Aset/*.joblib"
-REM git add "01 Artefak/Aset/*.h5"
-REM git add *.joblib
-REM git add *.h5
-REM git commit -m "Update model LSTM dan PCA terbaru hasil eksperimen lokal"
-REM git push origin main
-REM echo =^> Selesai! Model siap digunakan oleh Robot GitHub besok pagi!
+echo => Sinkronisasi dengan GitHub terlebih dahulu...
+git pull --rebase origin main
+
+echo => Mengunggah Model Baru dan Artefak ke GitHub...
+git add "01 Artefak/Aset/*.joblib"
+git add "01 Artefak/Aset/*.h5"
+git add *.joblib
+git add *.h5
+
+:: 3. Buat commit (|| echo memastikan skrip lanjut meski tidak ada perubahan)
+git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru" || echo => Tidak ada perubahan pada model untuk di-commit.
+
+:: 4. Push ke GitHub
+git push origin main
+
+echo => Selesai! Model dan artefak siap digunakan oleh Robot GitHub!
 
 echo.
 echo =================================================
