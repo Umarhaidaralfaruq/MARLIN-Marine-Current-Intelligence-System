@@ -96,8 +96,11 @@ def ekstrak_max_1_jam():
             for t_idx in range(uvdir_flat.shape[0]):
                 arr_clean = uvdir_flat[t_idx][~np.isnan(uvdir_flat[t_idx])]
                 if len(arr_clean) > 0:
-                    # PERUBAHAN: Menggunakan circular mean untuk arah sirkular 0-360 derajat
-                    val = float(circmean(arr_clean, high=360, low=0))
+                    # 1. Hitung rata-rata sirkular derajat asli
+                    val_asli = float(circmean(arr_clean, high=360, low=0))
+                    # 2. Balik arahnya 180 derajat (Flowing From -> Flowing To)
+                    val_dibalik = (val_asli + 180) % 360
+                    val = val_dibalik
                 else:
                     val = np.nan
                 modes_10m.append(val)
@@ -121,6 +124,7 @@ def ekstrak_max_1_jam():
     df_all = df_all[~df_all.index.duplicated(keep='last')].sort_index()
     
     # PERUBAHAN: Fungsi agregasi dari mode ke circular mean
+    # Fungsi agregasi ke 1 Jam (Tidak perlu ditambah 180 lagi di sini)
     def get_circular_mean(x):
         x = x.dropna()
         if len(x) > 0:
