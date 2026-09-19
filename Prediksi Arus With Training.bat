@@ -33,8 +33,6 @@ python "Training.py"
 echo =^> Reconstruction
 python "reconstruction.py"
 
-echo =^> cek_nc
-python "cek_nc.py"
 
 echo => Sinkronisasi dengan GitHub terlebih dahulu...
 git pull --rebase origin main
