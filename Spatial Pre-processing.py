@@ -262,8 +262,18 @@ def run_data_preparation():
     v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
     
     print(f"🧼 8. Imputasi Akhir (Sisa NaN > {MODEL_CONFIG['max_save_nan']} Jam menjadi 0.0 murni)...")
-    # Merubah sisa celah waktu yang besar menjadi netral (0.0) untuk PCA
+    
+    # 1. Simpan Ocean Mask sebelum fillna
+    # Gunakan ocean_mask yang sudah lu hitung sebelumnya di Langkah 4
+    mask_lautan = ds_filled['u'].notnull().any(dim='time') 
+    
+    # 2. Lakukan Imputasi (ini akan mengubah daratan jadi 0 juga)
     ds_final = ds_anom.fillna(0.0)
+    
+    # 3. Kembalikan daratan menjadi NaN dengan where()
+    # where(mask) akan mempertahankan nilai jika mask = True (laut),
+    # dan mengubahnya jadi NaN jika mask = False (daratan).
+    ds_final = ds_final.where(mask_lautan)
 
     ds_final.to_netcdf(PATHS['dataset_arus'])
     
