@@ -221,9 +221,17 @@ def run_data_preparation():
     ocean_mask = (ds['u'].notnull().sum(dim='time') / len(ds.time)) > MODEL_CONFIG['ocean_threshold']
     ds = ds.where(ocean_mask)
 
-    print("🧹 5. Menghapus Outlier (Temporal IQR -> NaN)...")
-    ds['u'] = filter_temporal_iqr(ds['u'])
-    ds['v'] = filter_temporal_iqr(ds['v'])
+    print("🧹 5. Menghapus Outlier (Temporal IQR Vector-Consistent -> NaN)...")
+    # 1. Hitung filter IQR temporal secara terpisah dulu untuk dapet batas masing-masing
+    u_cleaned = filter_temporal_iqr(ds['u'])
+    v_cleaned = filter_temporal_iqr(ds['v'])
+
+    # 2. Buat mask bersama: Hanya dianggap VALID jika U DAN V sama-sama BUKAN NaN
+    valid_vector_mask = u_cleaned.notnull() & v_cleaned.notnull()
+
+    # 3. Terapkan mask bersama ke kedua komponen U dan V
+    ds['u'] = ds['u'].where(valid_vector_mask)
+    ds['v'] = ds['v'].where(valid_vector_mask)
 
     print(f"🩹 6. Menambal data bolong (Interpolation maks {MODEL_CONFIG['max_save_nan']} jam)...")
     
@@ -254,44 +262,73 @@ def run_data_preparation():
 
     print(f"🔎 Max speed setelah clipping: {speed_final.max().item():.4f} m/s")
 
-    print("📉 7. Menghitung Anomali Spasial (Mean-Centering Bebas Leakage)...")
-    
-    # A. Cari tahu batas indeks untuk pemotongan (Splitting)
+    print("📉 7. Menghitung Anomali Spasial...")
     total_time_steps = len(ds_filled.time)
     split_idx = int(total_time_steps * TRAIN_RATIO)
     
-    # B. Isolasi data HANYA untuk porsi Training
-    # .isel() digunakan untuk memotong berdasarkan indeks
     ds_train_only = ds_filled.isel(time=slice(0, split_idx))
     
-    # C. Hitung rata-rata murni HANYA dari masa lalu (Data Train)
     u_mean = ds_train_only['u'].mean(dim='time')
     v_mean = ds_train_only['v'].mean(dim='time')
     
-    # D. Kurangi seluruh rentang waktu (Train & Test) dengan rata-rata Train
     ds_anom = ds_filled.copy()
     ds_anom['u'] = ds_filled['u'] - u_mean
     ds_anom['v'] = ds_filled['v'] - v_mean
 
-    # Pake mode='w' biar selalu nimpa file rata-rata yang lama pakai update terbaru
     u_mean.to_netcdf(PATHS['spatial_mean_u'], mode='w')
     v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
     
-    print(f"🧼 8. Imputasi Akhir (Sisa NaN > {MODEL_CONFIG['max_save_nan']} Jam menjadi 0.0 murni)...")
+    print(f"🧼 8. Imputasi Akhir Vector-Consistent...")
     
-    # 1. Simpan Ocean Mask sebelum fillna
-    # Gunakan ocean_mask yang sudah lu hitung sebelumnya di Langkah 4
+    # Masking Lautan Murni
     mask_lautan = ds_filled['u'].notnull().any(dim='time') 
     
-    # 2. Lakukan Imputasi (ini akan mengubah daratan jadi 0 juga)
+    # Pastikan jika U nan maka V nan sebelum fillna
+    nan_mask = ds_anom['u'].isnull() | ds_anom['v'].isnull()
+    ds_anom['u'] = ds_anom['u'].where(~nan_mask)
+    ds_anom['v'] = ds_anom['v'].where(~nan_mask)
+
+    # Lakukan fillna 0.0 (artinya baik U maupun V dianggap bernilai mean/radar mati)
     ds_final = ds_anom.fillna(0.0)
     
-    # 3. Kembalikan daratan menjadi NaN dengan where()
-    # where(mask) akan mempertahankan nilai jika mask = True (laut),
-    # dan mengubahnya jadi NaN jika mask = False (daratan).
+    # Kembalikan area daratan menjadi NaN
     ds_final = ds_final.where(mask_lautan)
+    
+    # QC FINAL ABSOLUTE VELOCITY
+    u_check = ds_anom['u'] + u_mean
+    v_check = ds_anom['v'] + v_mean
+
+    speed_check = np.sqrt(u_check**2 + v_check**2)
+
+    print("\n🔍 FINAL QC SEBELUM DISIMPAN")
+    print(f"Max U       : {u_check.max().item():.4f} m/s")
+    print(f"Min U       : {u_check.min().item():.4f} m/s")
+    print(f"Max V       : {v_check.max().item():.4f} m/s")
+    print(f"Min V       : {v_check.min().item():.4f} m/s")
+    print(f"Max Speed   : {speed_check.max().item():.4f} m/s")
 
     ds_final.to_netcdf(PATHS['dataset_arus'])
+    
+    print("\n================ FINAL FILE CHECK ================")
+
+    ds_test = xr.open_dataset(PATHS['dataset_arus'])
+    u_mean_test = xr.open_dataset(PATHS['spatial_mean_u'])['u']
+    v_mean_test = xr.open_dataset(PATHS['spatial_mean_v'])['v']
+
+    u_reconstructed = ds_test['u'] + u_mean_test
+    v_reconstructed = ds_test['v'] + v_mean_test
+
+    speed_reconstructed = np.sqrt(
+        u_reconstructed**2 + v_reconstructed**2
+    )
+
+    print(f"Max reconstructed U     : {u_reconstructed.max().item():.4f}")
+    print(f"Min reconstructed U     : {u_reconstructed.min().item():.4f}")
+    print(f"Max reconstructed V     : {v_reconstructed.max().item():.4f}")
+    print(f"Min reconstructed V     : {v_reconstructed.min().item():.4f}")
+    print(f"Max reconstructed Speed : {speed_reconstructed.max().item():.4f}")
+
+    ds_test.close()
     
     # Cleanup memory
     for d in datasets_list: d.close()
