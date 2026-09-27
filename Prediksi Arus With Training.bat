@@ -34,6 +34,7 @@ echo --- Reconstruction
 python "reconstruction.py"
 
 echo --- Mengunggah Model Baru dan Artefak ke Git lokal...
+git add "00 Data/*.nc"
 git add "01 Artefak/Aset/*.joblib"
 git add "01 Artefak/Aset/*.h5"
 git add *.joblib
