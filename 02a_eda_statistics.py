@@ -1,6 +1,7 @@
 # =============================================================================
 # FILE: 02a_eda_comparative_statistics.py
-# DESKRIPSI: Modul 2 - Komparasi Distribusi Arus (RAW vs PRE-PROCESSED)
+# DESKRIPSI: Modul 2 - Komparasi Distribusi Arus (RAW vs PRE-PROCESSED Cleaned)
+#            Menggabungkan fitur komparasi dengan filtering imputasi 0.0
 # =============================================================================
 
 import os
@@ -13,11 +14,8 @@ import seaborn as sns
 
 from config import PATHS
 
-# SESUAIKAN NAMA FILE OUTPUT FASE 1 LU DI SINI
-PREPROCESSED_FILE = "01_Output/dataset_arus.nc" 
-
 def generate_stats_and_plot(u_valid, v_valid, title_prefix, save_filename):
-    """Fungsi helper untuk menghitung stats dan menggambar plot"""
+    """Fungsi helper untuk menghitung deskripsi statistik dan menggambar histogram"""
     speed = np.sqrt(u_valid**2 + v_valid**2)
     
     df_stats = pd.DataFrame({
@@ -37,43 +35,48 @@ def generate_stats_and_plot(u_valid, v_valid, title_prefix, save_filename):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle(f"Distribusi Statistik - {title_prefix}", fontsize=16, fontweight='bold')
 
-    sns.histplot(df_stats['U_Velocity'], bins=150, kde=True, ax=axes[0], color='blue')
-    axes[0].set_title('Distribusi Komponen U', fontsize=12)
+    # Plot U Velocity
+    sns.histplot(df_stats['U_Velocity'], bins=100, kde=True, ax=axes[0], color='blue')
+    axes[0].set_title('Distribusi Komponen U (Timur-Barat)', fontsize=12)
     axes[0].set_xlabel('Kecepatan (m/s)')
+    axes[0].set_ylabel('Frekuensi Kejadian')
+    axes[0].axvline(df_stats['U_Velocity'].mean(), color='red', linestyle='--', label='Mean')
 
-    sns.histplot(df_stats['V_Velocity'], bins=150, kde=True, ax=axes[1], color='green')
-    axes[1].set_title('Distribusi Komponen V', fontsize=12)
+    # Plot V Velocity
+    sns.histplot(df_stats['V_Velocity'], bins=100, kde=True, ax=axes[1], color='green')
+    axes[1].set_title('Distribusi Komponen V (Utara-Selatan)', fontsize=12)
     axes[1].set_xlabel('Kecepatan (m/s)')
+    axes[1].axvline(df_stats['V_Velocity'].mean(), color='red', linestyle='--', label='Mean')
 
-    sns.histplot(df_stats['Current_Speed'], bins=150, kde=True, ax=axes[2], color='purple')
+    # Plot Speed (Magnitude)
+    sns.histplot(df_stats['Current_Speed'], bins=100, kde=True, ax=axes[2], color='purple')
     axes[2].set_title('Distribusi Total Kecepatan (Speed)', fontsize=12)
     axes[2].set_xlabel('Kecepatan (m/s)')
+    axes[2].axvline(df_stats['Current_Speed'].mean(), color='red', linestyle='--', label='Mean')
     
+    p99_speed = df_stats['Current_Speed'].quantile(0.99)
     p999_speed = df_stats['Current_Speed'].quantile(0.999)
-    max_speed = df_stats['Current_Speed'].max()
-    
+    axes[2].axvline(p99_speed, color='orange', linestyle='-', linewidth=2, label=f'P99 ({p99_speed:.2f} m/s)')
     axes[2].axvline(p999_speed, color='red', linestyle='--', linewidth=2, label=f'P99.9 ({p999_speed:.2f} m/s)')
-    axes[2].legend()
     
-    if max_speed > 5:
-        for ax in axes:
-            ax.set_xlim(df_stats.iloc[:, list(axes).index(ax)].quantile(0.0005), 
-                        df_stats.iloc[:, list(axes).index(ax)].quantile(0.9995))
+    for ax in axes:
+        ax.legend()
 
     plt.tight_layout()
-    os.makedirs("outputs", exist_ok=True)
-    save_path = os.path.join("outputs", save_filename)
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, save_filename)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"💾 Grafik tersimpan di: {save_path}")
     plt.close()
 
 def run_comparative_analysis():
     print("\n" + "="*60)
-    print("🌊 MODUL 2: KOMPARASI RAW DATA VS PRE-PROCESSED")
+    print("🌊 MODUL 2: KOMPARASI RAW DATA VS PRE-PROCESSED (CLEANED)")
     print("="*60)
 
     # =========================================================================
-    # 1. ANALISIS RAW DATA
+    # 1. ESTRAKSI RAW DATA (BELUM DI-TREATMENT)
     # =========================================================================
     pattern = PATHS["hf_radar_pattern"]
     all_files = glob.glob(pattern)
@@ -83,20 +86,21 @@ def run_comparative_analysis():
         return
 
     datasets_list = []
-    print(f"\n🔄 [1/2] Mengekstrak {len(all_files)} file RAW dari {pattern} ...")
+    print(f"\n🔄 [1/2] Mengekstrak {len(all_files)} file NetCDF RAW...")
     for f in all_files:
         if not os.path.exists(f): continue
         try:
-            if os.path.getsize(f) / 1024 < 50:
-                pass
             ds_temp = xr.open_dataset(f, engine='netcdf4')[['u', 'v']].load()
             datasets_list.append(ds_temp)
-        except ValueError:
+        except Exception:
             try:
                 ds_temp = xr.open_dataset(f, engine='scipy')[['u', 'v']].load()
                 datasets_list.append(ds_temp)
-            except: pass
-        except: pass
+            except Exception: pass
+
+    if not datasets_list:
+        print("❌ Gagal membaca dataset RAW.")
+        return
 
     print("🧩 Menggabungkan dataset RAW...")
     ds_raw = xr.concat(datasets_list, dim='time').sortby('time')
@@ -106,29 +110,50 @@ def run_comparative_analysis():
     v_raw = ds_raw['v'].values.flatten()
     valid_raw_idx = ~np.isnan(u_raw) & ~np.isnan(v_raw)
     
-    generate_stats_and_plot(u_raw[valid_raw_idx], v_raw[valid_raw_idx], 
-                            "RAW DATA (Sebelum Treatment)", "01_distribusi_raw.png")
+    generate_stats_and_plot(
+        u_raw[valid_raw_idx], 
+        v_raw[valid_raw_idx], 
+        "RAW DATA (Sebelum Treatment)", 
+        "01_distribusi_raw.png"
+    )
 
     # =========================================================================
-    # 2. ANALISIS PRE-PROCESSED DATA
+    # 2. EKSTRAKSI PRE-PROCESSED DATA (DENGAN FILTERING IMPUTASI 0.0)
     # =========================================================================
-    print(f"\n🔄 [2/2] Membaca data PRE-PROCESSED dari {PREPROCESSED_FILE} ...")
-    if not os.path.exists(PREPROCESSED_FILE):
-        print(f"❌ File pre-processed tidak ditemukan. Sesuaikan path PREPROCESSED_FILE.")
+    preprocessed_path = PATHS['dataset_arus']
+    mean_u_path = PATHS['spatial_mean_u']
+    mean_v_path = PATHS['spatial_mean_v']
+
+    print(f"\n🔄 [2/2] Membaca data PRE-PROCESSED dari {preprocessed_path} ...")
+    if not (os.path.exists(preprocessed_path) and os.path.exists(mean_u_path) and os.path.exists(mean_v_path)):
+        print("❌ File hasil Fase 1 (dataset_arus / spatial_mean) tidak lengkap.")
         return
-        
-    ds_prep = xr.open_dataset(PREPROCESSED_FILE)
+
+    ds_anom = xr.open_dataset(preprocessed_path)
+    ds_mean_u = xr.open_dataset(mean_u_path)
+    ds_mean_v = xr.open_dataset(mean_v_path)
+
+    print("🔧 Merekonstruksi kecepatan asli & memfilter padding imputasi (0.0)...")
     
-    # Deteksi nama variabel (terkadang 'u'/'v' atau 'u_anomali'/'v_anomali')
-    u_col = 'u' if 'u' in ds_prep.data_vars else 'u_anomali'
-    v_col = 'v' if 'v' in ds_prep.data_vars else 'v_anomali'
+    # Deteksi data yang di-fillna(0.0) paksa saat radar mati/gap panjang
+    is_imputed = (ds_anom['u'] == 0.0) & (ds_anom['v'] == 0.0)
     
-    u_prep = ds_prep[u_col].values.flatten()
-    v_prep = ds_prep[v_col].values.flatten()
-    valid_prep_idx = ~np.isnan(u_prep) & ~np.isnan(v_prep)
+    # Rekonstruksi ke nilai asli (Anomali + Mean), ubah kembali padding 0.0 menjadi NaN
+    u_real = xr.where(is_imputed, np.nan, ds_anom['u'] + ds_mean_u['u'])
+    v_real = xr.where(is_imputed, np.nan, ds_anom['v'] + ds_mean_v['v'])
     
-    generate_stats_and_plot(u_prep[valid_prep_idx], v_prep[valid_prep_idx], 
-                            "PRE-PROCESSED DATA (Hasil Fase 1)", "02_distribusi_preprocessed.png")
+    # Flatten dan buang NaN (Daratan + Gap Imputasi) untuk analisis murni
+    u_prep_flat = u_real.values.flatten()
+    v_prep_flat = v_real.values.flatten()
+    
+    valid_prep_idx = ~np.isnan(u_prep_flat) & ~np.isnan(v_prep_flat)
+    
+    generate_stats_and_plot(
+        u_prep_flat[valid_prep_idx], 
+        v_prep_flat[valid_prep_idx], 
+        "PRE-PROCESSED DATA (Cleaned)", 
+        "02_distribusi_preprocessed_cleaned.png"
+    )
 
 if __name__ == "__main__":
     run_comparative_analysis()

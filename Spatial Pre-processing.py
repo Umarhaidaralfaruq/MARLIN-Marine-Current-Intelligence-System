@@ -235,8 +235,24 @@ def run_data_preparation():
         max_gap=f"{MODEL_CONFIG['max_save_nan']}h",
         order=3
     )
-    
-    ds_filled = ds_filled.clip(min=-3.0, max=3.0)
+
+    MAX_SPEED = 3.0
+
+    speed = np.sqrt(ds_filled['u']**2 + ds_filled['v']**2)
+
+    scale = xr.where(
+        speed > MAX_SPEED,
+        MAX_SPEED / speed,
+        1.0
+    )
+
+    ds_filled['u'] = ds_filled['u'] * scale
+    ds_filled['v'] = ds_filled['v'] * scale
+
+    # QC check
+    speed_final = np.sqrt(ds_filled['u']**2 + ds_filled['v']**2)
+
+    print(f"🔎 Max speed setelah clipping: {speed_final.max().item():.4f} m/s")
 
     print("📉 7. Menghitung Anomali Spasial (Mean-Centering Bebas Leakage)...")
     
