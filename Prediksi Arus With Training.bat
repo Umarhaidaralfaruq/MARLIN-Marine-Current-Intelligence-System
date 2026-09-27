@@ -2,70 +2,102 @@
 title Pipeline Prediksi Arus Selat Bali
 
 echo -------------------------------------------------
-echo [1/3] Pindah ke direktori kerja...
+echo [1/4] Pindah ke direktori kerja...
 echo -------------------------------------------------
 cd /d "D:\Haidar\Upgrade Arus"
 
 echo.
 echo -------------------------------------------------
-echo [2/3] Mengaktifkan environment Conda (umar309)...
+echo [2/4] Mengecek status Git...
 echo -------------------------------------------------
-:: Memanggil script aktivasi bawaan Anaconda, lalu nama environment-nya
+
+git status --short
+
+echo.
+echo -------------------------------------------------
+echo [3/4] Mengaktifkan environment Conda (umar309)...
+echo -------------------------------------------------
+
 call "C:\Users\stame\anaconda3\Scripts\activate.bat" umar309
 
 echo.
 echo -------------------------------------------------
-echo [3/3] Mengeksekusi Script Python...
+echo [4/4] Mengeksekusi Pipeline...
 echo -------------------------------------------------
 
+echo.
 echo --- Extract Data Arus dan Pasut
 python "extractdata.py"
+if errorlevel 1 goto ERROR
 
+echo.
 echo --- Spatial Pre-processing
 python "Spatial Pre-processing.py"
+if errorlevel 1 goto ERROR
 
+echo.
 echo --- MEOF Analysis
 python "MEOF Analysis.py"
+if errorlevel 1 goto ERROR
 
+echo.
 echo --- Training
 python "Training.py"
+if errorlevel 1 goto ERROR
 
+echo.
 echo --- Reconstruction
 python "reconstruction.py"
+if errorlevel 1 goto ERROR
 
-echo --- Mengunggah Model Baru dan Artefak ke Git lokal...
+echo.
+echo -------------------------------------------------
+echo Mengunggah Model dan Artefak...
+echo -------------------------------------------------
+
 git add "00 Data/*.nc"
 git add "01 Artefak/Aset/*.joblib"
 git add "01 Artefak/Aset/*.h5"
 git add *.joblib
 git add *.h5
 
-:: Tambahkan baris ini agar skrip ikut tersimpan dan tidak ter-stash!
-git add "Prediksi Arus With Training.bat"
+git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru"
 
-:: 1. Commit khusus file model, artefak, dan skrip bat ini
-git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru" || echo --- Tidak ada perubahan pada model untuk di-commit.
+if errorlevel 1 (
+    echo.
+    echo --- Tidak ada perubahan output untuk di-commit.
+)
 
-echo --- Mengamankan file lain yang sedang berubah...
-:: 2. Sembunyikan sisa file (seperti .py, .nc, .csv) ke penyimpanan sementara
-git stash
-
-echo --- Sinkronisasi dengan GitHub...
-:: 3. Rebase sekarang akan berjalan mulus tanpa error
-git pull --rebase origin main
-
-echo --- Mengembalikan file yang diamankan...
-:: 4. Keluarkan lagi file sisa tadi agar foldermu kembali seperti semula
-git stash pop || echo --- Tidak ada file di penyimpanan sementara.
-
-echo --- Mengirim ke GitHub...
-:: 5. Push model terbaru ke server
+echo.
+echo --- Mengirim hasil terbaru ke GitHub...
 git push origin main
 
-echo --- Selesai! Model dan artefak siap digunakan oleh Robot GitHub!
+if errorlevel 1 goto GIT_ERROR
 
 echo.
 echo =================================================
-echo 🎉 SEMUA PROSES SELESAI!
+echo SUCCESS: Pipeline dan upload berhasil.
 echo =================================================
+goto END
+
+
+:ERROR
+echo.
+echo =================================================
+echo ERROR: Pipeline Python gagal.
+echo GitHub TIDAK di-update.
+echo =================================================
+goto END
+
+
+:GIT_ERROR
+echo.
+echo =================================================
+echo ERROR: Push ke GitHub gagal.
+echo Periksa status Git sebelum menjalankan ulang.
+echo =================================================
+
+
+:END
+echo.
 pause
