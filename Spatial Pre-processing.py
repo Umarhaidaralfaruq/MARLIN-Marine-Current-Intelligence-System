@@ -235,6 +235,8 @@ def run_data_preparation():
         max_gap=f"{MODEL_CONFIG['max_save_nan']}h",
         order=3
     )
+    
+    ds_filled = ds_filled.clip(min=-3.0, max=3.0)
 
     print("📉 7. Menghitung Anomali Spasial (Mean-Centering Bebas Leakage)...")
     
