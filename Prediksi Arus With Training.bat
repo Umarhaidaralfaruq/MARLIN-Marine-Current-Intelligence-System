@@ -33,20 +33,32 @@ python "Training.py"
 echo --- Reconstruction
 python "reconstruction.py"
 
-
-echo --- Sinkronisasi dengan GitHub terlebih dahulu...
-git pull --rebase origin main
-
-echo --- Mengunggah Model Baru dan Artefak ke GitHub...
+echo --- Mengunggah Model Baru dan Artefak ke Git lokal...
 git add "01 Artefak/Aset/*.joblib"
 git add "01 Artefak/Aset/*.h5"
 git add *.joblib
 git add *.h5
 
-:: 3. Buat commit (|| echo memastikan skrip lanjut meski tidak ada perubahan)
+:: Tambahkan baris ini agar skrip ikut tersimpan dan tidak ter-stash!
+git add "Prediksi Arus With Training.bat"
+
+:: 1. Commit khusus file model, artefak, dan skrip bat ini
 git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru" || echo --- Tidak ada perubahan pada model untuk di-commit.
 
-:: 4. Push ke GitHub
+echo --- Mengamankan file lain yang sedang berubah...
+:: 2. Sembunyikan sisa file (seperti .py, .nc, .csv) ke penyimpanan sementara
+git stash
+
+echo --- Sinkronisasi dengan GitHub...
+:: 3. Rebase sekarang akan berjalan mulus tanpa error
+git pull --rebase origin main
+
+echo --- Mengembalikan file yang diamankan...
+:: 4. Keluarkan lagi file sisa tadi agar foldermu kembali seperti semula
+git stash pop || echo --- Tidak ada file di penyimpanan sementara.
+
+echo --- Mengirim ke GitHub...
+:: 5. Push model terbaru ke server
 git push origin main
 
 echo --- Selesai! Model dan artefak siap digunakan oleh Robot GitHub!
