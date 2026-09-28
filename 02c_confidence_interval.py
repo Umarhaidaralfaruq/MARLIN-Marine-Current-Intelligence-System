@@ -1,30 +1,35 @@
 # =============================================================================
 # FILE: 02c_confidence_interval.py
-# DESKRIPSI: Modul 2 - Menghitung 95% Confidence Interval dari Data MARLIN
+# DESKRIPSI: Modul 2 - Menghitung 95% Confidence Interval Otomatis
 # =============================================================================
 
 import os
 import pandas as pd
 import numpy as np
-import scipy.stats as st
 from config import PATHS
 
-def calculate_confidence_interval(comp):
+def calculate_confidence_interval():
     print("\n" + "="*50)
-    print(f"📊 CONFIDENCE INTERVAL (95%) - KOMPONEN {comp.upper()}")
+    print("📊 CONFIDENCE INTERVAL (95%) - PRINCIPAL COMPONENTS")
     print("="*50)
 
-    train_path = str(PATHS['pc_train']).replace('.npy', f'_{comp}.csv')
+    # Langsung tembak ke file utama tanpa replace string
+    train_path = PATHS['pc_train']
     if not os.path.exists(train_path):
         print(f"❌ File tidak ditemukan: {train_path}")
         return
         
     df = pd.read_csv(train_path)
+    print(f"🔍 Kolom terdeteksi: {list(df.columns)}\n")
     
-    for target in ['PC1', 'PC2']:
-        if target not in df.columns:
-            continue
-            
+    # Ambil semua kolom yang mengandung kata 'PC'
+    pc_columns = [col for col in df.columns if 'PC' in col.upper()]
+    
+    if not pc_columns:
+        print("❌ Tidak ada kolom Principal Component (PC) di dalam file ini.")
+        return
+        
+    for target in pc_columns:
         data = df[target].dropna()
         n = len(data)
         mean_val = np.mean(data)
@@ -45,11 +50,9 @@ def calculate_confidence_interval(comp):
         print(f"   -> Std Deviation  : {std_val:.4f}")
         print(f"   -> 95% CI (Mean)  : [{lower_bound:.4f}  s/d  {upper_bound:.4f}]")
         
-        # --- SIMULASI CI PREDIKSI (PREDICTION INTERVAL) ---
-        # Jika model lu menebak nilai 0.0, seberapa lebar rentang error alaminya?
+        # Simulasi rentang error prediksi (Prediction Interval)
         pred_margin = z_score * std_val
-        print(f"   -> Rentang Tebakan Model (Pred Interval) : Prediksi ± {pred_margin:.4f}\n")
+        print(f"   -> Prediction Interval : Prediksi ± {pred_margin:.4f}\n")
 
 if __name__ == "__main__":
-    for c in ['u', 'v']:
-        calculate_confidence_interval(c)
+    calculate_confidence_interval()

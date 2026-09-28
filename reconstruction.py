@@ -430,7 +430,7 @@ def run_period_simulation(start_date, end_date):
             
             for i in valid_indices:
                 # 🌟 BARU: Ambil nilai target (Y) tepat 24 jam mundur dari masa depan
-                idx_start_persist = i + LOOKBACK - 24
+                idx_start_persist = i + LOOKBACK - 25
                 
                 # Pastikan indeks tidak negatif (harus ada cukup histori di sequence)
                 if idx_start_persist < 0:

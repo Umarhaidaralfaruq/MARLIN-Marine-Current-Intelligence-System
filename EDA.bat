@@ -21,6 +21,12 @@ echo -------------------------------------------------
 echo --- Analisis Statistik
 python "02a_eda_statistics.py"
 
+echo --- Analisis Korelasi
+python "02b_eda_correlation.py"
+
+echo --- Analisis Korelasi
+python "02c_confidence_interval.py"
+
 echo.
 echo =================================================
 echo 🎉 SEMUA PROSES SELESAI!

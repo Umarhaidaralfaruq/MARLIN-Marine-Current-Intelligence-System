@@ -235,16 +235,27 @@ def run_data_preparation():
 
     print(f"🩹 6. Menambal data bolong (Interpolation maks {MODEL_CONFIG['max_save_nan']} jam)...")
     
-    # Tambahkan parameter max_gap agar gap yang lebih besar dari limit tidak disentuh sama sekali
-    ds_filled = ds.interpolate_na(
-        dim='time', 
-        method='polynomial', 
-        limit=MODEL_CONFIG['max_save_nan'],
-        max_gap=f"{MODEL_CONFIG['max_save_nan']}h",
-        order=3
-    )
+    # Ambil konfigurasi dari config (fallback ke 'linear' dan orde 3 jika tidak ada)
+    i_method = MODEL_CONFIG.get('interp_method', 'linear')
+    i_order = MODEL_CONFIG.get('interp_order', 3)
+    
+    # Siapkan argumen dasar
+    interp_kwargs = {
+        'dim': 'time', 
+        'method': i_method,
+        'limit': MODEL_CONFIG['max_save_nan'],
+        'max_gap': f"{MODEL_CONFIG['max_save_nan']}h"
+    }
+    
+    # Injeksi parameter 'order' HANYA jika menggunakan metode polinomial
+    # Hal ini mencegah error dari xarray jika metode 'linear' diberi argumen 'order'
+    if i_method == 'polynomial':
+        interp_kwargs['order'] = i_order
 
-    MAX_SPEED = 3.0
+    # Tambahkan parameter max_gap agar gap yang lebih besar dari limit tidak disentuh sama sekali
+    ds_filled = ds.interpolate_na(**interp_kwargs)
+
+    MAX_SPEED = 2.6
 
     speed = np.sqrt(ds_filled['u']**2 + ds_filled['v']**2)
 
