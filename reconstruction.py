@@ -42,7 +42,7 @@ def load_artifacts(comp):
 
 def prepare_test_data(comp):
     """Membangun ulang data Test dengan fitur-fitur FE"""
-    test_path = str(PATHS['pc_test']).replace('.npy', f'_{comp}.csv')
+    test_path = str(PATHS['pc_test']).replace('.csv', f'_{comp}.csv')
     df_test = pd.read_csv(test_path, parse_dates=['datetime'])
     
     # Panggil Feature Engineering Otomatis
@@ -907,7 +907,7 @@ if __name__ == "__main__":
     #run_visual_test() 
     
     # 2. AUTO-DETECT TANGGAL TEST UNTUK SIMULASI MUSIMAN
-    test_path = str(PATHS['pc_test']).replace('.npy', '_u.csv')
+    test_path = str(PATHS['pc_test']).replace('.csv', '_u.csv')
     df_cek = pd.read_csv(test_path)
     
     # Ambil batas tanggal riil yang ada di file test

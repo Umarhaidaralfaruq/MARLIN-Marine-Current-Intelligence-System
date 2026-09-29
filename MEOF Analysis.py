@@ -149,8 +149,8 @@ def run_eof_extraction():
         print(f"   -> Sisa Baris Test : {len(df_test_final)} | Jumlah Segmen: {df_test_final['Segment_ID'].nunique()}")
 
         # 6. SIMPAN ARTIFAK
-        csv_train_path = str(PATHS['pc_train']).replace('.npy', f'_{comp}.csv')
-        csv_test_path = str(PATHS['pc_test']).replace('.npy', f'_{comp}.csv')
+        csv_train_path = str(PATHS['pc_train']).replace('.csv', f'_{comp}.csv')
+        csv_test_path = str(PATHS['pc_test']).replace('.csv', f'_{comp}.csv')
         df_train_final.to_csv(csv_train_path, index=False)
         df_test_final.to_csv(csv_test_path, index=False)
         

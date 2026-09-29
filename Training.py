@@ -61,8 +61,8 @@ def train_component(comp):
     print("="*50)
     
     # 1. LOAD DATA CSV
-    train_path = str(PATHS['pc_train']).replace('.npy', f'_{comp}.csv')
-    test_path = str(PATHS['pc_test']).replace('.npy', f'_{comp}.csv')
+    train_path = str(PATHS['pc_train']).replace('.csv', f'_{comp}.csv')
+    test_path = str(PATHS['pc_test']).replace('.csv', f'_{comp}.csv')
     
     df_train = pd.read_csv(train_path, parse_dates=['datetime'])
     df_test = pd.read_csv(test_path, parse_dates=['datetime'])
