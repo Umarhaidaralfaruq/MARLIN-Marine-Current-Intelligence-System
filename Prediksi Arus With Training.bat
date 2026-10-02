@@ -50,52 +50,52 @@ echo --- Reconstruction
 python "reconstruction.py"
 if errorlevel 1 goto ERROR
 
-echo.
-echo -------------------------------------------------
-echo Mengunggah Model dan Artefak...
-echo -------------------------------------------------
+REM echo.
+REM echo -------------------------------------------------
+REM echo Mengunggah Model dan Artefak...
+REM echo -------------------------------------------------
 
-git add "00 Data/*.nc"
-git add "01 Artefak/Aset/*.joblib"
-git add "01 Artefak/Aset/*.h5"
-git add *.joblib
-git add *.h5
+REM git add "00 Data/*.nc"
+REM git add "01 Artefak/Aset/*.joblib"
+REM git add "01 Artefak/Aset/*.h5"
+REM git add *.joblib
+REM git add *.h5
 
-git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru"
+REM git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru"
 
-if errorlevel 1 (
-    echo.
-    echo --- Tidak ada perubahan output untuk di-commit.
-)
+REM if errorlevel 1 (
+    REM echo.
+    REM echo --- Tidak ada perubahan output untuk di-commit.
+REM )
 
-echo.
-echo --- Mengirim hasil terbaru ke GitHub...
-git push origin main
+REM echo.
+REM echo --- Mengirim hasil terbaru ke GitHub...
+REM git push origin main
 
-if errorlevel 1 goto GIT_ERROR
+REM if errorlevel 1 goto GIT_ERROR
 
-echo.
-echo =================================================
-echo SUCCESS: Pipeline dan upload berhasil.
-echo =================================================
-goto END
-
-
-:ERROR
-echo.
-echo =================================================
-echo ERROR: Pipeline Python gagal.
-echo GitHub TIDAK di-update.
-echo =================================================
-goto END
+REM echo.
+REM echo =================================================
+REM echo SUCCESS: Pipeline dan upload berhasil.
+REM echo =================================================
+REM goto END
 
 
-:GIT_ERROR
-echo.
-echo =================================================
-echo ERROR: Push ke GitHub gagal.
-echo Periksa status Git sebelum menjalankan ulang.
-echo =================================================
+REM :ERROR
+REM echo.
+REM echo =================================================
+REM echo ERROR: Pipeline Python gagal.
+REM echo GitHub TIDAK di-update.
+REM echo =================================================
+REM goto END
+
+
+REM :GIT_ERROR
+REM echo.
+REM echo =================================================
+REM echo ERROR: Push ke GitHub gagal.
+REM echo Periksa status Git sebelum menjalankan ulang.
+REM echo =================================================
 
 
 :END
