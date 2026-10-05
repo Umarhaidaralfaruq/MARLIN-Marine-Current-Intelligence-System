@@ -88,9 +88,9 @@ GIL_LON_MIN, GIL_LON_MAX = 114.41354, 114.43416
 MODEL_CONFIG = {
     'train_split_ratio': 0.8,
     'n_modes' : 2,
-    'input_window': 48,
+    'input_window': 24,
     'output_window': 24, 
-    'min_seq_len': 96,    
+    'min_seq_len': 48,    
     'min_segmen_len': 48, 
     'max_save_nan': 5,     
     'ocean_threshold': 0.2,

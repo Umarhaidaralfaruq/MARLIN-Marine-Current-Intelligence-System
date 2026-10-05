@@ -50,8 +50,11 @@ def prepare_test_data(comp):
     
     # Deteksi kolom Input (seperti di skrip Training)
     all_generated_cols = [col for col in df_test.columns if col not in ['datetime', 'Segment_ID']]
-    input_cols = [col for col in all_generated_cols if col not in TARGET_COLS]
-    scale_cols = TARGET_COLS + input_cols
+    # GANTI BARIS DI BAWAH INI:
+    # input_cols = [col for col in all_generated_cols if col not in TARGET_COLS] 
+    input_cols = all_generated_cols.copy() # Masukkan semua kolom (termasuk TARGET_COLS)
+    
+    scale_cols = TARGET_COLS + [col for col in input_cols if col not in TARGET_COLS]
     
     return df_test, scale_cols, input_cols
 

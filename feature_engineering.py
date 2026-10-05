@@ -34,45 +34,31 @@ def _add_time_features(df):
     return df, features
 
 def _add_target_features(df, target_columns):
-    """Menambahkan Lags, Rolling Mean, Std, dan Z-Score untuk SEMUA kolom PC"""
+    """
+    Percobaan 2: Feature Engineering Optimal untuk LSTM
+    Tanpa Lag Manual, Tanpa Shift, Tanpa Z-Score.
+    """
     features = []
     
     for col_name in target_columns:
         if col_name not in df.columns: 
             continue
             
-        # 1. LAG FEATURES
-        lags_to_use = [1]
-        for lag in lags_to_use:
-            col = f'lag_{col_name}_{lag}'
-            df[col] = df.groupby('Segment_ID')[col_name].shift(lag)
-            features.append(col)
+        # 1. ROLLING MEAN 24 JAM (Tanpa .shift!)
+        # LSTM berhak melihat rata-rata historis hingga tepat pada jam ini (t)
+        # karena indeks pemotongan Lookback di Training.py sudah mengunci masa depan.
+        win = 24
+        col_mean = f'rolling_mean_{col_name}_{win}'
+        df[col_mean] = df.groupby('Segment_ID')[col_name].transform(
+            lambda x: x.rolling(window=win, min_periods=1).mean()
+        )
+        features.append(col_mean)
 
-        # 2. ROLLING MEAN & STD (Background State)
-        for win in [24]:
-            col = f'rolling_mean_{col_name}_{win}'
-            df[col] = df.groupby('Segment_ID')[col_name].transform(
-                lambda x: x.shift(1).rolling(window=win, min_periods=1).mean()
-            )
-            features.append(col)
-            
-        for win in [3, 6, 24]:
-            col = f'rolling_std_{col_name}_{win}'
-            df[col] = df.groupby('Segment_ID')[col_name].transform(
-                lambda x: x.shift(1).rolling(window=win, min_periods=1).std().fillna(0)
-            )
-            features.append(col)
-
-        # 3. DISTANCE FROM BACKGROUND
-        col_dist = f'jarak_dari_latar_{col_name}_24'
-        df[col_dist] = df[col_name] - df[f'rolling_mean_{col_name}_24']
+        # 2. JARAK DARI LATAR (Sinyal Anomali Utama)
+        # Ini adalah fitur dengan korelasi +0.9 yang kita pertahankan
+        col_dist = f'jarak_dari_latar_{col_name}_{win}'
+        df[col_dist] = df[col_name] - df[col_mean]
         features.append(col_dist)
-
-        # 4. Z-SCORE
-        col_z = f'jarak_z_{col_name}_24'
-        std_col = df[f'rolling_std_{col_name}_24'].replace(0, np.nan)
-        df[col_z] = ((df[col_name] - df[f'rolling_mean_{col_name}_24']) / std_col).fillna(0).clip(-10, 10)
-        features.append(col_z)
 
     return df, features
 

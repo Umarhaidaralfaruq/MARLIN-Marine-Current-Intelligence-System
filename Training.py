@@ -72,7 +72,8 @@ def train_component(comp):
     df_test = build_features(df_test)
     
     ALL_GENERATED_COLS = [col for col in df_train.columns if col not in ['datetime', 'Segment_ID']]
-    INPUT_COLS = [col for col in ALL_GENERATED_COLS if col not in TARGET_COLS]
+    # Masukkan seluruh kolom (termasuk TARGET_COLS) sebagai input matriks LSTM
+    INPUT_COLS = ALL_GENERATED_COLS.copy()
 
     # 3. SCALING DINAMIS (MinMax -1 to 1)
     SCALE_COLS = TARGET_COLS + [col for col in INPUT_COLS if col not in TARGET_COLS]
@@ -119,7 +120,7 @@ def train_component(comp):
         LSTM(MODEL_CONFIG['lstm_units'], activation='tanh', input_shape=(LOOKBACK, N_INPUT_FEATURES), return_sequences=False),
         Dropout(MODEL_CONFIG['dropout_rate']),
         Dense(MODEL_CONFIG['dense_units'], activation='relu'),
-        Dense(HORIZON * N_PC_FEATURES), 
+        Dense(HORIZON * N_PC_FEATURES, activation='tanh'), 
         Reshape((HORIZON, N_PC_FEATURES))
     ])
 

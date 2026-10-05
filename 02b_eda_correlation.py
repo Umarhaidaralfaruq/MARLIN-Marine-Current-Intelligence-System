@@ -18,7 +18,7 @@ def analyze_correlation_for_component(comp):
     print("="*50)
 
     # 1. BUKA DATA TRAINING (Murni Data Latih)
-    train_path = str(PATHS['pc_train']).replace('.npy', f'_{comp}.csv')
+    train_path = str(PATHS['pc_train']).replace('.csv', f'_{comp}.csv')
     
     if not os.path.exists(train_path):
         print(f"❌ File tidak ditemukan: {train_path}")

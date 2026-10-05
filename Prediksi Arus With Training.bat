@@ -28,27 +28,22 @@ echo -------------------------------------------------
 echo.
 echo --- Extract Data Arus dan Pasut
 python "extractdata.py"
-if errorlevel 1 goto ERROR
 
 echo.
 echo --- Spatial Pre-processing
 python "Spatial Pre-processing.py"
-if errorlevel 1 goto ERROR
 
 echo.
 echo --- MEOF Analysis
 python "MEOF Analysis.py"
-if errorlevel 1 goto ERROR
 
 echo.
 echo --- Training
 python "Training.py"
-if errorlevel 1 goto ERROR
 
 echo.
 echo --- Reconstruction
 python "reconstruction.py"
-if errorlevel 1 goto ERROR
 
 REM echo.
 REM echo -------------------------------------------------
