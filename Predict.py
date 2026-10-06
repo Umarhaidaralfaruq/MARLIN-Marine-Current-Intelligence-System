@@ -102,8 +102,12 @@ def main_operational_forecast():
         
         df_proc = build_features(df_buffer)
         all_gen_cols = [c for c in df_proc.columns if c not in ['datetime', 'Segment_ID']]
-        input_cols = [c for c in all_gen_cols if c not in TARGET_COLS]
-        scale_cols = TARGET_COLS + input_cols
+        
+        # PERBAIKAN: Masukkan seluruh kolom (termasuk TARGET_COLS) sebagai input
+        input_cols = all_gen_cols.copy() 
+        
+        # Susun scale_cols agar TARGET_COLS tetap ada di depan dan tidak duplikat
+        scale_cols = TARGET_COLS + [c for c in input_cols if c not in TARGET_COLS]
         
         df_input_window = df_proc.iloc[-LOOKBACK:].copy().reset_index(drop=True)
         if df_input_window[scale_cols].isna().any().any():
