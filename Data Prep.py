@@ -25,9 +25,9 @@ def apply_segmentation_datetime(df):
     df['break_seg'] = df['dt_hour'] > MAX_SAFE_NAN
     df['Segment_ID'] = df['break_seg'].cumsum() + 1
     
-    # FILTER LAPIS 1: Buang Segmen yang panjangnya < 48 Jam
+    # FILTER LAPIS 1: Buang Segmen yang tidak bisa membentuk minimal 1 sequence (Input + Output)
     seg_len = df.groupby('Segment_ID').size()
-    valid_seg = seg_len[seg_len >= MODEL_CONFIG['output_window']].index
+    valid_seg = seg_len[seg_len >= MODEL_CONFIG['min_seq_len']].index
     
     df_final = df[df['Segment_ID'].isin(valid_seg)].copy()
     
