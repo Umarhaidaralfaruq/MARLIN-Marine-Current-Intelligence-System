@@ -12,6 +12,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
+from sklearn.metrics import r2_score
+from scipy.stats import pearsonr
 from config import PATHS, MODEL_CONFIG, VISUAL_CONFIG
 
 # Import modul FE yang udah kita buat
@@ -557,6 +559,29 @@ def run_period_simulation(start_date, end_date):
     print(f"RMSE Periodic Persist: {rmse_persist_mean:.4f} m/s")
     print(f"Skill Score Mean     : {skill_mean:.3f}")
     
+    # ==========================================================
+    # TAMBAHAN MODUL 5: GLOBAL R-SQUARED & CORRELATION
+    # ==========================================================
+    # Meratakan (flatten) array 3D menjadi 1D untuk evaluasi global keseluruhan skenario
+    y_true_flat = speed_true.flatten()
+    y_pred_flat = speed_pred.flatten()
+    y_persist_flat = speed_persist.flatten()
+
+    # Hitung R2 Score
+    r2_lstm = r2_score(y_true_flat, y_pred_flat)
+    r2_persist = r2_score(y_true_flat, y_persist_flat)
+
+    # Hitung Pearson Correlation
+    corr_lstm, _ = pearsonr(y_true_flat, y_pred_flat)
+    corr_persist, _ = pearsonr(y_true_flat, y_persist_flat)
+
+    print("\n📈 RINGKASAN R² & KORELASI (MODUL 5)")
+    print("-" * 70)
+    print(f"R² Score LSTM            : {r2_lstm:.4f}")
+    print(f"R² Score Persist         : {r2_persist:.4f}")
+    print(f"Korelasi (r) LSTM        : {corr_lstm:.4f}")
+    print(f"Korelasi (r) Persist     : {corr_persist:.4f}")
+    
     # =====================================================================
     # 📈 PLOTTING GRAFIK EVALUASI PER HORIZON
     # =====================================================================
@@ -620,6 +645,60 @@ def run_period_simulation(start_date, end_date):
     print(f"Best Grid RMSE    : {np.nanmin(rmse_speed_1d):.4f} m/s")
     print(f"Worst Grid RMSE   : {np.nanmax(rmse_speed_1d):.4f} m/s")
     print(f"P90 Grid RMSE     : {np.nanpercentile(rmse_speed_1d, 90):.4f} m/s")
+    
+    # =========================================================================
+    # 🎯 ISENG-ISENG SAINTIFIK: ANALISIS TITIK TERBAIK & TERBURUK
+    # =========================================================================
+    print("\n" + "="*70)
+    print("🎯 INVESTIGASI METRIK DI TITIK KOORDINAT TERBAIK & TERBURUK")
+    print("="*70)
+
+    # 1. Dapatkan array koordinat 1D (hanya untuk grid laut yang valid)
+    Lon, Lat = np.meshgrid(lons, lats)
+    lon_valid = Lon.flatten()[valid_mask]
+    lat_valid = Lat.flatten()[valid_mask]
+
+    # 2. Cari index titik terbaik (min) dan terburuk (max) dari array RMSE 1D
+    best_idx = np.nanargmin(rmse_speed_1d)
+    worst_idx = np.nanargmax(rmse_speed_1d)
+
+    # 3. Fungsi pembantu untuk membedah time-series di titik tersebut
+    def print_point_metrics(idx, label):
+        lat_pt = lat_valid[idx]
+        lon_pt = lon_valid[idx]
+        
+        # Ekstrak sejarah waktu murni (array 1D) khusus di titik ini
+        y_true_pt = speed_true[:, idx]
+        y_pred_pt = speed_pred[:, idx]
+        y_persist_pt = speed_persist[:, idx]
+        
+        # Kalkulasi Error Fisika
+        rmse_pt = np.sqrt(np.mean((y_true_pt - y_pred_pt)**2))
+        rmse_persist_pt = np.sqrt(np.mean((y_true_pt - y_persist_pt)**2))
+        mae_pt = np.mean(np.abs(y_true_pt - y_pred_pt))
+        
+        # Skill Score
+        skill_pt = 1 - (rmse_pt / max(rmse_persist_pt, 1e-8))
+        
+        # Metrik ML (R2 & Korelasi)
+        from sklearn.metrics import r2_score
+        from scipy.stats import pearsonr
+        r2_pt = r2_score(y_true_pt, y_pred_pt)
+        corr_pt, _ = pearsonr(y_true_pt, y_pred_pt)
+        
+        print(f"\n📍 {label}")
+        print(f"   Koordinat   : Lat {lat_pt:.5f}, Lon {lon_pt:.5f}")
+        print("-" * 50)
+        print(f"   RMSE LSTM      : {rmse_pt:.4f} m/s")
+        print(f"   MAE LSTM       : {mae_pt:.4f} m/s")
+        print(f"   RMSE Persist   : {rmse_persist_pt:.4f} m/s")
+        print(f"   Skill Score    : {skill_pt:.3f}  ({(skill_pt)*100:.1f}%)")
+        print(f"   R² Score       : {r2_pt:.4f}")
+        print(f"   Korelasi (r)   : {corr_pt:.4f}")
+
+    # Panggil fungsi untuk kedua titik ekstrem
+    print_point_metrics(best_idx, "TITIK PALING AKURAT (BEST GRID)")
+    print_point_metrics(worst_idx, "TITIK PALING TURBULEN (WORST GRID)")
 
     def to_2d_map(data_1d):
         base_map = np.full(n_lat * n_lon, np.nan)

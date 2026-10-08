@@ -110,6 +110,7 @@ MODEL_CONFIG = {
     'reduce_lr_patience': 4,
     'reduce_lr_factor': 0.5,
     'reduce_lr_min': 1e-5,
+    'spatial_mode': 'EOF', # Opsi: 'EOF', 'MEOF'
 }
 
 # =============================================================================
