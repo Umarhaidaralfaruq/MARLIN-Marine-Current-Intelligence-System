@@ -714,6 +714,18 @@ with tab2:
 # ------------------------------------------
 with tab3:
     st.markdown("### Akurasi & Validasi Model")
+    
+    # Tambahan: Widget untuk mengatur limit shift secara interaktif
+    limit_shift = st.number_input(
+        "Tampilkan N Shift Terakhir:", 
+        min_value=1, 
+        max_value=100, 
+        value=14, 
+        step=1, 
+        help="Default: 14 shift (7 hari terakhir)"
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     with st.spinner("Merekap riwayat validasi HF Radar..."):
         path_verif_csv = PATHS["Verif_12jam"] 
         df_real_hourly, df_real_agg = pd.DataFrame(), pd.DataFrame()
@@ -822,7 +834,11 @@ with tab3:
             df_verif['Waktu Puncak'] = df_verif['Waktu Puncak'].fillna("-")
             df_verif['Arah Dominan'] = df_verif['Arah Dominan'].fillna("-")
             
+            # Pengurutan data terbaru di atas
             df_verif = df_verif.sort_values(by=['Tanggal', 'Baserun'], ascending=[False, False])
+            
+            # Tambahan: Terapkan limit shift sebelum kalkulasi matriks global
+            df_verif = df_verif.head(limit_shift)
 
             valid_data = df_verif.dropna(subset=[f'RMSE ({satuan_teks})', f'Observasi ({satuan_teks})'])
             if len(valid_data) > 0:
