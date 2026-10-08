@@ -136,7 +136,7 @@ SPATIAL_CONFIG = {
 # 8. PARAMETER KALKULASI & SISTEM (DASHBOARD)
 # =============================================================================
 FAKTOR_KNOT = 1.94384
-METODE_STATISTIK = "MAX"  # Opsi: "MAX" atau "P95"
+METODE_STATISTIK = "P95"  # Opsi: "MAX" atau "P95"
 REFRESH_INTERVAL_MS = 1800000
 
 # =============================================================================
