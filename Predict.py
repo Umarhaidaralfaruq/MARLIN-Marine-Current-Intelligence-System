@@ -14,7 +14,7 @@ import xarray as xr
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from config import PATHS, MODEL_CONFIG, FEATURE_TOGGLES
+from config import PATHS, MODEL_CONFIG, FEATURE_TOGGLES, SPATIAL_CONFIG
 from feature_engineering import build_features, TARGET_COLS
 
 LOOKBACK = MODEL_CONFIG['input_window']
@@ -165,6 +165,11 @@ def main_operational_forecast():
         v_absolute = anom_v_1d + mean_v_map
         
         speed = np.sqrt(u_absolute**2 + v_absolute**2)
+        
+        # --- PERBAIKAN: POST-PROCESSING CLIPPER (Batas P99.9 Dinamis) ---
+        MAX_SPEED = SPATIAL_CONFIG['max_physical_speed']
+        speed = np.clip(speed, a_min=0.0, a_max=MAX_SPEED)
+        
         direction = np.degrees(np.arctan2(u_absolute, v_absolute)) % 360
         
         # Simpan ke memori visualisasi jika jam ini masuk radar plot
