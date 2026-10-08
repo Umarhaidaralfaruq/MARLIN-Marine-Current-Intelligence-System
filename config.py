@@ -109,7 +109,7 @@ MODEL_CONFIG = {
     'early_stop_patience': 15,
     'reduce_lr_patience': 4,
     'reduce_lr_factor': 0.5,
-    'reduce_lr_min': 1e-5
+    'reduce_lr_min': 1e-5,
 }
 
 # =============================================================================
@@ -129,7 +129,8 @@ SPATIAL_CONFIG = {
     'RESAMPLE_METHOD': 'max_amplitude',  # Opsi: 'max_amplitude', 'mean'
     'RESAMPLE_FREQ': '1H',
     'min_spatial_percent_from_avg': 0.5,     # Batas minimal 50% dari rata-rata titik valid
-    'min_temporal_records': 3,               
+    'min_temporal_records': 3,
+    'max_physical_speed': 2.59,
 }
 
 # =============================================================================
