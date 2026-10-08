@@ -255,7 +255,7 @@ def run_data_preparation():
     # Tambahkan parameter max_gap agar gap yang lebih besar dari limit tidak disentuh sama sekali
     ds_filled = ds.interpolate_na(**interp_kwargs)
 
-    MAX_SPEED = 2.6
+    MAX_SPEED = SPATIAL_CONFIG['max_physical_speed']
 
     speed = np.sqrt(ds_filled['u']**2 + ds_filled['v']**2)
 
