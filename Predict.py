@@ -28,31 +28,41 @@ def load_production_artifacts(comp):
     model = tf.keras.models.load_model(model_path, compile=False)
     return pca, scaler, model
 
+
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
-    
-    buffer_rows = 24 * 7 
-    df_buffer = df_full.iloc[-buffer_rows:].copy().reset_index(drop=True) if len(df_full) >= buffer_rows else df_full.copy()
-    
+
+    buffer_rows = 24 * 7
+    df_buffer = (
+        df_full.iloc[-buffer_rows:].copy().reset_index(drop=True)
+        if len(df_full) >= buffer_rows
+        else df_full.copy()
+    )
+
+    # Pertahankan nama PC ASLI seperti saat training.
     if SPATIAL_MODE == 'EOF':
-        pc_cols_asal = [f"{comp.upper()}_PC{i+1}" for i in range(N_PC_FEATURES)]
+        pc_cols = [
+            f"{comp.upper()}_PC{i+1}"
+            for i in range(N_PC_FEATURES)
+        ]
     else:
-        pc_cols_asal = [f"MEOF_PC{i+1}" for i in range(N_PC_FEATURES)]
-        
-    pc_cols_tujuan = [f"PC{i+1}" for i in range(N_PC_FEATURES)]
-    
+        pc_cols = [
+            f"MEOF_PC{i+1}"
+            for i in range(N_PC_FEATURES)
+        ]
+
     cols_to_keep = ['datetime', 'Segment_ID']
+
     if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
         cols_to_keep.append('waterlevel')
 
-    cols_to_keep += pc_cols_asal
+    cols_to_keep += pc_cols
+
     df_comp = df_buffer[cols_to_keep].copy()
-    
-    rename_dict = dict(zip(pc_cols_asal, pc_cols_tujuan))
-    df_comp = df_comp.rename(columns=rename_dict)
-    
+
+    # Tidak ada rename MEOF_PC1 -> PC1.
     return df_comp
 
 def inverse_scale_operational(y_pred_batch, scaler_obj, total_cols, n_pcs):
