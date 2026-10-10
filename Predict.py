@@ -31,10 +31,20 @@ def load_production_artifacts(comp):
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
+    
+    # ==========================================================
+    # 🛑 INJEKSI UJI COBA: POTONG DATA SAMPAI TGL 9 JAM 21:00 UTC
+    # ==========================================================
+    # Silakan sesuaikan tahun dan bulannya dengan data riil lu!
+    cutoff_time = pd.to_datetime("2026-10-09 21:00:00") 
+    df_full = df_full[df_full['datetime'] <= cutoff_time]
+    # ==========================================================
+    
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
     
     buffer_rows = 24 * 7 
     df_buffer = df_full.iloc[-buffer_rows:].copy().reset_index(drop=True) if len(df_full) >= buffer_rows else df_full.copy()
+
     
     # 🚀 FIX SCALER: Tidak ada lagi rename kolom PC. Gunakan nama asli!
     if SPATIAL_MODE == 'EOF':
