@@ -32,14 +32,6 @@ def load_production_artifacts(comp):
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
-    
-    # ==========================================================
-    # 🛑 INJEKSI UJI COBA: HINDCASTING (SIMULASI MASA LALU)
-    # Hapus tanda pagar (#) di 2 baris bawah ini jika ingin memotong data
-    cutoff_time = pd.to_datetime("2026-10-09 09:00:00") 
-    df_full = df_full[df_full['datetime'] <= cutoff_time]
-    # ==========================================================
-    
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
 
     buffer_rows = 24 * 7
@@ -135,10 +127,10 @@ def main_operational_forecast():
             print("🪓 Membelah Matriks Prediksi MEOF menjadi U dan V...")
             pred_pc_outputs['meof'] = unscaled_pc
 
-    print(f"\n🌐 Data terakhir tercatat (UTC): {latest_timestamp}")
+    print(f"\n🌐 Data terakhir tercatat: {latest_timestamp}")
     print("🌐 Merekonsiliasi PC menjadi Peta 2D dan menghitung Kecepatan & Arah...")
     
-    future_timestamps_utc = pd.date_range(start=latest_timestamp + pd.Timedelta(hours=1), periods=HORIZON, freq='1H')
+    future_timestamps = pd.date_range(start=latest_timestamp + pd.Timedelta(hours=1), periods=HORIZON, freq='1H')
     all_forecast_rows = []
     maps_for_plotting = []
 
@@ -149,8 +141,7 @@ def main_operational_forecast():
         pca_meof = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_meof_model.joblib'))
 
     for h_idx in range(HORIZON):
-        current_pred_time_utc = future_timestamps_utc[h_idx]
-        current_pred_time_wib = current_pred_time_utc + pd.Timedelta(hours=7) 
+        current_pred_time = future_timestamps[h_idx]
         
         if SPATIAL_MODE == 'EOF':
             pc_u_hour = pred_pc_outputs['u'][h_idx].reshape(1, -1)
@@ -185,13 +176,13 @@ def main_operational_forecast():
                 return base.reshape(n_lat, n_lon)
             
             maps_for_plotting.append({
-                'time_wib': current_pred_time_wib, 'u_2d': to_2d(u_absolute),
+                'time': current_pred_time, 'u_2d': to_2d(u_absolute),
                 'v_2d': to_2d(v_absolute), 'speed_2d': to_2d(speed)
             })
         
         for i in range(len(lon_valid)):
             all_forecast_rows.append({
-                'datetime_prediction': current_pred_time_wib,
+                'datetime_prediction': current_pred_time,
                 'forecast_horizon_hour': h_idx + 1,
                 'latitude': lat_valid[i], 'longitude': lon_valid[i],
                 'u_velocity_ms': round(u_absolute[i], 4),
@@ -204,10 +195,10 @@ def main_operational_forecast():
     output_dir = "outputs/predictions"
     os.makedirs(output_dir, exist_ok=True)
     
-    file_timestamp = future_timestamps_utc[0].strftime('%Y%m%d_%H%M')
-    csv_save_path = os.path.join(PATHS['OUTPUT_PRED'], f"prediksi_spasial_{file_timestamp}_WIB.csv")
+    file_timestamp = future_timestamps[0].strftime('%Y%m%d_%H%M')
+    csv_save_path = os.path.join(PATHS['OUTPUT_PRED'], f"prediksi_spasial_{file_timestamp}.csv")
     df_final_forecast.to_csv(csv_save_path, index=False)
-    print(f"\n💾 CSV Ramalan Laut (WIB) tersimpan di:\n   -> {csv_save_path}")
+    print(f"\n💾 CSV Ramalan Laut tersimpan di:\n   -> {csv_save_path}")
 
     print("🎨 Menggambar Peta Prakiraan Cuaca Harian (24-Panel)...")
     fig, axes = plt.subplots(4, 6, figsize=(26, 18), sharex=True, sharey=True)
@@ -220,7 +211,8 @@ def main_operational_forecast():
 
     for ax, map_data in zip(axes, maps_for_plotting):
         U, V, Speed = map_data['u_2d'], map_data['v_2d'], map_data['speed_2d']
-        plot_time_str = map_data['time_wib'].strftime('%H:%M WIB\n(%d %b)')
+        waktu_wib_panel = map_data['time'] + pd.Timedelta(hours=7)
+        plot_time_str = waktu_wib_panel.strftime('%H:%M WIB\n(%d %b)')
         
         contour = ax.contourf(Lon, Lat, Speed, cmap='jet', alpha=0.7, levels=np.linspace(0, 3.0, 20))
         ax.quiver(Lon[skip], Lat[skip], U[skip], V[skip], color='black', scale=20, width=0.003, headwidth=2)
