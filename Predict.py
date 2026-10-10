@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: operational_prediction.py (MODULAR EOF / MEOF)
+# FILE: operational_prediction.py (FIX ZONA WAKTU & SCALER)
 # DESKRIPSI: Prediksi Harian Arus Selat Bali (Export CSV & Peta 24-Panel)
 # =============================================================================
 
@@ -28,42 +28,26 @@ def load_production_artifacts(comp):
     model = tf.keras.models.load_model(model_path, compile=False)
     return pca, scaler, model
 
-
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
-
-    buffer_rows = 24 * 7
-    df_buffer = (
-        df_full.iloc[-buffer_rows:].copy().reset_index(drop=True)
-        if len(df_full) >= buffer_rows
-        else df_full.copy()
-    )
-
-    # Pertahankan nama PC ASLI seperti saat training.
+    
+    buffer_rows = 24 * 7 
+    df_buffer = df_full.iloc[-buffer_rows:].copy().reset_index(drop=True) if len(df_full) >= buffer_rows else df_full.copy()
+    
+    # 🚀 FIX SCALER: Tidak ada lagi rename kolom PC. Gunakan nama asli!
     if SPATIAL_MODE == 'EOF':
-        pc_cols = [
-            f"{comp.upper()}_PC{i+1}"
-            for i in range(N_PC_FEATURES)
-        ]
+        pc_cols = [f"{comp.upper()}_PC{i+1}" for i in range(N_PC_FEATURES)]
     else:
-        pc_cols = [
-            f"MEOF_PC{i+1}"
-            for i in range(N_PC_FEATURES)
-        ]
-
+        pc_cols = [f"MEOF_PC{i+1}" for i in range(N_PC_FEATURES)]
+        
     cols_to_keep = ['datetime', 'Segment_ID']
-
     if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
         cols_to_keep.append('waterlevel')
-
     cols_to_keep += pc_cols
-
-    df_comp = df_buffer[cols_to_keep].copy()
-
-    # Tidak ada rename MEOF_PC1 -> PC1.
-    return df_comp
+    
+    return df_buffer[cols_to_keep].copy()
 
 def inverse_scale_operational(y_pred_batch, scaler_obj, total_cols, n_pcs):
     out_len = y_pred_batch.shape[1]
@@ -85,8 +69,6 @@ def main_operational_forecast():
     n_lat, n_lon = len(lats), len(lons)
     
     valid_mask = ds_mean_u['u'].notnull().values.flatten()
-    valid_grid_count = valid_mask.sum()
-    
     mean_u_map = ds_mean_u['u'].values.flatten()[valid_mask]
     mean_v_map = ds_mean_v['v'].values.flatten()[valid_mask]
     
@@ -127,10 +109,10 @@ def main_operational_forecast():
             print("🪓 Membelah Matriks Prediksi MEOF menjadi U dan V...")
             pred_pc_outputs['meof'] = unscaled_pc
 
-    print(f"\n🌐 Data terakhir tercatat: {latest_timestamp}")
+    print(f"\n🌐 Data terakhir tercatat (UTC): {latest_timestamp}")
     print("🌐 Merekonsiliasi PC menjadi Peta 2D dan menghitung Kecepatan & Arah...")
     
-    future_timestamps = pd.date_range(start=latest_timestamp + pd.Timedelta(hours=1), periods=HORIZON, freq='1H')
+    future_timestamps_utc = pd.date_range(start=latest_timestamp + pd.Timedelta(hours=1), periods=HORIZON, freq='1H')
     all_forecast_rows = []
     maps_for_plotting = []
 
@@ -141,7 +123,10 @@ def main_operational_forecast():
         pca_meof = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_meof_model.joblib'))
 
     for h_idx in range(HORIZON):
-        current_pred_time = future_timestamps[h_idx]
+        current_pred_time_utc = future_timestamps_utc[h_idx]
+        
+        # 🚀 FIX ZONA WAKTU: Konversi eksplisit ke WIB sebelum masuk CSV
+        current_pred_time_wib = current_pred_time_utc + pd.Timedelta(hours=7) 
         
         if SPATIAL_MODE == 'EOF':
             pc_u_hour = pred_pc_outputs['u'][h_idx].reshape(1, -1)
@@ -151,8 +136,10 @@ def main_operational_forecast():
         else:
             pc_meof_hour = pred_pc_outputs['meof'][h_idx].reshape(1, -1)
             anom_meof_1d = pca_meof.inverse_transform(pc_meof_hour)[0]
-            anom_u_1d = anom_meof_1d[:valid_grid_count]
-            anom_v_1d = anom_meof_1d[valid_grid_count:]
+            # Belah tepat di tengah
+            half_idx = len(anom_meof_1d) // 2
+            anom_u_1d = anom_meof_1d[:half_idx]
+            anom_v_1d = anom_meof_1d[half_idx:]
         
         def sinkronisasi_grid(anomali, target_size):
             if len(anomali) > target_size: return anomali[:target_size]
@@ -176,13 +163,13 @@ def main_operational_forecast():
                 return base.reshape(n_lat, n_lon)
             
             maps_for_plotting.append({
-                'time': current_pred_time, 'u_2d': to_2d(u_absolute),
+                'time_wib': current_pred_time_wib, 'u_2d': to_2d(u_absolute),
                 'v_2d': to_2d(v_absolute), 'speed_2d': to_2d(speed)
             })
         
         for i in range(len(lon_valid)):
             all_forecast_rows.append({
-                'datetime_prediction': current_pred_time,
+                'datetime_prediction': current_pred_time_wib, # 🚀 SIMPAN KE CSV SEBAGAI WIB
                 'forecast_horizon_hour': h_idx + 1,
                 'latitude': lat_valid[i], 'longitude': lon_valid[i],
                 'u_velocity_ms': round(u_absolute[i], 4),
@@ -195,10 +182,10 @@ def main_operational_forecast():
     output_dir = "outputs/predictions"
     os.makedirs(output_dir, exist_ok=True)
     
-    file_timestamp = future_timestamps[0].strftime('%Y%m%d_%H%M')
-    csv_save_path = os.path.join(PATHS['OUTPUT_PRED'], f"prediksi_spasial_{file_timestamp}.csv")
+    file_timestamp = future_timestamps_utc[0].strftime('%Y%m%d_%H%M')
+    csv_save_path = os.path.join(PATHS['OUTPUT_PRED'], f"prediksi_spasial_{file_timestamp}_WIB.csv")
     df_final_forecast.to_csv(csv_save_path, index=False)
-    print(f"\n💾 CSV Ramalan Laut tersimpan di:\n   -> {csv_save_path}")
+    print(f"\n💾 CSV Ramalan Laut (WIB) tersimpan di:\n   -> {csv_save_path}")
 
     print("🎨 Menggambar Peta Prakiraan Cuaca Harian (24-Panel)...")
     fig, axes = plt.subplots(4, 6, figsize=(26, 18), sharex=True, sharey=True)
@@ -211,8 +198,7 @@ def main_operational_forecast():
 
     for ax, map_data in zip(axes, maps_for_plotting):
         U, V, Speed = map_data['u_2d'], map_data['v_2d'], map_data['speed_2d']
-        waktu_wib_panel = map_data['time'] + pd.Timedelta(hours=7)
-        plot_time_str = waktu_wib_panel.strftime('%H:%M WIB\n(%d %b)')
+        plot_time_str = map_data['time_wib'].strftime('%H:%M WIB\n(%d %b)')
         
         contour = ax.contourf(Lon, Lat, Speed, cmap='jet', alpha=0.7, levels=np.linspace(0, 3.0, 20))
         ax.quiver(Lon[skip], Lat[skip], U[skip], V[skip], color='black', scale=20, width=0.003, headwidth=2)
