@@ -45,9 +45,9 @@ echo.
 echo --- Reconstruction
 python "reconstruction.py"
 
-echo.
-echo --- Reconstruction
-python "reconstruction.py"
+REM echo.
+REM echo --- Prediksi
+REM python "Predict.py"
 
 REM echo.
 REM echo -------------------------------------------------
