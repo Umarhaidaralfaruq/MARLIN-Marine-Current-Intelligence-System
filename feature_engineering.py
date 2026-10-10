@@ -96,9 +96,7 @@ def build_features(df):
     mandatory_cols = ['datetime', 'Segment_ID'] + target_cols
     
     final_list = sorted(list(set(all_feats)))
-    for col in mandatory_cols:
-        if col not in final_list:
-            final_list.insert(0, col) 
+    final_list = mandatory_cols + [col for col in final_list if col not in mandatory_cols] 
 
     final_list = [col for col in final_list if col in df_processed.columns]
     

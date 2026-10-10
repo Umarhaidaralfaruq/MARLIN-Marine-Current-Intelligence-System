@@ -45,6 +45,10 @@ echo.
 echo --- Reconstruction
 python "reconstruction.py"
 
+echo.
+echo --- Reconstruction
+python "reconstruction.py"
+
 REM echo.
 REM echo -------------------------------------------------
 REM echo Mengunggah Model dan Artefak...
@@ -58,16 +62,9 @@ REM git add *.h5
 
 REM git commit -m "Auto-update: Model LSTM, artefak PCA, dan hasil validasi terbaru"
 
-REM if errorlevel 1 (
-    REM echo.
-    REM echo --- Tidak ada perubahan output untuk di-commit.
-REM )
-
 REM echo.
 REM echo --- Mengirim hasil terbaru ke GitHub...
 REM git push origin main
-
-REM if errorlevel 1 goto GIT_ERROR
 
 REM echo.
 REM echo =================================================
