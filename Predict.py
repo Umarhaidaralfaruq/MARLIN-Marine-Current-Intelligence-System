@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: operational_prediction.py (FIX ZONA WAKTU & SCALER)
+# FILE: operational_prediction.py (MODULAR EOF / MEOF)
 # DESKRIPSI: Prediksi Harian Arus Selat Bali (Export CSV & Peta 24-Panel)
 # =============================================================================
 
@@ -28,36 +28,50 @@ def load_production_artifacts(comp):
     model = tf.keras.models.load_model(model_path, compile=False)
     return pca, scaler, model
 
+
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
     
     # ==========================================================
-    # 🛑 INJEKSI UJI COBA: POTONG DATA SAMPAI TGL 9 JAM 21:00 UTC
-    # ==========================================================
-    # Silakan sesuaikan tahun dan bulannya dengan data riil lu!
+    # 🛑 INJEKSI UJI COBA: HINDCASTING (SIMULASI MASA LALU)
+    # Hapus tanda pagar (#) di 2 baris bawah ini jika ingin memotong data
     cutoff_time = pd.to_datetime("2026-10-09 21:00:00") 
     df_full = df_full[df_full['datetime'] <= cutoff_time]
     # ==========================================================
     
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
-    
-    buffer_rows = 24 * 7 
-    df_buffer = df_full.iloc[-buffer_rows:].copy().reset_index(drop=True) if len(df_full) >= buffer_rows else df_full.copy()
 
-    
-    # 🚀 FIX SCALER: Tidak ada lagi rename kolom PC. Gunakan nama asli!
+    buffer_rows = 24 * 7
+    df_buffer = (
+        df_full.iloc[-buffer_rows:].copy().reset_index(drop=True)
+        if len(df_full) >= buffer_rows
+        else df_full.copy()
+    )
+
+    # Pertahankan nama PC ASLI seperti saat training.
     if SPATIAL_MODE == 'EOF':
-        pc_cols = [f"{comp.upper()}_PC{i+1}" for i in range(N_PC_FEATURES)]
+        pc_cols = [
+            f"{comp.upper()}_PC{i+1}"
+            for i in range(N_PC_FEATURES)
+        ]
     else:
-        pc_cols = [f"MEOF_PC{i+1}" for i in range(N_PC_FEATURES)]
-        
+        pc_cols = [
+            f"MEOF_PC{i+1}"
+            for i in range(N_PC_FEATURES)
+        ]
+
     cols_to_keep = ['datetime', 'Segment_ID']
+
     if FEATURE_TOGGLES.get('ENABLE_WATER_LEVEL', False):
         cols_to_keep.append('waterlevel')
+
     cols_to_keep += pc_cols
-    
-    return df_buffer[cols_to_keep].copy()
+
+    df_comp = df_buffer[cols_to_keep].copy()
+
+    # Tidak ada rename MEOF_PC1 -> PC1.
+    return df_comp
 
 def inverse_scale_operational(y_pred_batch, scaler_obj, total_cols, n_pcs):
     out_len = y_pred_batch.shape[1]
@@ -79,6 +93,8 @@ def main_operational_forecast():
     n_lat, n_lon = len(lats), len(lons)
     
     valid_mask = ds_mean_u['u'].notnull().values.flatten()
+    valid_grid_count = valid_mask.sum()
+    
     mean_u_map = ds_mean_u['u'].values.flatten()[valid_mask]
     mean_v_map = ds_mean_v['v'].values.flatten()[valid_mask]
     
@@ -134,8 +150,6 @@ def main_operational_forecast():
 
     for h_idx in range(HORIZON):
         current_pred_time_utc = future_timestamps_utc[h_idx]
-        
-        # 🚀 FIX ZONA WAKTU: Konversi eksplisit ke WIB sebelum masuk CSV
         current_pred_time_wib = current_pred_time_utc + pd.Timedelta(hours=7) 
         
         if SPATIAL_MODE == 'EOF':
@@ -146,10 +160,8 @@ def main_operational_forecast():
         else:
             pc_meof_hour = pred_pc_outputs['meof'][h_idx].reshape(1, -1)
             anom_meof_1d = pca_meof.inverse_transform(pc_meof_hour)[0]
-            # Belah tepat di tengah
-            half_idx = len(anom_meof_1d) // 2
-            anom_u_1d = anom_meof_1d[:half_idx]
-            anom_v_1d = anom_meof_1d[half_idx:]
+            anom_u_1d = anom_meof_1d[:valid_grid_count]
+            anom_v_1d = anom_meof_1d[valid_grid_count:]
         
         def sinkronisasi_grid(anomali, target_size):
             if len(anomali) > target_size: return anomali[:target_size]
@@ -179,7 +191,7 @@ def main_operational_forecast():
         
         for i in range(len(lon_valid)):
             all_forecast_rows.append({
-                'datetime_prediction': current_pred_time_wib, # 🚀 SIMPAN KE CSV SEBAGAI WIB
+                'datetime_prediction': current_pred_time_wib,
                 'forecast_horizon_hour': h_idx + 1,
                 'latitude': lat_valid[i], 'longitude': lon_valid[i],
                 'u_velocity_ms': round(u_absolute[i], 4),
