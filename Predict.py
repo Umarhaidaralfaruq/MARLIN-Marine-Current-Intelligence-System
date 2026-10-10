@@ -32,12 +32,6 @@ def load_production_artifacts(comp):
 def get_latest_data_for_comp(comp):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
-    
-    # === TAMBAHAN UNTUK MEMUTAR WAKTU KE TANGGAL 9 JAM 9 UTC ===
-    target_time = pd.to_datetime("2026-10-09 21:00:00")
-    df_full = df_full[df_full['datetime'] <= target_time]
-    # ===========================================================
-    
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
 
     buffer_rows = 24 * 7
@@ -46,7 +40,6 @@ def get_latest_data_for_comp(comp):
         if len(df_full) >= buffer_rows
         else df_full.copy()
     )
-
 
     # Pertahankan nama PC ASLI seperti saat training.
     if SPATIAL_MODE == 'EOF':
