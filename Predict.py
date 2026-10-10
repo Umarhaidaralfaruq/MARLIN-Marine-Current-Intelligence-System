@@ -36,7 +36,7 @@ def get_latest_data_for_comp(comp):
     # ==========================================================
     # 🛑 INJEKSI UJI COBA: HINDCASTING (SIMULASI MASA LALU)
     # Hapus tanda pagar (#) di 2 baris bawah ini jika ingin memotong data
-    cutoff_time = pd.to_datetime("2026-10-09 21:00:00") 
+    cutoff_time = pd.to_datetime("2026-10-09 09:00:00") 
     df_full = df_full[df_full['datetime'] <= cutoff_time]
     # ==========================================================
     
