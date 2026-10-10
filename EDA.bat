@@ -18,17 +18,17 @@ echo -------------------------------------------------
 echo [3/3] Mengeksekusi Script Python...
 echo -------------------------------------------------
 
-echo --- Analisis Statistik
-python "02a_eda_statistics.py"
+REM echo --- Analisis Statistik
+REM python "02a_eda_statistics.py"
 
-echo --- Analisis Korelasi
-python "02b_eda_correlation.py"
+REM echo --- Analisis Korelasi
+REM python "02b_eda_correlation.py"
 
-echo --- Analisis Korelasi
-python "02c_confidence_interval.py"
+REM echo --- Analisis Korelasi
+REM python "02c_confidence_interval.py"
 
-REM echo --- Analisis Time Series
-REM python "03_time_series_analysis.py"
+echo --- Analisis Time Series
+python "03_time_series_analysis.py"
 
 echo.
 echo =================================================

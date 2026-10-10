@@ -326,6 +326,7 @@ def run_period_simulation(start_date, end_date):
     mae_speed_1d = np.mean(np.abs(speed_pred - speed_true), axis=0)
     rmse_speed_1d = np.sqrt(np.mean((speed_pred - speed_true)**2, axis=0))
     rmse_persist_1d = np.sqrt(np.mean((speed_persist - speed_true)**2, axis=0))
+    p90_rmse_speed = np.percentile(rmse_speed_1d, 90)
     
     def circular_error(pred, true):
         diff = np.abs(pred - true) % 360
@@ -346,6 +347,7 @@ def run_period_simulation(start_date, end_date):
     
     # 3. Metrik Spasial Skill Score
     skill_spatial_1d = 1 - (rmse_speed_1d / np.maximum(rmse_persist_1d, 1e-8))
+    
 
     print("\n🌐 RINGKASAN ERROR SPASIAL")
     print("-" * 60)
@@ -353,6 +355,7 @@ def run_period_simulation(start_date, end_date):
     print(f"RMSE Speed Mean   : {np.nanmean(rmse_speed_1d):.4f} m/s")
     print(f"RMSE Direction    : {np.nanmean(rmse_dir_1d):.2f}°")
     print(f"Best Grid RMSE    : {np.nanmin(rmse_speed_1d):.4f} m/s")
+    print(f"P90 Grid RMSE     : {p90_rmse_speed:.4f} m/s")
     print(f"Worst Grid RMSE   : {np.nanmax(rmse_speed_1d):.4f} m/s")
 
     # =====================================================================

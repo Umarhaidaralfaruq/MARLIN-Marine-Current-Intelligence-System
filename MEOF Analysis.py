@@ -73,15 +73,21 @@ def plot_pca_spatial_loadings():
             var_u = var_v = pca_meof.explained_variance_ratio_[mode]*100
         
         map_u, map_v = to_2d(bobot_u_1d), to_2d(bobot_v_1d)
-        
+                
         for j, (comp_map, title, var) in enumerate(zip([map_u, map_v], ['Komponen U', 'Komponen V'], [var_u, var_v])):
             ax = axes[i, j]
             max_val = np.nanmax(np.abs(comp_map))
             contour = ax.contourf(Lon, Lat, comp_map, cmap='bwr', levels=np.linspace(-max_val, max_val, 20))
-            ax.set_title(f"Mode {mode+1} - {title}\n(Variansi: {var:.1f}%)", fontsize=12)
-            if i == 1: ax.set_xlabel('Longitude')
-            if j == 0: ax.set_ylabel('Latitude')
-            fig.colorbar(contour, ax=ax, fraction=0.046, pad=0.04)
+            
+            # KOREKSI LABEL DISINI
+            if SPATIAL_MODE == 'EOF':
+                ax.set_title(f"Mode {mode+1} - {title}\n(Variansi: {var:.1f}%)", fontsize=12)
+            else:
+                # Untuk MEOF, variansi ditaruh di title Mode, bukan per komponen
+                if j == 0: 
+                    ax.set_title(f"Mode {mode+1} - {title}\n(Total Variansi Mode: {var:.1f}%)", fontsize=12)
+                else:
+                    ax.set_title(f"Mode {mode+1} - {title}", fontsize=12)
 
     plt.tight_layout()
     output_dir = "outputs"
