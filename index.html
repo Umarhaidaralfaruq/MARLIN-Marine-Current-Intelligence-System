@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>MARLIN UI - Fullscreen</title>
+    
+    <!-- Pustaka CSS untuk Peta Leaflet & Animasi Arus -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
+    
+    <style>
+        /* Reset bawaan browser */
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; }
+
+        /* PETA FULL SCREEN */
+        #map { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; background-color: #0f172a; }
+
+        /* WADAH POSISI UI */
+        .ui-top-left { position: absolute; top: 20px; left: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 15px; pointer-events: none; }
+        .ui-bottom-right { position: absolute; bottom: 30px; right: 20px; z-index: 1000; pointer-events: none; }
+
+        /* DESAIN KARTU KACA (GLASSMORPHISM) UMUM */
+        .glass-card {
+            pointer-events: auto; 
+            /* Angka 0.4 dan 0.5 di bawah ini yang bikin dia makin transparan */
+            background: linear-gradient(135deg, rgba(30,41,59, 0.4) 0%, rgba(15,23,42, 0.5) 100%);
+            border-radius: 12px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3); /* Bayangan sedikit dihaluskan */
+            border: 1px solid rgba(148,163,184,0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+        }
+        /* KHUSUS HEADER LOGO & JUDUL */
+        .header-card {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            gap: 15px;
+        }
+        .header-card img { height: 45px; width: auto; }
+        .header-card h1 { margin: 0; font-size: 1.5em; font-weight: bold; color: #f8fafc; letter-spacing: 1px;}
+        .header-card p { margin: 0; font-size: 0.75em; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;}
+
+        /* KHUSUS DATA PELABUHAN */
+        .data-card { padding: 20px; width: 280px; }
+        .speed { font-size: 2.5em; font-weight: bold; color: #38bdf8; margin: 10px 0; line-height: 1; }
+
+        /* KHUSUS LEGENDA WARNA */
+        .legend-card { padding: 15px; width: 250px; }
+        .legend-title { text-align: center; font-size: 0.85em; font-weight: bold; color: #cbd5e1; margin-bottom: 8px; }
+        .legend-gradient {
+            height: 12px;
+            border-radius: 6px;
+            background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+        }
+        .legend-labels { display: flex; justify-content: space-between; font-size: 0.75em; color: #94a3b8; margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- Wadah Peta Utama -->
+    <div id="map"></div>
+
+    <!-- ================= UI KIRI ATAS ================= -->
+    <div class="ui-top-left">
+        
+        <!-- 1. Header Logo & Judul -->
+        <div class="glass-card header-card">
+            <!-- Pastikan nama file gambar ini sesuai dengan yang ada di folder lo -->
+            <img src="Logo_BMKG.png" alt="Logo BMKG">
+            <div>
+                <h1>MARLIN</h1>
+                <p>Marine Current Intelligence System</p>
+            </div>
+        </div>
+
+        <!-- 2. Ringkasan Data -->
+        <div class="glass-card data-card">
+            <h2 style="margin-top: 0; color: #cbd5e1; font-size: 1.1em;">Pelabuhan <span id="title-ketapang">...</span></h2>
+            <p style="color: #94a3b8; font-size: 0.85em; margin-bottom: 0;">Kecepatan Saat Ini</p>
+            <div class="speed"><span id="speed-ketapang">-</span> <span style="font-size: 0.4em; color: #94a3b8;">m/s</span></div>
+            <p style="color: #94a3b8; font-size: 0.9em; margin-top: 0;">Arah: <b id="dir-ketapang" style="color: white;">-</b></p>
+        </div>
+
+    </div>
+
+    <!-- ================= UI KANAN BAWAH ================= -->
+    <div class="ui-bottom-right">
+        
+        <!-- Legenda Gradasi Warna -->
+        <div class="glass-card legend-card">
+            <div class="legend-title">Kecepatan Arus (m/s)</div>
+            <div class="legend-gradient"></div>
+            <div class="legend-labels">
+                <span>0</span>
+                <span>1</span>
+                <span>2</span>
+                <span>3</span>
+                <span>4+</span>
+            </div>
+        </div>
+
+    </div>
+    <!-- Pustaka JavaScript (Leaflet & Velocity) -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.js"></script>
+
+    <script>
+        // === 1. KONFIGURASI URL API ===
+        // GANTI INI dengan URL Port 8000 lo (tanpa tanda slash / di akhir)
+        // Contoh: 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'
+        const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
+
+        // === 2. INISIALISASI PETA ===
+        // Koordinat diset ke area Selat Bali
+        var map = L.map('map').setView([-8.140, 114.440], 12); 
+        
+        // Memuat basemap citra satelit (seperti di v1)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri',
+            className: 'map-tiles'
+        }).addTo(map);
+
+        // Menambahkan filter gelap ke basemap agar partikel putih arus lebih jelas terlihat
+        document.querySelector('.leaflet-tile-pane').style.filter = 'brightness(0.75) contrast(1.1)';
+
+        // === 3. MENGAMBIL DATA SUMMARY (KARTU KIRI ATAS) ===
+        fetch(`${BASE_API_URL}/api/summary?pelabuhan=ketapang`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('title-ketapang').innerText = data.pelabuhan;
+                document.getElementById('speed-ketapang').innerText = data.current.speed_ms;
+                document.getElementById('dir-ketapang').innerText = data.current.direction;
+            })
+            .catch(err => console.error('Gagal mengambil summary:', err));
+
+        // === 4. MENGAMBIL DATA GRID & MERENDER ANIMASI ARUS ===
+        fetch(`${BASE_API_URL}/api/spatial-grid`)
+            .then(res => res.json())
+            .then(data => {
+                var velocityLayer = L.velocityLayer({
+                    displayValues: true,
+                    displayOptions: { 
+                        velocityType: 'Kecepatan Arus', 
+                        displayPosition: 'bottomright', 
+                        displayEmptyString: 'Tidak ada data' 
+                    },
+                    data: data,                 // Data matriks U dan V dari FastAPI
+                    maxVelocity: 4.0,           // Batas maksimal kecepatan
+                    velocityScale: 0.035,       // Panjang partikel
+                    particleAge: 120,           // Umur animasi partikel
+                    particleMultiplier: 0.005,  // Kepadatan partikel di layar
+                    colorScale: ['#ffffff', '#a5f3fc', '#38bdf8'] // Gradasi partikel
+                });
+                
+                velocityLayer.addTo(map);
+            })
+            .catch(err => console.error('Gagal memuat animasi arus:', err));
+            
+        // === 5. MENGAMBIL BACKGROUND WARNA PANAS/DINGIN ===
+            fetch(`${BASE_API_URL}/api/map-background`)
+                .then(res => res.json())
+                .then(data => {
+                    // Merangkai teks base64 menjadi format gambar web
+                    var imageUrl = 'data:image/png;base64,' + data.image;
+                    var imageBounds = data.bounds; // Koordinat ujung ke ujung
+                    
+                    // Menimpa gambar ke atas peta Leaflet
+                    L.imageOverlay(imageUrl, imageBounds, {
+                        opacity: 0.65 // Lo bisa atur ketebalan warnanya di sini (0.0 sampai 1.0)
+                    }).addTo(map);
+                })
+                .catch(err => console.error('Gagal memuat warna background:', err));
+    </script>
+
+</body>
+</html>

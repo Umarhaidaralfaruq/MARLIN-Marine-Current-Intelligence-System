@@ -12,6 +12,10 @@ import glob
 import json
 import matplotlib.tri as tri
 from datetime import datetime
+import io
+import base64
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 # Mengambil variabel konfigurasi (pastikan file config.py tetap ada di folder yang sama)
 from config import *
@@ -193,3 +197,60 @@ def get_spatial_grid(time_str: str = Query(None, description="Format YYYY-MM-DD 
         {"header": {"parameterCategory": 2, "parameterNumber": 2, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": u_data},
         {"header": {"parameterCategory": 2, "parameterNumber": 3, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": v_data}
     ]
+
+
+@app.get("/api/map-background")
+def get_map_background(time_str: str = Query(None, description="Format YYYY-MM-DD HH:MM")):
+    """Menghasilkan gambar overlay warna gradasi kecepatan arus"""
+    files = get_available_baseruns()
+    if not files:
+        raise HTTPException(status_code=404, detail="Data tidak tersedia")
+        
+    df_spatial = load_data(files[0])
+    
+    if time_str:
+        df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == time_str]
+    else:
+        waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
+        df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == waktu_unik[0]]
+
+    if df_hour.empty:
+        raise HTTPException(status_code=404, detail="Waktu tidak ditemukan")
+
+    lon_min, lon_max = float(df_hour['lon'].min()), float(df_hour['lon'].max())
+    lat_min, lat_max = float(df_hour['lat'].min()), float(df_hour['lat'].max())
+    
+    # Proses Masking Segitiga (seperti di app.py lama)
+    triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
+    x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
+    batas_resolusi = BATAS_RESOLUSI if 'BATAS_RESOLUSI' in globals() else 0.015
+    mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
+    triang.set_mask(mask)
+    
+    # Proses Menggambar dengan Matplotlib
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.axis('off')
+    ax.set_xlim(lon_min, lon_max)
+    ax.set_ylim(lat_min, lat_max)
+    fig.patch.set_alpha(0.0)
+    ax.patch.set_alpha(0.0)
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    plt.margins(0,0)
+    
+    vmax_plot = 4.0 # Batas max gradasi warna
+    cmap_custom = LinearSegmentedColormap.from_list("custom", ['#0000ff', '#00ffff', '#00ff00', '#ffff00', '#ffa500', '#ff0000', '#4b0082'])
+    
+    ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0, vmax_plot, 100), cmap=cmap_custom, vmin=0, vmax=vmax_plot, extend='max', alpha=0.9, antialiased=True)
+    
+    # Ubah gambar jadi teks Base64
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', transparent=True, dpi=300, bbox_inches='tight', pad_inches=0)
+    buf.seek(0)
+    plt.close(fig)
+    
+    image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    return {
+        "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
+        "image": image_base64
+    }
