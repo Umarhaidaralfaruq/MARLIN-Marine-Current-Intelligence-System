@@ -2,177 +2,403 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>MARLIN UI - Fullscreen</title>
+    <title>MARLIN UI - Fullscreen Dashboard</title>
     
-    <!-- Pustaka CSS untuk Peta Leaflet & Animasi Arus -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
     
     <style>
-        /* Reset bawaan browser */
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; background-color: #0f172a;}
+        #map { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; }
+        .leaflet-control-attribution { display: none !important; }
 
-        /* PETA FULL SCREEN */
-        #map { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; background-color: #0f172a; }
-
-        /* WADAH POSISI UI */
-        .ui-top-left { position: absolute; top: 20px; left: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 15px; pointer-events: none; }
-        .ui-bottom-right { position: absolute; bottom: 30px; right: 20px; z-index: 1000; pointer-events: none; }
-
-        /* DESAIN KARTU KACA (GLASSMORPHISM) UMUM */
-        .glass-card {
-            pointer-events: auto; 
-            /* Angka 0.4 dan 0.5 di bawah ini yang bikin dia makin transparan */
-            background: linear-gradient(135deg, rgba(30,41,59, 0.4) 0%, rgba(15,23,42, 0.5) 100%);
-            border-radius: 12px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3); /* Bayangan sedikit dihaluskan */
-            border: 1px solid rgba(148,163,184,0.2);
-            backdrop-filter: blur(10px);
-            color: white;
+        .ui-top-left { position: absolute; top: 15px; left: 15px; z-index: 1000; pointer-events: none; }
+        .ui-right-bottom { position: absolute; bottom: 20px; right: 15px; z-index: 1000; pointer-events: none; }
+        
+        .bottom-wrapper {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90vw; max-width: 1000px; display: flex; flex-direction: column; gap: 8px; 
+            opacity: 0.25; transition: opacity 0.4s ease-in-out; pointer-events: auto; 
         }
-        /* KHUSUS HEADER LOGO & JUDUL */
-        .header-card {
-            display: flex;
-            align-items: center;
-            padding: 12px 20px;
-            gap: 15px;
-        }
-        .header-card img { height: 45px; width: auto; }
-        .header-card h1 { margin: 0; font-size: 1.5em; font-weight: bold; color: #f8fafc; letter-spacing: 1px;}
-        .header-card p { margin: 0; font-size: 0.75em; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;}
+        .bottom-wrapper:hover { opacity: 1; }
 
-        /* KHUSUS DATA PELABUHAN */
-        .data-card { padding: 20px; width: 280px; }
-        .speed { font-size: 2.5em; font-weight: bold; color: #38bdf8; margin: 10px 0; line-height: 1; }
-
-        /* KHUSUS LEGENDA WARNA */
-        .legend-card { padding: 15px; width: 250px; }
-        .legend-title { text-align: center; font-size: 0.85em; font-weight: bold; color: #cbd5e1; margin-bottom: 8px; }
-        .legend-gradient {
-            height: 12px;
-            border-radius: 6px;
-            background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082);
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+        .glass-theme {
+            background: linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(2,6,23,0.75) 100%);
+            border: 1px solid rgba(148,163,184,0.25); border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4); backdrop-filter: blur(12px); color: white; pointer-events: auto;
         }
-        .legend-labels { display: flex; justify-content: space-between; font-size: 0.75em; color: #94a3b8; margin-top: 5px; font-weight: bold; }
+
+        .header-card { display: flex; align-items: center; padding: 8px 15px; gap: 12px; width: max-content; }
+        .header-card img { height: 35px; width: auto; }
+        .header-card h1 { margin: 0; font-size: 1.2em; font-weight: bold; color: #f8fafc; letter-spacing: 1px;}
+        .header-card p { margin: 0; font-size: 0.65em; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;}
+
+        .legend-card { padding: 10px 15px; width: 220px; }
+        .legend-title { text-align: center; font-size: 0.75em; font-weight: bold; color: #cbd5e1; margin-bottom: 6px; }
+        .legend-gradient { height: 8px; border-radius: 4px; background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ffa500, #ff0000, #4b0082); box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
+        .legend-labels { display: flex; justify-content: space-between; font-size: 0.7em; color: #94a3b8; margin-top: 4px; font-weight: bold; }
+
+        .dashboard-panel { display: flex; gap: 12px; width: 100%; }
+        .port-card { flex: 1; padding: 10px 15px; } 
+
+        .port-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 6px; margin-bottom: 8px;
+        }
+        .port-title { font-size: 0.9em; font-weight: bold; letter-spacing: 0.5px; margin: 0; color: #e2e8f0; }
+        
+        .status-badge {
+            padding: 2px 8px; border-radius: 20px; font-size: 0.7em; font-weight: bold;
+            display: inline-flex; align-items: center; gap: 5px; color: white; background-color: #22c55e;
+        }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: white; opacity: 0.8; }
+
+        .data-columns { display: flex; justify-content: space-between; gap: 10px; }
+        .data-col { flex: 1; }
+        .col-title { font-size: 0.7em; color: #94a3b8; margin-bottom: 2px; display: flex; align-items: center; }
+        .speed-val { font-size: 1.5em; font-weight: bold; color: white; display: flex; align-items: baseline; gap: 4px; line-height: 1; margin-bottom: 4px; }
+        .speed-unit { font-size: 0.45em; color: #94a3b8; font-weight: normal; }
+        .speed-detail { font-size: 0.7em; color: #94a3b8; line-height: 1.2;}
+        .speed-detail strong { color: white; }
+
+        .time-nav-panel { display: flex; gap: 8px; width: 100%; }
+        .nav-btn, .time-display-box {
+            padding: 8px 15px; color: #e2e8f0; font-weight: bold; font-size: 0.8em; display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .nav-btn:hover { background: rgba(30,41,59,0.85); border-color: rgba(148,163,184,0.5); }
+        .nav-btn:active { transform: scale(0.98); }
+        .nav-btn-prev { flex: 3; }
+        .nav-btn-reset { flex: 1; font-size: 1em; }
+        .time-display-box { flex: 5; cursor: default; } 
+        .nav-btn-next { flex: 3; }
+        .time-display-box span { color: #38bdf8; margin-right: 6px; } 
+
+        /* TOOLTIP KURSOR MELAYANG */
+        .leaflet-control-velocity {
+            position: fixed !important; pointer-events: none !important; 
+            background: rgba(15, 23, 42, 0.85) !important; border: 1px solid rgba(56, 189, 248, 0.5) !important;
+            border-radius: 6px !important; padding: 6px 12px !important; color: #e2e8f0 !important;
+            font-weight: bold !important; font-size: 0.85em !important; box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+            backdrop-filter: blur(4px) !important; z-index: 9999 !important; margin: 0 !important;
+            opacity: 0; transition: opacity 0.2s ease-in-out; transform: translate(15px, 15px); 
+        }
+
+        /* PANEL GRAFIK (KANAN ATAS) */
+        .chart-panel {
+            position: absolute; top: 15px; right: 15px; z-index: 1000; width: 400px; padding: 15px;
+            display: none; flex-direction: column;
+        }
+        .chart-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+            font-size: 0.85em; font-weight: bold; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 8px; color: #e2e8f0;
+        }
+        .chart-title-box { display: flex; align-items: center; gap: 8px; }
+        .close-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.2em; transition: 0.2s; }
+        .close-btn:hover { color: #ef4444; }
+
+        /* ================= MODE FORECASTER (KANAN ATAS) ================= */
+        .ui-top-right { position: absolute; top: 15px; right: 15px; z-index: 1000; }
+        .forecaster-btn {
+            background: linear-gradient(135deg, rgba(15,23,42,0.3) 0%, rgba(2,6,23,0.4) 100%);
+            border: 1px solid rgba(148,163,184,0.1); border-radius: 8px;
+            padding: 8px 15px; color: #94a3b8; font-size: 0.75em; font-weight: bold;
+            cursor: pointer; display: flex; align-items: center; gap: 8px;
+            backdrop-filter: blur(4px); box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-decoration: none; letter-spacing: 0.5px;
+            
+            /* Kunci agar sangat transparan seperti bunglon */
+            opacity: 0.15; 
+            transition: all 0.3s ease;
+        }
+        
+        /* Muncul timbul dan menyala saat disorot kursor */
+        .forecaster-btn:hover {
+            opacity: 1; 
+            color: #38bdf8; 
+            border-color: rgba(56, 189, 248, 0.5);
+            background: linear-gradient(135deg, rgba(15,23,42,0.75) 0%, rgba(2,6,23,0.85) 100%);
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+        }
+
+        /* Geser panel grafik sedikit ke bawah agar tidak menabrak tombol ini saat terbuka */
+        .chart-panel { top: 60px; }
+
     </style>
 </head>
 <body>
 
-    <!-- Wadah Peta Utama -->
     <div id="map"></div>
 
-    <!-- ================= UI KIRI ATAS ================= -->
     <div class="ui-top-left">
-        
-        <!-- 1. Header Logo & Judul -->
-        <div class="glass-card header-card">
-            <!-- Pastikan nama file gambar ini sesuai dengan yang ada di folder lo -->
+        <div class="glass-theme header-card">
             <img src="Logo_BMKG.png" alt="Logo BMKG">
             <div>
                 <h1>MARLIN</h1>
                 <p>Marine Current Intelligence System</p>
             </div>
         </div>
-
-        <!-- 2. Ringkasan Data -->
-        <div class="glass-card data-card">
-            <h2 style="margin-top: 0; color: #cbd5e1; font-size: 1.1em;">Pelabuhan <span id="title-ketapang">...</span></h2>
-            <p style="color: #94a3b8; font-size: 0.85em; margin-bottom: 0;">Kecepatan Saat Ini</p>
-            <div class="speed"><span id="speed-ketapang">-</span> <span style="font-size: 0.4em; color: #94a3b8;">m/s</span></div>
-            <p style="color: #94a3b8; font-size: 0.9em; margin-top: 0;">Arah: <b id="dir-ketapang" style="color: white;">-</b></p>
-        </div>
-
     </div>
 
-    <!-- ================= UI KANAN BAWAH ================= -->
-    <div class="ui-bottom-right">
-        
-        <!-- Legenda Gradasi Warna -->
-        <div class="glass-card legend-card">
+    <!-- PANEL GRAFIK (DISEMBUNYIKAN DEFAULT) -->
+    <div id="chart-panel" class="glass-theme chart-panel">
+        <div class="chart-header">
+            <div class="chart-title-box">📊 <span id="chart-title">Analisis Titik</span></div>
+            <button onclick="tutupChart()" class="close-btn">✖</button>
+        </div>
+        <canvas id="timeSeriesChart" height="150"></canvas>
+    </div>
+
+    <div class="ui-right-bottom">
+        <div class="glass-theme legend-card">
             <div class="legend-title">Kecepatan Arus (m/s)</div>
             <div class="legend-gradient"></div>
             <div class="legend-labels">
-                <span>0</span>
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4+</span>
+                <span>0</span><span>1</span><span>2</span><span>3</span><span>4+</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- === KANAN ATAS: TOMBOL MODE FORECASTER === -->
+    <div class="ui-top-right">
+        <!-- Ganti href dengan URL Streamlit app.py lo (biasanya port 8501) -->
+        <a href="forecaster.html" class="forecaster-btn" title="Buka Mode Analisis & Validasi">
+            🔬 MODE FORECASTER
+        </a>
+    </div>
+
+    <div class="bottom-wrapper">
+        <div class="dashboard-panel">
+            <!-- KARTU KETAPANG -->
+            <div class="glass-theme port-card">
+                <div class="port-header">
+                    <h2 class="port-title">PELABUHAN KETAPANG</h2>
+                    <div class="status-badge" id="badge-ketapang"><div class="status-dot"></div><span id="status-text-ketapang">AMAN</span></div>
+                </div>
+                <div class="data-columns">
+                    <div class="data-col">
+                        <div class="col-title">Waktu Terpilih (<span id="time-curr-ketapang">-</span>)</div>
+                        <div class="speed-val"><span id="speed-curr-ketapang">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail"><span id="knot-curr-ketapang">-</span> Knot &bull; Arah: <strong id="dir-curr-ketapang">-</strong></div>
+                    </div>
+                    <div class="data-col">
+                        <div class="col-title">Maksimal - 12 Jam</div>
+                        <div class="speed-val"><span id="speed-max-ketapang">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail"><span id="knot-max-ketapang">-</span> Knot &bull; Arah: <strong id="dir-max-ketapang">-</strong> (<span id="time-max-ketapang">-</span>)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KARTU GILIMANUK -->
+            <div class="glass-theme port-card">
+                <div class="port-header">
+                    <h2 class="port-title">PELABUHAN GILIMANUK</h2>
+                    <div class="status-badge" id="badge-gilimanuk"><div class="status-dot"></div><span id="status-text-gilimanuk">AMAN</span></div>
+                </div>
+                <div class="data-columns">
+                    <div class="data-col">
+                        <div class="col-title">Waktu Terpilih (<span id="time-curr-gilimanuk">-</span>)</div>
+                        <div class="speed-val"><span id="speed-curr-gilimanuk">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail"><span id="knot-curr-gilimanuk">-</span> Knot &bull; Arah: <strong id="dir-curr-gilimanuk">-</strong></div>
+                    </div>
+                    <div class="data-col">
+                        <div class="col-title">Maksimal - 12 Jam</div>
+                        <div class="speed-val"><span id="speed-max-gilimanuk">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail"><span id="knot-max-gilimanuk">-</span> Knot &bull; Arah: <strong id="dir-max-gilimanuk">-</strong> (<span id="time-max-gilimanuk">-</span>)</div>
+                    </div>
+                </div>
             </div>
         </div>
 
+        <div class="time-nav-panel">
+            <div class="glass-theme nav-btn nav-btn-prev" onclick="gantiWaktu(-1)">⬅️ Waktu Sebelumnya</div>
+            <div class="glass-theme nav-btn nav-btn-reset" onclick="gantiWaktu(0)" title="Kembali ke waktu saat ini">🔄</div>
+            <div class="glass-theme time-display-box"><span>⏱️</span> <div id="time-display-text">Memuat...</div></div>
+            <div class="glass-theme nav-btn nav-btn-next" onclick="gantiWaktu(1)">Selanjutnya ➡️</div>
+        </div>
     </div>
-    <!-- Pustaka JavaScript (Leaflet & Velocity) -->
+
+    <!-- PUSTAKA JS -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Library Grafik -->
 
     <script>
-        // === 1. KONFIGURASI URL API ===
-        // GANTI INI dengan URL Port 8000 lo (tanpa tanda slash / di akhir)
-        // Contoh: 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'
         const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
 
-        // === 2. INISIALISASI PETA ===
-        // Koordinat diset ke area Selat Bali
-        var map = L.map('map').setView([-8.140, 114.440], 12); 
-        
-        // Memuat basemap citra satelit (seperti di v1)
+        var map = L.map('map', { zoomControl: false }).setView([-8.200, 114.420], 13); 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri',
-            className: 'map-tiles'
+            attribution: '', className: 'map-tiles'
         }).addTo(map);
-
-        // Menambahkan filter gelap ke basemap agar partikel putih arus lebih jelas terlihat
         document.querySelector('.leaflet-tile-pane').style.filter = 'brightness(0.75) contrast(1.1)';
 
-        // === 3. MENGAMBIL DATA SUMMARY (KARTU KIRI ATAS) ===
+        function getStatus(speed) {
+            if (speed >= 2.5) return { text: "AWAS", color: "#dc2626" };    
+            if (speed >= 2.0) return { text: "WASPADA", color: "#f97316" }; 
+            if (speed >= 1.5) return { text: "SIAGA", color: "#eab308" };   
+            return { text: "AMAN", color: "#22c55e" };                      
+        }
+        function msToKnot(ms) { return (ms * 1.94384).toFixed(2); }
+
+        function formatWaktuPort(timeStr, isGilimanuk) {
+            if (!timeStr) return '-';
+            let timePart = timeStr.split(' ')[1]; let [hh, mm] = timePart.split(':'); let jam = parseInt(hh, 10);
+            if (isGilimanuk) { jam = (jam + 1) % 24; return `${jam < 10 ? '0'+jam : jam}:${mm} WITA`; } 
+            else { return `${hh}:${mm} WIB`; }
+        }
+
+        function updatePortCard(portName, data) {
+            if(!data || !data.current) return; 
+            const prefix = portName.toLowerCase();
+            const isGilimanuk = prefix === 'gilimanuk';
+            
+            const currSpeed = parseFloat(data.current.speed_ms || 0);
+            const statusCurr = getStatus(currSpeed);
+            document.getElementById(`status-text-${prefix}`).innerText = statusCurr.text;
+            document.getElementById(`badge-${prefix}`).style.backgroundColor = statusCurr.color;
+            document.getElementById(`speed-curr-${prefix}`).innerText = currSpeed.toFixed(2);
+            document.getElementById(`knot-curr-${prefix}`).innerText = msToKnot(currSpeed);
+            document.getElementById(`dir-curr-${prefix}`).innerText = data.current.direction || '-';
+            if(data.current.time_wib) document.getElementById(`time-curr-${prefix}`).innerText = formatWaktuPort(data.current.time_wib, isGilimanuk);
+
+            if(data.peak) {
+                const maxSpeed = parseFloat(data.peak.speed_ms || 0);
+                document.getElementById(`speed-max-${prefix}`).innerText = maxSpeed.toFixed(2);
+                document.getElementById(`knot-max-${prefix}`).innerText = msToKnot(maxSpeed);
+                document.getElementById(`dir-max-${prefix}`).innerText = data.peak.direction || '-';
+                if(data.peak.time_wib) document.getElementById(`time-max-${prefix}`).innerText = formatWaktuPort(data.peak.time_wib, isGilimanuk);
+            }
+        }
+
+        let waktuAsliServer = ""; let waktuAktifPeta = "";   
+
+        function formatWaktuDisplay(timeStr) {
+            if (!timeStr) return "-";
+            const bulan = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGT", "SEP", "OKT", "NOV", "DES"];
+            let parts = timeStr.split(' '); let dateParts = parts[0].split('-'); let y = dateParts[0]; let m = parseInt(dateParts[1], 10); let d = parseInt(dateParts[2], 10);
+            return `${d} ${bulan[m-1]} ${y} • ${parts[1]} WIB`;
+        }
+
+        function tambahJam(timeStr, jumlahJam) {
+            let parts = timeStr.split(' '); let dateParts = parts[0].split('-'); let timeParts = parts[1].split(':');
+            let dateObj = new Date(dateParts[0], dateParts[1]-1, dateParts[2], timeParts[0], timeParts[1]);
+            dateObj.setHours(dateObj.getHours() + jumlahJam);
+            let yy = dateObj.getFullYear(); let mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+            let dd = String(dateObj.getDate()).padStart(2, '0'); let hh = String(dateObj.getHours()).padStart(2, '0'); let mnt = String(dateObj.getMinutes()).padStart(2, '0');
+            return `${yy}-${mm}-${dd} ${hh}:${mnt}`;
+        }
+
+        function fetchSummaryData(timeStr = null) {
+            let param = timeStr ? `&time_str=${timeStr}` : '';
+            fetch(`${BASE_API_URL}/api/summary?pelabuhan=ketapang${param}`).then(res => res.json()).then(data => updatePortCard('ketapang', data));
+            fetch(`${BASE_API_URL}/api/summary?pelabuhan=gilimanuk${param}`).then(res => res.json()).then(data => updatePortCard('gilimanuk', data));
+        }
+
+        function gantiWaktu(arah) {
+            if (!waktuAktifPeta || !waktuAsliServer) return;
+            waktuAktifPeta = (arah === 0) ? waktuAsliServer : tambahJam(waktuAktifPeta, arah);
+            document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
+            loadMapData(waktuAktifPeta); fetchSummaryData(waktuAktifPeta); 
+        }
+
+        let velocityLayer; let backgroundLayer;
+        function loadMapData(timeStr) {
+            if (velocityLayer) map.removeLayer(velocityLayer);
+            if (backgroundLayer) map.removeLayer(backgroundLayer);
+
+            fetch(`${BASE_API_URL}/api/spatial-grid?time_str=${timeStr}`)
+                .then(res => res.json())
+                .then(data => {
+                    velocityLayer = L.velocityLayer({
+                        displayValues: true, displayOptions: { velocityType: 'Arus', displayPosition: 'topleft', displayEmptyString: 'KOSONG' },
+                        data: data, maxVelocity: 4.0, velocityScale: 0.035, particleAge: 120, particleMultiplier: 0.001, colorScale: ['#ffffff']
+                    }).addTo(map);
+                });
+                
+            fetch(`${BASE_API_URL}/api/map-background?time_str=${timeStr}`)
+                .then(res => res.json())
+                .then(data => {
+                    var imageUrl = 'data:image/png;base64,' + data.image;
+                    backgroundLayer = L.imageOverlay(imageUrl, data.bounds, { opacity: 0.85 }).addTo(map);
+                });
+        }
+
+        // INIT SERVER
         fetch(`${BASE_API_URL}/api/summary?pelabuhan=ketapang`)
             .then(res => res.json())
             .then(data => {
-                document.getElementById('title-ketapang').innerText = data.pelabuhan;
-                document.getElementById('speed-ketapang').innerText = data.current.speed_ms;
-                document.getElementById('dir-ketapang').innerText = data.current.direction;
-            })
-            .catch(err => console.error('Gagal mengambil summary:', err));
+                const waktuSaatIni = data.current.time_wib; 
+                if(waktuSaatIni) {
+                    waktuAsliServer = waktuSaatIni; waktuAktifPeta = waktuSaatIni;
+                    document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
+                    loadMapData(waktuAktifPeta); fetchSummaryData(waktuAktifPeta);
+                }
+            });
 
-        // === 4. MENGAMBIL DATA GRID & MERENDER ANIMASI ARUS ===
-        fetch(`${BASE_API_URL}/api/spatial-grid`)
-            .then(res => res.json())
-            .then(data => {
-                var velocityLayer = L.velocityLayer({
-                    displayValues: true,
-                    displayOptions: { 
-                        velocityType: 'Kecepatan Arus', 
-                        displayPosition: 'bottomright', 
-                        displayEmptyString: 'Tidak ada data' 
-                    },
-                    data: data,                 // Data matriks U dan V dari FastAPI
-                    maxVelocity: 4.0,           // Batas maksimal kecepatan
-                    velocityScale: 0.035,       // Panjang partikel
-                    particleAge: 120,           // Umur animasi partikel
-                    particleMultiplier: 0.005,  // Kepadatan partikel di layar
-                    colorScale: ['#ffffff', '#a5f3fc', '#38bdf8'] // Gradasi partikel
-                });
-                
-                velocityLayer.addTo(map);
-            })
-            .catch(err => console.error('Gagal memuat animasi arus:', err));
+        // ================= SENSOR KURSOR =================
+        document.addEventListener('mousemove', function(e) {
+            const tooltip = document.querySelector('.leaflet-control-velocity');
+            if (tooltip) {
+                let text = tooltip.innerText.toLowerCase();
+                if (text.trim() === '' || text.includes('unavailable') || text.includes('kosong')) {
+                    tooltip.style.opacity = '0';
+                } else {
+                    tooltip.style.opacity = '1'; tooltip.style.left = (e.clientX + 15) + 'px'; tooltip.style.top = (e.clientY + 15) + 'px';
+                }
+            }
+        });
+
+        // ================= GRAFIK KLIK PETA =================
+        let currentChart = null;
+
+        map.on('click', function(e) {
+            const lat = e.latlng.lat; const lon = e.latlng.lng;
             
-        // === 5. MENGAMBIL BACKGROUND WARNA PANAS/DINGIN ===
-            fetch(`${BASE_API_URL}/api/map-background`)
-                .then(res => res.json())
-                .then(data => {
-                    // Merangkai teks base64 menjadi format gambar web
-                    var imageUrl = 'data:image/png;base64,' + data.image;
-                    var imageBounds = data.bounds; // Koordinat ujung ke ujung
-                    
-                    // Menimpa gambar ke atas peta Leaflet
-                    L.imageOverlay(imageUrl, imageBounds, {
-                        opacity: 0.65 // Lo bisa atur ketebalan warnanya di sini (0.0 sampai 1.0)
-                    }).addTo(map);
+            fetch(`${BASE_API_URL}/api/timeseries?lat=${lat}&lon=${lon}`)
+                .then(res => {
+                    // JIKA SERVER MENOLAK (KLIK DI DARATAN), LEMPAR ERROR
+                    if (!res.ok) { throw new Error("Klik di luar area perairan"); }
+                    return res.json();
                 })
-                .catch(err => console.error('Gagal memuat warna background:', err));
-    </script>
+                .then(data => {
+                    // MUNCULKAN GRAFIK HANYA JIKA DATA VALID
+                    document.getElementById('chart-panel').style.display = 'flex';
+                    document.getElementById('chart-title').innerText = `Titik: ${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`;
+                    
+                    const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+                    if (currentChart) currentChart.destroy(); 
+                    
+                    currentChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.waktu,
+                            datasets: [{
+                                label: 'Kecepatan (m/s)',
+                                data: data.kecepatan,
+                                borderColor: '#38bdf8', 
+                                backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                                borderWidth: 2, fill: true, pointRadius: 2, pointHoverRadius: 5, tension: 0.3
+                            }]
+                        },
+                        options: {
+                            responsive: true, plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { display: false } },
+                                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: 3 }
+                            }
+                        }
+                    });
+                })
+                .catch(err => {
+                    // SILENT ERROR (Tidak ngapa-ngapain kalau user klik daratan)
+                    console.log("Diabaikan: ", err.message);
+                });
+        });
 
+        function tutupChart() {
+            document.getElementById('chart-panel').style.display = 'none';
+        }
+    </script>
 </body>
 </html>
