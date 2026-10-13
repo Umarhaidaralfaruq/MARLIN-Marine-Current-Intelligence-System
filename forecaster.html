@@ -199,8 +199,7 @@
         // FUNGSI 2: LOAD GRAFIK PRAKIRAAN
         async function loadForecastData(filename) {
             try {
-                // Jalankan validasi berbarengan
-                loadValidationData(filename);
+                loadValidationData(filename); // Jangan lupa panggil fungsi sebelah
 
                 let response = await fetch(`${BASE_API_URL}/api/forecast-12h?filename=${filename}`);
                 if (!response.ok) throw new Error("API Forecast gagal");
@@ -210,39 +209,56 @@
                     document.getElementById('forecast-title').innerText = `📈 Prakiraan Operasional ${data.title_range}`;
                 }
 
-                if (data.waktu.length === 0) return; // Hentikan jika kosong
+                if (data.waktu.length === 0) return;
 
                 let dinamicAnnotations = {};
                 let yMaxGlobal = Math.max(...data.kecepatan) + 0.5;
 
                 data.anotasi_blok.forEach((blok, index) => {
+                    // Logika index shift
+                    let startIndex = index * 3;
+                    let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
+                    
+                    let boxMin = startIndex - 0.5;
+                    let boxMax = endIndex + 0.5;
+                    let boxCenter = (startIndex + endIndex) / 2;
+
                     let bgColor = (index % 2 === 0) ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0)';
-                    dinamicAnnotations[`box${index}`] = { type: 'box', xMin: blok.xMin, xMax: blok.xMax, backgroundColor: bgColor, borderWidth: 0 };
+                    
+                    dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
-                        type: 'label', xValue: blok.xCenter, yValue: yMaxGlobal - 0.2, 
+                        type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
                         content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Dom: ${blok.arah}`], 
-                        color: '#94a3b8', font: {size: 10}
+                        color: '#94a3b8', font: {size: 10}, textAlign: 'center'
                     };
                 });
 
-                if(forecastChartObj !== null) forecastChartObj.destroy();
-                const ctxForecast = document.getElementById('forecastChart').getContext('2d');
-                forecastChartObj = new Chart(ctxForecast, {
-                    type: 'line',
-                    data: {
-                        labels: data.waktu,
-                        datasets: [{
-                            label: 'Kecepatan Model (m/s)', data: data.kecepatan,
-                            borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                            borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#0ea5e9', pointRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false }, annotation: { annotations: dinamicAnnotations } },
-                        scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false } }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
-                    }
-                });
+                if(forecastChartObj !== null) {
+                    forecastChartObj.data.labels = data.waktu;
+                    forecastChartObj.data.datasets[0].data = data.kecepatan;
+                    forecastChartObj.options.scales.y.suggestedMax = yMaxGlobal;
+                    forecastChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
+                    forecastChartObj.update(); 
+                } else {
+                    const ctxForecast = document.getElementById('forecastChart').getContext('2d');
+                    forecastChartObj = new Chart(ctxForecast, {
+                        type: 'line',
+                        data: {
+                            labels: data.waktu,
+                            datasets: [{
+                                label: 'Kecepatan Model (m/s)', data: data.kecepatan,
+                                borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                                borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#0ea5e9', pointRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            animation: { duration: 800 }, 
+                            plugins: { legend: { display: false }, annotation: { annotations: dinamicAnnotations } },
+                            scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false }, offset: true }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
+                        }
+                    });
+                }
             } catch (err) { console.error("Gagal meload grafik prakiraan:", err); }
         }
 
@@ -266,33 +282,50 @@
                 if(!isFinite(yMaxGlobal) || isNaN(yMaxGlobal)) yMaxGlobal = 3.0; 
 
                 data.anotasi_blok.forEach((blok, index) => {
+                    // Terapkan logika index shift yang sama persis di sini!
+                    let startIndex = index * 3;
+                    let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
+                    
+                    let boxMin = startIndex - 0.5;
+                    let boxMax = endIndex + 0.5;
+                    let boxCenter = (startIndex + endIndex) / 2;
+
                     let bgColor = (index % 2 === 0) ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0)';
                     let teksObs = blok.max_v !== null ? `Obs: ${blok.max_v.toFixed(2)} m/s` : "Data Kosong";
                     
-                    dinamicAnnotations[`box${index}`] = { type: 'box', xMin: blok.xMin, xMax: blok.xMax, backgroundColor: bgColor, borderWidth: 0 };
+                    dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
-                        type: 'label', xValue: blok.xCenter, yValue: yMaxGlobal - 0.2, 
-                        content: [teksObs, `Dom: ${blok.arah}`], color: '#94a3b8', font: {size: 10}
+                        type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
+                        content: [teksObs, `Dom: ${blok.arah}`], color: '#94a3b8', font: {size: 10}, textAlign: 'center'
                     };
                 });
-
-                if(validationChartObj !== null) validationChartObj.destroy();
-                const ctxValidation = document.getElementById('validationChart').getContext('2d');
-                validationChartObj = new Chart(ctxValidation, {
-                    type: 'line',
-                    data: {
-                        labels: data.waktu,
-                        datasets: [
-                            { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 0 },
-                            { label: 'Observasi Radar', data: data.observasi, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true }
-                        ]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: true, position: 'bottom', labels: { color: '#cbd5e1', font: {size: 11}, boxWidth: 15 } }, annotation: { annotations: dinamicAnnotations } },
-                        scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false } }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
-                    }
-                });
+                
+                if(validationChartObj !== null) {
+                    validationChartObj.data.labels = data.waktu;
+                    validationChartObj.data.datasets[0].data = data.prediksi;
+                    validationChartObj.data.datasets[1].data = data.observasi;
+                    validationChartObj.options.scales.y.suggestedMax = yMaxGlobal;
+                    validationChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
+                    validationChartObj.update(); 
+                } else {
+                    const ctxValidation = document.getElementById('validationChart').getContext('2d');
+                    validationChartObj = new Chart(ctxValidation, {
+                        type: 'line',
+                        data: {
+                            labels: data.waktu,
+                            datasets: [
+                                { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 0 },
+                                { label: 'Observasi Radar', data: data.observasi, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            animation: { duration: 800 }, 
+                            plugins: { legend: { display: true, position: 'bottom', labels: { color: '#cbd5e1', font: {size: 11}, boxWidth: 15 } }, annotation: { annotations: dinamicAnnotations } },
+                            scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false }, offset: true }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
+                        }
+                    });
+                }
             } catch (err) { console.error("Gagal meload grafik validasi:", err); }
         }
 

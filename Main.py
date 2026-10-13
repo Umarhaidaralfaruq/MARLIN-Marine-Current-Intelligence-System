@@ -1,6 +1,6 @@
 # =============================================================================
 # FILE: main.py
-# FUNGSI: API Backend MARLIN v2 (FastAPI)
+# FUNGSI: API Backend MARLIN v2 (FastAPI) - GITHUB CLOUD NATIVE
 # =============================================================================
 
 from fastapi import FastAPI, HTTPException, Query
@@ -16,62 +16,110 @@ import io
 import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+import requests
+import time
+import math
 
-# Mengambil variabel konfigurasi (pastikan file config.py tetap ada di folder yang sama)
+# Mengambil semua variabel konfigurasi dari config.py (termasuk GITHUB_OWNER dkk)
 from config import *
 
-app = FastAPI(title="MARLIN API", description="API Backend untuk Marine Current Intelligence System")
+app = FastAPI(title="MARLIN API", description="API Backend Cloud Native (GitHub Fetch)")
 
-# Setup CORS (SANGAT PENTING!)
-# Ini mengizinkan frontend (seperti Netlify/Vercel) untuk mengambil data dari API ini
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Saat production, ganti "*" dengan URL web lo
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------
-# FUNGSI HELPER (Diambil dari Marlin V1)
+# FUNGSI HELPER GITHUB (MENGGANTIKAN BACA FILE LOKAL)
 # ---------------------------------------------------------
-import os
-import glob
+github_cache = {"files": [], "last_fetch": 0}
+CACHE_TTL = 300 # Cache daftar file 5 menit agar tidak kena rate limit GitHub API
 
 def get_available_baseruns():
-    # 1. Coba ambil dari config.py jika tersedia
-    try:
-        from config import PATHS
-        utama = os.path.join(PATHS["OUTPUT_PRED"], "prediksi_spasial*.csv")
-    except:
-        utama = "prediksi_spasial*.csv" # Fallback jika config gagal di-load
-        
-    # 2. Daftar folder yang mungkin menyimpan CSV lo
-    kemungkinan_path = [
-        utama,
-        "prediksi_spasial*.csv",         # Jika file ada di folder yang sama dengan main.py
-        "data/prediksi_spasial*.csv",    # Jika file ada di dalam folder 'data'
-        "output/prediksi_spasial*.csv"   # Jika file ada di dalam folder 'output'
-    ]
+    """Mengambil daftar file CSV langsung dari GitHub REST API"""
+    global github_cache
+    now = time.time()
     
-    # 3. Cari dan kembalikan file pertama yang ketemu
+    if now - github_cache["last_fetch"] < CACHE_TTL and github_cache["files"]:
+        return github_cache["files"]
+
+    path_suffix = f"/{GITHUB_DATA_DIR}" if GITHUB_DATA_DIR else ""
+    api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents{path_suffix}?ref={GITHUB_BRANCH}"
+    
+    try:
+        # Menambahkan otorisasi token di sini
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "Authorization": f"token {GITHUB_TOKEN}"
+        }
+        response = requests.get(api_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            files = []
+            for item in data:
+                if item['name'].startswith('prediksi_spasial') and item['name'].endswith('.csv'):
+                    files.append({
+                        "filename": item['name'],
+                        "path": item['download_url'] 
+                    })
+            
+            files = sorted(files, key=lambda x: x["filename"], reverse=True)
+            github_cache["files"] = [f["path"] for f in files]
+            github_cache["last_fetch"] = now
+            return github_cache["files"]
+        else:
+            print(f"⚠️ Gagal akses GitHub API (Status: {response.status_code}). Fallback ke file lokal.")
+            return get_local_baseruns()
+    except Exception as e:
+        print(f"⚠️ Error GitHub Fetch: {e}. Fallback ke file lokal.")
+        return get_local_baseruns()
+
+def get_local_baseruns():
+    """Fallback jika internet mati atau testing lokal"""
+    kemungkinan_path = ["prediksi_spasial*.csv", "data/prediksi_spasial*.csv", "output/prediksi_spasial*.csv"]
     for path in kemungkinan_path:
         files = sorted(glob.glob(path), reverse=True)
         if len(files) > 0:
             return files
-            
-    # Jika benar-benar tidak ketemu di mana pun
-    print("WARNING: File prediksi_spasial*.csv tidak ditemukan di folder mana pun!")
     return []
 
-# Cache sederhana untuk memori lokal
+def get_verif_csv_url():
+    """Dapatkan URL Raw untuk file observasi menggunakan PATHS dari config"""
+    try:
+        # Ambil path dari config.py (fallback ke default kalau error)
+        verif_path = PATHS.get("Verif_12jam", "Hasil_Validasi/Validasi_Real_Max_12H.csv")
+        
+        # Cek lokal dulu buat testing
+        if os.path.exists(verif_path): 
+            return verif_path
+        
+        # Bersihkan slash di awal kalau ada, biar URL gak dobel slash (//)
+        clean_path = verif_path.lstrip('/')
+        
+        # Tembak raw GitHub sesuai path di config
+        return f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
+    except Exception as e:
+        print(f"⚠️ Error ambil path verif: {e}")
+        return f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/Hasil_Validasi/Validasi_Real_Max_12H.csv"
+
+# Cache sederhana untuk memori Pandas Dataframe
 data_cache = {}
 
-def load_data(file_path):
-    if file_path in data_cache:
-        return data_cache[file_path]
+def load_data(file_path_or_url):
+    if file_path_or_url in data_cache:
+        return data_cache[file_path_or_url]
         
-    df = pd.read_csv(file_path).rename(columns={
+    # Menambahkan token ke header permintaan Pandas agar bisa buka raw URL private
+    storage_options = None
+    if file_path_or_url.startswith("http"):
+        storage_options = {"Authorization": f"token {GITHUB_TOKEN}"}
+
+    df = pd.read_csv(file_path_or_url, storage_options=storage_options).rename(columns={
         'datetime_prediction': 'datetime', 
         'latitude': 'lat', 
         'longitude': 'lon', 
@@ -83,11 +131,15 @@ def load_data(file_path):
     df['datetime'] = pd.to_datetime(df['datetime'])
     df['datetime_wib'] = df['datetime'] + pd.Timedelta(hours=7)
     
-    data_cache[file_path] = df
+    data_cache[file_path_or_url] = df
     return df
 
+def get_clean_files():
+    raw = get_available_baseruns()
+    if not raw: return []
+    return [f["path"] if isinstance(f, dict) else str(f) for f in raw]
+
 def ambil_index_target(group):
-    # Logika statistik dari v1
     if METODE_STATISTIK == "P95":
         p95 = group['predicted_v_max'].quantile(0.95)
         if pd.isna(p95): return group.index[0]
@@ -97,33 +149,44 @@ def ambil_index_target(group):
 def derajat_ke_utara_selatan(deg):
     return "" if pd.isna(deg) else ("Utara" if deg >= 270 or deg < 90 else "Selatan")
 
+def format_rentang_waktu(waktu_series):
+    if waktu_series.empty: return ""
+    dt_start = waktu_series.iloc[0]
+    dt_end = waktu_series.iloc[-1]
+    bulan = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'Mei', 6:'Jun', 7:'Jul', 8:'Agu', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Des'}
+    tgl_start = f"{dt_start.day:02d} {bulan[dt_start.month]} {dt_start.year}"
+    tgl_end = f"{dt_end.day:02d} {bulan[dt_end.month]} {dt_end.year}"
+    if tgl_start == tgl_end:
+         return f"({tgl_start}, {dt_start.strftime('%H:%M')} - {dt_end.strftime('%H:%M')} WIB)"
+    return f"({tgl_start} {dt_start.strftime('%H:%M')} - {tgl_end} {dt_end.strftime('%H:%M')} WIB)"
+
+
 # ---------------------------------------------------------
-# ENDPOINTS API (Jalur untuk dipanggil Frontend)
+# ENDPOINTS API 
 # ---------------------------------------------------------
 
 @app.get("/")
 def read_root():
-    return {"message": "MARLIN API System Online. Akses /docs untuk melihat dokumentasi API."}
+    return {"message": "MARLIN API System Online. Data Source: GitHub Raw."}
 
 @app.get("/api/baseruns")
-def get_baseruns():
-    """Mengembalikan daftar file prediksi yang tersedia."""
-    files = get_available_baseruns()
-    if not files:
-        raise HTTPException(status_code=404, detail="Tidak ada file prediksi ditemukan")
+def get_baseruns_list():
+    files = get_clean_files()
+    if not files: return {"status": "success", "data": []}
     
-    # Format agar mudah dibaca frontend
-    hasil = [{"filename": os.path.basename(f), "path": f} for f in files]
-    return {"status": "success", "data": hasil}
+    baseruns_data = []
+    for f in files:
+        # os.path.basename berfungsi baik memotong URL maupun path lokal
+        filename = os.path.basename(f).split("?")[0]
+        label = filename.replace("prediksi_spasial_", "").replace(".csv", "") + " UTC"
+        baseruns_data.append({"filename": filename, "label": label, "path": f})
+        
+    return {"status": "success", "data": baseruns_data}
 
 @app.get("/api/summary")
-def get_summary(
-    pelabuhan: str = Query(..., description="Pilih: ketapang atau gilimanuk"),
-    time_str: str = Query(None, description="Format YYYY-MM-DD HH:MM")
-):
-    files = get_available_baseruns()
-    if not files:
-        raise HTTPException(status_code=404, detail="Data tidak tersedia")
+def get_summary(pelabuhan: str = Query(..., description="ketapang atau gilimanuk"), time_str: str = Query(None)):
+    files = get_clean_files()
+    if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
         
     df_spatial = load_data(files[0])
     
@@ -137,30 +200,20 @@ def get_summary(
     df_area = df_spatial[(df_spatial['lat'] >= lat_min) & (df_spatial['lat'] <= lat_max) & 
                          (df_spatial['lon'] >= lon_min) & (df_spatial['lon'] <= lon_max)]
                          
-    if df_area.empty:
-        raise HTTPException(status_code=404, detail="Data area kosong")
+    if df_area.empty: raise HTTPException(status_code=404, detail="Data area kosong")
 
-    # Tentukan waktu acuan (bisa dari parameter frontend atau waktu server real-time)
-    if time_str:
-        waktu_acuan = pd.to_datetime(time_str)
-    else:
-        waktu_acuan = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
+    if time_str: waktu_acuan = pd.to_datetime(time_str)
+    else: waktu_acuan = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=7)
 
     idx_target = df_area.groupby('datetime_wib').apply(ambil_index_target)
     df_trend = df_area.loc[idx_target].reset_index(drop=True)
     
-    # 1. Cari data spesifik untuk "Waktu Terpilih" (menggantikan "Saat Ini")
     df_trend['selisih_waktu'] = abs(df_trend['datetime_wib'] - waktu_acuan)
     baris_terpilih = df_trend.loc[df_trend['selisih_waktu'].idxmin()]
     
-    # 2. Cari Peak (Maksimal 12 Jam ke depan) dihitung dari waktu acuan
     waktu_batas = waktu_acuan + pd.Timedelta(hours=12)
     df_12h = df_trend[(df_trend['datetime_wib'] >= waktu_acuan) & (df_trend['datetime_wib'] <= waktu_batas)]
-    
-    if not df_12h.empty:
-        baris_max = df_12h.loc[df_12h['predicted_v_max'].idxmax()]
-    else:
-        baris_max = baris_terpilih # Fallback jika data habis
+    baris_max = df_12h.loc[df_12h['predicted_v_max'].idxmax()] if not df_12h.empty else baris_terpilih
 
     return {
         "pelabuhan": pelabuhan.capitalize(),
@@ -177,28 +230,19 @@ def get_summary(
     }
 
 @app.get("/api/spatial-grid")
-def get_spatial_grid(time_str: str = Query(None, description="Format YYYY-MM-DD HH:MM")):
-    """
-    Menghasilkan data JSON grid U dan V yang akan dipakai oleh Leaflet-Velocity di Frontend.
-    Menggantikan fungsi konversi_ke_velocity_json di v1.
-    """
-    files = get_available_baseruns()
-    if not files:
-        raise HTTPException(status_code=404, detail="Data tidak tersedia")
+def get_spatial_grid(time_str: str = Query(None)):
+    files = get_clean_files()
+    if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
         
     df_spatial = load_data(files[0])
     
-    if time_str:
-        df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == time_str]
+    if time_str: df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == time_str]
     else:
-        # Jika tidak dikasih waktu, ambil waktu pertama
         waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
         df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == waktu_unik[0]]
 
-    if df_hour.empty:
-        raise HTTPException(status_code=404, detail="Waktu tidak ditemukan di data")
+    if df_hour.empty: raise HTTPException(status_code=404, detail="Waktu tidak ditemukan")
 
-    # Logika konversi grid (Sama persis dengan konversi_ke_velocity_json di V1)
     lo1, lo2 = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     la1, la2 = float(df_hour['lat'].max()), float(df_hour['lat'].min()) 
     nx, ny = GRID_NX, GRID_NY
@@ -206,12 +250,11 @@ def get_spatial_grid(time_str: str = Query(None, description="Format YYYY-MM-DD 
     dx, dy = (lo2 - lo1) / (nx - 1), (la1 - la2) / (ny - 1) 
     
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
-    batas_resolusi = BATAS_RESOLUSI
     x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
     sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
     sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
     sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
-    triang.set_mask(np.any([sisi_a > batas_resolusi, sisi_b > batas_resolusi, sisi_c > batas_resolusi], axis=0))
+    triang.set_mask(np.any([sisi_a > BATAS_RESOLUSI, sisi_b > BATAS_RESOLUSI, sisi_c > BATAS_RESOLUSI], axis=0))
     
     interp_u = tri.LinearTriInterpolator(triang, df_hour['predicted_u'])
     interp_v = tri.LinearTriInterpolator(triang, df_hour['predicted_v'])
@@ -222,150 +265,79 @@ def get_spatial_grid(time_str: str = Query(None, description="Format YYYY-MM-DD 
     for i in range(ny):
         for j in range(nx):
             u_val, v_val = U_grid[i, j], V_grid[i, j]
-            if np.ma.is_masked(u_val) or np.isnan(u_val):
-                u_data.append(None); v_data.append(None)
-            else:
-                u_data.append(float(u_val)); v_data.append(float(v_val))
+            if np.ma.is_masked(u_val) or np.isnan(u_val): u_data.append(None); v_data.append(None)
+            else: u_data.append(float(u_val)); v_data.append(float(v_val))
                 
-    # Return sebagai list of dictionaries (JSON)
     return [
         {"header": {"parameterCategory": 2, "parameterNumber": 2, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": u_data},
         {"header": {"parameterCategory": 2, "parameterNumber": 3, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": v_data}
     ]
 
-
 @app.get("/api/map-background")
-def get_map_background(time_str: str = Query(None, description="Format YYYY-MM-DD HH:MM")):
-    """Menghasilkan gambar overlay warna gradasi kecepatan arus"""
-    files = get_available_baseruns()
-    if not files:
-        raise HTTPException(status_code=404, detail="Data tidak tersedia")
+def get_map_background(time_str: str = Query(None)):
+    files = get_clean_files()
+    if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
         
     df_spatial = load_data(files[0])
     
-    if time_str:
-        df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == time_str]
+    if time_str: df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == time_str]
     else:
         waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
         df_hour = df_spatial[df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M') == waktu_unik[0]]
 
-    if df_hour.empty:
-        raise HTTPException(status_code=404, detail="Waktu tidak ditemukan")
+    if df_hour.empty: raise HTTPException(status_code=404, detail="Waktu tidak ditemukan")
 
     lon_min, lon_max = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     lat_min, lat_max = float(df_hour['lat'].min()), float(df_hour['lat'].max())
     
-    # Proses Masking Segitiga (seperti di app.py lama)
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
     x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
     batas_resolusi = BATAS_RESOLUSI if 'BATAS_RESOLUSI' in globals() else 0.015
     mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
     triang.set_mask(mask)
     
-    # Proses Menggambar dengan Matplotlib
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.axis('off')
-    ax.set_xlim(lon_min, lon_max)
-    ax.set_ylim(lat_min, lat_max)
-    fig.patch.set_alpha(0.0)
-    ax.patch.set_alpha(0.0)
+    ax.axis('off'); ax.set_xlim(lon_min, lon_max); ax.set_ylim(lat_min, lat_max)
+    fig.patch.set_alpha(0.0); ax.patch.set_alpha(0.0)
     plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
     plt.margins(0,0)
     
-    vmax_plot = 4.0 # Batas max gradasi warna
     cmap_custom = LinearSegmentedColormap.from_list("custom", ['#0000ff', '#00ffff', '#00ff00', '#ffff00', '#ffa500', '#ff0000', '#4b0082'])
+    ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0, 4.0, 100), cmap=cmap_custom, vmin=0, vmax=4.0, extend='max', alpha=0.9, antialiased=True)
     
-    ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0, vmax_plot, 100), cmap=cmap_custom, vmin=0, vmax=vmax_plot, extend='max', alpha=0.9, antialiased=True)
-    
-    # Ubah gambar jadi teks Base64
     buf = io.BytesIO()
     plt.savefig(buf, format='png', transparent=True, dpi=300, bbox_inches='tight', pad_inches=0)
-    buf.seek(0)
-    plt.close(fig)
+    buf.seek(0); plt.close(fig)
     
-    image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    
-    return {
-        "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
-        "image": image_base64
-    }
+    return {"bounds": [[lat_min, lon_min], [lat_max, lon_max]], "image": base64.b64encode(buf.getvalue()).decode('utf-8')}
 
 @app.get("/api/timeseries")
 def get_timeseries(lat: float, lon: float):
-    files = get_available_baseruns()
-    if not files:
-        raise HTTPException(status_code=404, detail="Data tidak tersedia")
-        
+    files = get_clean_files()
+    if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
     df = load_data(files[0])
     
     df_coords = df[['lat', 'lon']].drop_duplicates()
     df_coords['jarak'] = (df_coords['lat'] - lat)**2 + (df_coords['lon'] - lon)**2
     
-    # CEK BATAS TOLERANSI: Jika jarak terdekat lebih dari 0.0001 (daratan)
-    jarak_terdekat = df_coords['jarak'].min()
-    if jarak_terdekat > 0.0001:
-        raise HTTPException(status_code=404, detail="Titik di luar area perairan")
+    if df_coords['jarak'].min() > 0.0001: raise HTTPException(status_code=404, detail="Titik di luar area")
     
     titik_terdekat = df_coords.loc[df_coords['jarak'].idxmin()]
-    
-    lat_dekat = float(titik_terdekat['lat'])
-    lon_dekat = float(titik_terdekat['lon'])
-    
-    df_titik = df[(df['lat'] == lat_dekat) & (df['lon'] == lon_dekat)].sort_values('datetime_wib')
+    df_titik = df[(df['lat'] == float(titik_terdekat['lat'])) & (df['lon'] == float(titik_terdekat['lon']))].sort_values('datetime_wib')
     
     return {
-        "lat": lat_dekat,
-        "lon": lon_dekat,
+        "lat": float(titik_terdekat['lat']), "lon": float(titik_terdekat['lon']),
         "waktu": df_titik['datetime_wib'].dt.strftime('%H:%M WIB').tolist(),
         "kecepatan": df_titik['predicted_v_max'].tolist()
     }
 
-import os
-import math
-import numpy as np
-import pandas as pd
-
-# --- FUNGSI BANTUAN ---
-def format_rentang_waktu(waktu_series):
-    if waktu_series.empty: return ""
-    dt_start = waktu_series.iloc[0]
-    dt_end = waktu_series.iloc[-1]
-    bulan = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'Mei', 6:'Jun', 7:'Jul', 8:'Agu', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Des'}
-    tgl_start = f"{dt_start.day:02d} {bulan[dt_start.month]} {dt_start.year}"
-    tgl_end = f"{dt_end.day:02d} {bulan[dt_end.month]} {dt_end.year}"
-    if tgl_start == tgl_end:
-         return f"({tgl_start}, {dt_start.strftime('%H:%M')} - {dt_end.strftime('%H:%M')} WIB)"
-    return f"({tgl_start} {dt_start.strftime('%H:%M')} - {tgl_end} {dt_end.strftime('%H:%M')} WIB)"
-
-# FUNGSI PENSTERIL DATA: Memastikan list file berupa teks path murni
-def get_clean_files():
-    raw = get_available_baseruns()
-    if not raw: return []
-    return [f["path"] if isinstance(f, dict) else str(f) for f in raw]
-
-# === API 1: AMBIL DAFTAR BASERUN ===
-@app.get("/api/baseruns")
-def get_baseruns_list():
-    files = get_clean_files()
-    if not files: return {"status": "success", "data": []}
-    
-    baseruns_data = []
-    for f in files:
-        filename = os.path.basename(f)
-        # Cara ampuh potong nama tanpa regex (prediksi_spasial_20261012_0900.csv -> 20261012_0900 UTC)
-        label = filename.replace("prediksi_spasial_", "").replace(".csv", "") + " UTC"
-        baseruns_data.append({"filename": filename, "label": label, "path": f})
-        
-    return {"status": "success", "data": baseruns_data}
-
-# === API 2: PRAKIRAAN 12 JAM ===
 @app.get("/api/forecast-12h")
 def get_forecast_12h(filename: str = None):
     try:
         files = get_clean_files()
         if not files: return {"waktu": [], "kecepatan": [], "anotasi_blok": [], "title_range": ""}
         
-        target_file = next((f for f in files if os.path.basename(f) == filename), files[0])
+        target_file = next((f for f in files if os.path.basename(f).split("?")[0] == filename), files[0])
         df = load_data(target_file)
         df_area = df[(df['lat'] >= -8.2) & (df['lat'] <= -8.0) & (df['lon'] >= 114.3) & (df['lon'] <= 114.5)]
         
@@ -389,29 +361,24 @@ def get_forecast_12h(filename: str = None):
             kat_arah = chunk['arah_derajat'].apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else "Selatan")
             arah_dom = kat_arah.mode()[0] if not kat_arah.mode().empty else "-"
             
-            x_min = waktu_list[i]
-            x_center = waktu_list[min(i+1, len(waktu_list)-1)]
-            x_max = waktu_list[min(i+3, len(waktu_list)-1)]
-            anotasi_blok.append({"xMin": x_min, "xMax": x_max, "xCenter": x_center, "max_v": max_v, "arah": arah_dom})
+            anotasi_blok.append({"xMin": waktu_list[i], "xMax": waktu_list[min(i+3, len(waktu_list)-1)], "xCenter": waktu_list[min(i+1, len(waktu_list)-1)], "max_v": max_v, "arah": arah_dom})
             
         return {"waktu": waktu_list, "kecepatan": kecepatan_list, "anotasi_blok": anotasi_blok, "title_range": title_range}
     except Exception as e:
         print("Error Forecast:", e)
         return {"waktu": [], "title_range": ""}
 
-# === API 3: VALIDASI (OTOMATIS MUNDUR 1 BASERUN) ===
 @app.get("/api/validation-12h")
 def get_validation_12h(filename: str = None):
     try:
         files = get_clean_files()
         if not files: return {"waktu": [], "title_range": ""}
         
-        target_idx = next((i for i, f in enumerate(files) if os.path.basename(f) == filename), 0)
-        valid_idx = target_idx + 1 # Geser mundur 1 baserun
+        target_idx = next((i for i, f in enumerate(files) if os.path.basename(f).split("?")[0] == filename), 0)
+        valid_idx = target_idx + 1 
         if valid_idx >= len(files): return {"waktu": [], "title_range": "(Baserun Sebelumnya Tidak Tersedia)"}
              
         target_file = files[valid_idx]
-        
         df_pred = load_data(target_file)
         df_area = df_pred[(df_pred['lat'] >= -8.2) & (df_pred['lat'] <= -8.0) & (df_pred['lon'] >= 114.3) & (df_pred['lon'] <= 114.5)]
         
@@ -421,17 +388,17 @@ def get_validation_12h(filename: str = None):
         
         idx_target = df_shift.groupby('datetime_wib')['predicted_v_max'].idxmax()
         df_trend = df_shift.loc[idx_target].sort_values('datetime_wib').reset_index(drop=True)
-        
         title_range = format_rentang_waktu(df_trend['datetime_wib'])
         
-        path_verif = "Verif_12jam.csv"
-        if not os.path.exists(path_verif) and os.path.exists("data/Verif_12jam.csv"): path_verif = "data/Verif_12jam.csv"
-                
-        if os.path.exists(path_verif):
-            df_rr = pd.read_csv(path_verif)
+        # Fetch file verifikasi dari url atau lokal
+        path_verif = get_verif_csv_url()
+        try:
+            # Tambahkan kunci token agar bisa tembus repo private
+            opsi_akses = {"Authorization": f"token {GITHUB_TOKEN}"} if str(path_verif).startswith("http") else None
+            df_rr = pd.read_csv(path_verif, storage_options=opsi_akses)
             df_rr['waktu_utc'] = pd.to_datetime(df_rr['Waktu_UTC'])
             df_merge = pd.merge(df_trend[['datetime', 'datetime_wib', 'predicted_v_max']], df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Arah_Derajat']], left_on='datetime', right_on='waktu_utc', how='left')
-        else:
+        except:
             df_merge = df_trend[['datetime', 'datetime_wib', 'predicted_v_max']].copy()
             df_merge['Real_Max_Speed_ms'], df_merge['Arah_Derajat'] = np.nan, np.nan
             
@@ -454,36 +421,33 @@ def get_validation_12h(filename: str = None):
                     arah_asli = kat_arah.mode()[0]
                     arah_dom = "Selatan" if arah_asli == "Utara" else ("Utara" if arah_asli == "Selatan" else "-")
             
-            x_min = waktu_list[i]
-            x_center = waktu_list[min(i+1, len(waktu_list)-1)]
-            x_max = waktu_list[min(i+3, len(waktu_list)-1)]
-            anotasi_blok.append({"xMin": x_min, "xMax": x_max, "xCenter": x_center, "max_v": max_v, "arah": arah_dom})
+            anotasi_blok.append({"xMin": waktu_list[i], "xMax": waktu_list[min(i+3, len(waktu_list)-1)], "xCenter": waktu_list[min(i+1, len(waktu_list)-1)], "max_v": max_v, "arah": arah_dom})
             
         return {"waktu": waktu_list, "prediksi": prediksi_list, "observasi": observasi_list, "anotasi_blok": anotasi_blok, "title_range": title_range}
     except Exception as e:
         print("Error Validation:", e)
         return {"waktu": [], "title_range": ""}
 
-# === API 4: RMSE SPASIAL (OTOMATIS MUNDUR 1 BASERUN) ===
 @app.get("/api/rmse-spatial")
 def get_rmse_spatial(filename: str = None):
     try:
         files = get_clean_files()
         if not files: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
         
-        target_idx = next((i for i, f in enumerate(files) if os.path.basename(f) == filename), 0)
+        target_idx = next((i for i, f in enumerate(files) if os.path.basename(f).split("?")[0] == filename), 0)
         valid_idx = target_idx + 1
         if valid_idx >= len(files): return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
         
         target_file = files[valid_idx]
         df_pred = load_data(target_file)
         
-        path_verif = "Verif_12jam.csv"
-        if not os.path.exists(path_verif): path_verif = "data/Verif_12jam.csv"
-        if not os.path.exists(path_verif): return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
-            
-        df_obs = pd.read_csv(path_verif)
-        df_obs['waktu_utc'] = pd.to_datetime(df_obs['Waktu_UTC'])
+        path_verif = get_verif_csv_url()
+        try:
+            # Tambahkan kunci token agar bisa tembus repo private
+            opsi_akses = {"Authorization": f"token {GITHUB_TOKEN}"} if str(path_verif).startswith("http") else None
+            df_obs = pd.read_csv(path_verif, storage_options=opsi_akses)
+            df_obs['waktu_utc'] = pd.to_datetime(df_obs['Waktu_UTC'])
+        except: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
         
         df_area = df_pred[(df_pred['lat'] >= -8.2) & (df_pred['lat'] <= -8.0) & (df_pred['lon'] >= 114.3) & (df_pred['lon'] <= 114.5)]
         last_hour = df_area['datetime'].max().hour
@@ -507,9 +471,7 @@ def get_rmse_spatial(filename: str = None):
             
             speed_heatmap.append([lat, lon, min(rmse_speed / 0.6, 1.0)])
             dir_heatmap.append([lat, lon, min(rmse_dir / 30.0, 1.0)])
-            total_speed_rmse += rmse_speed
-            total_dir_rmse += rmse_dir
-            count += 1
+            total_speed_rmse += rmse_speed; total_dir_rmse += rmse_dir; count += 1
             
         return {
             "speed_heatmap": speed_heatmap, "dir_heatmap": dir_heatmap,

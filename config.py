@@ -183,3 +183,12 @@ VALIDATION_CONFIG = {
     'window_hours': 3,          # Berapa jam per kelompok timeframe
     'threshold_percent': 0.5    # Persentase minimal kelulusan (0.5 = 50%)
 }
+
+# =========================================================
+# 13. PENGATURAN GITHUB REPOSITORY UNTUK BACKEND 
+# =========================================================
+GITHUB_OWNER = "Umarhaidaralfaruq"
+GITHUB_REPO = "MARLIN-Marine-Current-Intelligence-System"   # Contoh: "marlin-data"
+GITHUB_BRANCH = "main"                                      # Cabang utama (main / master)
+GITHUB_DATA_DIR = "Arsip_Prediksi"                  # Folder tempat CSV (isi "" jika di luar/root, atau "data" jika di dalam folder data)
+GITHUB_TOKEN = "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"
