@@ -111,27 +111,26 @@ def get_verif_csv_url():
 data_cache = {}
 
 def load_data(file_path_or_url):
-    if file_path_or_url in data_cache:
-        return data_cache[file_path_or_url]
+    # Buang token sementara dari URL agar kunci cache permanen
+    clean_key = file_path_or_url.split("?")[0]
+    
+    if clean_key in data_cache:
+        return data_cache[clean_key]
         
-    # Menambahkan token ke header permintaan Pandas agar bisa buka raw URL private
     storage_options = None
     if file_path_or_url.startswith("http"):
         storage_options = {"Authorization": f"token {GITHUB_TOKEN}"}
 
     df = pd.read_csv(file_path_or_url, storage_options=storage_options).rename(columns={
-        'datetime_prediction': 'datetime', 
-        'latitude': 'lat', 
-        'longitude': 'lon', 
-        'current_speed_ms': 'predicted_v_max', 
-        'v_velocity_ms': 'predicted_v', 
-        'u_velocity_ms': 'predicted_u', 
-        'current_direction_deg': 'arah_derajat'
+        'datetime_prediction': 'datetime', 'latitude': 'lat', 'longitude': 'lon', 
+        'current_speed_ms': 'predicted_v_max', 'v_velocity_ms': 'predicted_v', 
+        'u_velocity_ms': 'predicted_u', 'current_direction_deg': 'arah_derajat'
     })
     df['datetime'] = pd.to_datetime(df['datetime'])
     df['datetime_wib'] = df['datetime'] + pd.Timedelta(hours=7)
     
-    data_cache[file_path_or_url] = df
+    # Simpan pakai clean_key
+    data_cache[clean_key] = df
     return df
 
 def get_clean_files():
@@ -229,10 +228,18 @@ def get_summary(pelabuhan: str = Query(..., description="ketapang atau gilimanuk
         }
     }
 
+# Tambahkan ini di bagian atas (di bawah deklarasi data_cache = {})
+api_response_cache = {}
+
 @app.get("/api/spatial-grid")
 def get_spatial_grid(time_str: str = Query(None)):
     files = get_clean_files()
     if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
+    
+    # KUNCI CACHE: Biar kalau jam yang sama dipanggil lagi, langsung instan!
+    cache_key = f"grid_{files[0]}_{time_str}"
+    if cache_key in api_response_cache:
+        return api_response_cache[cache_key]
         
     df_spatial = load_data(files[0])
     
@@ -251,10 +258,9 @@ def get_spatial_grid(time_str: str = Query(None)):
     
     triang = tri.Triangulation(df_hour['lon'], df_hour['lat'])
     x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
-    sisi_a = np.sqrt((x_tri[:, 0] - x_tri[:, 1])**2 + (y_tri[:, 0] - y_tri[:, 1])**2)
-    sisi_b = np.sqrt((x_tri[:, 1] - x_tri[:, 2])**2 + (y_tri[:, 1] - y_tri[:, 2])**2)
-    sisi_c = np.sqrt((x_tri[:, 2] - x_tri[:, 0])**2 + (y_tri[:, 2] - y_tri[:, 0])**2)
-    triang.set_mask(np.any([sisi_a > BATAS_RESOLUSI, sisi_b > BATAS_RESOLUSI, sisi_c > BATAS_RESOLUSI], axis=0))
+    batas_resolusi = BATAS_RESOLUSI if 'BATAS_RESOLUSI' in globals() else 0.015
+    mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
+    triang.set_mask(mask)
     
     interp_u = tri.LinearTriInterpolator(triang, df_hour['predicted_u'])
     interp_v = tri.LinearTriInterpolator(triang, df_hour['predicted_v'])
@@ -268,15 +274,24 @@ def get_spatial_grid(time_str: str = Query(None)):
             if np.ma.is_masked(u_val) or np.isnan(u_val): u_data.append(None); v_data.append(None)
             else: u_data.append(float(u_val)); v_data.append(float(v_val))
                 
-    return [
+    result = [
         {"header": {"parameterCategory": 2, "parameterNumber": 2, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": u_data},
         {"header": {"parameterCategory": 2, "parameterNumber": 3, "nx": nx, "ny": ny, "lo1": lo1, "lo2": lo2, "la1": la1, "la2": la2, "dx": dx, "dy": dy}, "data": v_data}
     ]
+    
+    # Simpan hasil ke memori
+    api_response_cache[cache_key] = result
+    return result
 
 @app.get("/api/map-background")
 def get_map_background(time_str: str = Query(None)):
     files = get_clean_files()
     if not files: raise HTTPException(status_code=404, detail="Data tidak tersedia")
+    
+    # KUNCI CACHE
+    cache_key = f"bg_{files[0]}_{time_str}"
+    if cache_key in api_response_cache:
+        return api_response_cache[cache_key]
         
     df_spatial = load_data(files[0])
     
@@ -303,13 +318,33 @@ def get_map_background(time_str: str = Query(None)):
     plt.margins(0,0)
     
     cmap_custom = LinearSegmentedColormap.from_list("custom", ['#0000ff', '#00ffff', '#00ff00', '#ffff00', '#ffa500', '#ff0000', '#4b0082'])
-    ax.tricontourf(triang, df_hour['predicted_v_max'], levels=np.linspace(0, 4.0, 100), cmap=cmap_custom, vmin=0, vmax=4.0, extend='max', alpha=0.9, antialiased=True)
+    
+    # =========================================================
+    # TRIK PAMUNGKAS: RASTERISASI & BICUBIC BLUR (SEPERTI REFERENSI)
+    # =========================================================
+    # 1. Bikin kanvas piksel yang rapat (300x300 pixel)
+    nx_bg, ny_bg = 300, 300
+    grid_lon_bg, grid_lat_bg = np.meshgrid(np.linspace(lon_min, lon_max, nx_bg), 
+                                           np.linspace(lat_min, lat_max, ny_bg))
+    
+    # 2. Tuangkan data dari segitiga-segitiga kasar ke atas kanvas piksel yang rapat
+    interp_bg = tri.LinearTriInterpolator(triang, df_hour['predicted_v_max'])
+    Z_bg = interp_bg(grid_lon_bg, grid_lat_bg)
+    
+    # 3. Render sebagai gambar "Heatmap" dengan blur alami (bicubic)
+    ax.imshow(Z_bg, extent=[lon_min, lon_max, lat_min, lat_max], origin='lower', 
+              cmap=cmap_custom, vmin=0, vmax=4.0, alpha=0.9, interpolation='bicubic')
+    # =========================================================
     
     buf = io.BytesIO()
+    # DPI bisa dibiarkan di 150 atau 300. Karena datanya sudah berupa raster (gambar), 
+    # file size-nya akan otomatis lebih kecil dan enteng dirender server.
     plt.savefig(buf, format='png', transparent=True, dpi=300, bbox_inches='tight', pad_inches=0)
     buf.seek(0); plt.close(fig)
     
-    return {"bounds": [[lat_min, lon_min], [lat_max, lon_max]], "image": base64.b64encode(buf.getvalue()).decode('utf-8')}
+    result = {"bounds": [[lat_min, lon_min], [lat_max, lon_max]], "image": base64.b64encode(buf.getvalue()).decode('utf-8')}
+    api_response_cache[cache_key] = result
+    return result
 
 @app.get("/api/timeseries")
 def get_timeseries(lat: float, lon: float):

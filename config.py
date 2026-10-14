@@ -54,6 +54,7 @@ PATHS = {
     
     # Verifikasi
     "Verif_12jam" : BASE_DIR / "Hasil_Validasi" / "Validasi_Real_Max_12H.csv",
+    "Verif_Spasial": "Hasil_Validasi/Validasi_Spasial_1H.csv",
 }
 
 # =============================================================================

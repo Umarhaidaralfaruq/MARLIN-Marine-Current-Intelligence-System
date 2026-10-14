@@ -8,6 +8,23 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
     
     <style>
+        /* LOADING SPINNER */
+        #loader-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(15,23,42,0.6); backdrop-filter: blur(3px);
+            z-index: 9999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        #loader-overlay.active { opacity: 1; pointer-events: auto; }
+        
+        .spinner {
+            width: 50px; height: 50px; border: 5px solid rgba(56, 189, 248, 0.2);
+            border-top-color: #38bdf8; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; background-color: #0f172a;}
         #map { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; }
         .leaflet-control-attribution { display: none !important; }
@@ -304,24 +321,33 @@
 
         let velocityLayer; let backgroundLayer;
         function loadMapData(timeStr) {
+            // 1. Munculkan Loading Spinner
+            document.getElementById('loader-overlay').classList.add('active');
+
             if (velocityLayer) map.removeLayer(velocityLayer);
             if (backgroundLayer) map.removeLayer(backgroundLayer);
 
-            fetch(`${BASE_API_URL}/api/spatial-grid?time_str=${timeStr}`)
-                .then(res => res.json())
-                .then(data => {
-                    velocityLayer = L.velocityLayer({
-                        displayValues: true, displayOptions: { velocityType: 'Arus', displayPosition: 'topleft', displayEmptyString: 'KOSONG' },
-                        data: data, maxVelocity: 4.0, velocityScale: 0.035, particleAge: 120, particleMultiplier: 0.001, colorScale: ['#ffffff']
-                    }).addTo(map);
-                });
-                
-            fetch(`${BASE_API_URL}/api/map-background?time_str=${timeStr}`)
-                .then(res => res.json())
-                .then(data => {
-                    var imageUrl = 'data:image/png;base64,' + data.image;
-                    backgroundLayer = L.imageOverlay(imageUrl, data.bounds, { opacity: 0.85 }).addTo(map);
-                });
+            // 2. Tarik data Grid dan Background secara bersamaan
+            Promise.all([
+                fetch(`${BASE_API_URL}/api/spatial-grid?time_str=${timeStr}`).then(res => res.json()),
+                fetch(`${BASE_API_URL}/api/map-background?time_str=${timeStr}`).then(res => res.json())
+            ])
+            .then(([gridData, bgData]) => {
+                // Tampilkan Peta Angin
+                velocityLayer = L.velocityLayer({
+                    displayValues: true, displayOptions: { velocityType: 'Arus', displayPosition: 'topleft', displayEmptyString: 'KOSONG' },
+                    data: gridData, maxVelocity: 4.0, velocityScale: 0.035, particleAge: 120, particleMultiplier: 0.001, colorScale: ['#ffffff']
+                }).addTo(map);
+
+                // Tampilkan Background Warna
+                var imageUrl = 'data:image/png;base64,' + bgData.image;
+                backgroundLayer = L.imageOverlay(imageUrl, bgData.bounds, { opacity: 0.85 }).addTo(map);
+            })
+            .catch(err => console.error("Gagal memuat peta:", err))
+            .finally(() => {
+                // 3. Matikan Loading Spinner setelah semua selesai
+                document.getElementById('loader-overlay').classList.remove('active');
+            });
         }
 
         // INIT SERVER
@@ -401,4 +427,9 @@
         }
     </script>
 </body>
+<!-- LAYAR LOADING -->
+    <div id="loader-overlay">
+        <div class="spinner"></div>
+        <div style="font-weight: bold; letter-spacing: 1px; color: #e2e8f0;">Memuat Data Peta...</div>
+    </div>
 </html>

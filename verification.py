@@ -205,6 +205,94 @@ def ekstrak_max_1_jam():
     print(f"💾 Disimpan di: {output_csv}")
     
     return df_final
+def ekstrak_spasial_1_jam():
+    print("\n" + "="*70)
+    print("🗺️ MEMULAI VALIDASI SPASIAL: EKSTRAKSI GRID (1 JAM)")
+    print("="*70)
+    
+    # Ambil path dari config
+    output_csv = PATHS.get("Verif_Spasial", "Hasil_Validasi/Validasi_Spasial_1H.csv")
+    file_terbaru = PATHS["nc_file_arus"]
+    all_files = []
+    
+    # Mode Incremental
+    if not os.path.exists(output_csv):
+        print("🚀 [MODE AWAL] Tarik semua file untuk Spasial...")
+        all_files.extend(sorted(glob.glob(str(PATHS["hf_radar_pattern"]))))
+        if file_terbaru.exists(): all_files.append(str(file_terbaru))
+    else:
+        print("⚡ [MODE UPDATE] Update data Spasial dari file terbaru...")
+        if file_terbaru.exists(): all_files.append(str(file_terbaru))
+        else: return None
+
+    if not all_files: return None
+
+    # Batas area
+    lat_min, lat_max = -8.209161, -8.137236
+    lon_min, lon_max = 114.387089, 114.438983
+    
+    list_df_spasial = []
+    
+    print("⏱️ Mengekstrak titik koordinat (lat, lon) per jam...")
+    for f in all_files:
+        if not os.path.exists(f): continue
+        try:
+            ds = xr.open_dataset(f)
+            area_ds = ds.sel(lat=slice(lat_min, lat_max), lon=slice(lon_min, lon_max))
+            
+            # Resample langsung ke 1 Jam menggunakan rata-rata (mean)
+            ds_1h = area_ds[['uvvel', 'uvdir']].resample(time='1H').mean(skipna=True)
+            
+            # Ubah format ke Dataframe Pandas (otomatis punya kolom time, lat, lon, uvvel, uvdir)
+            df_temp = ds_1h.to_dataframe().reset_index()
+            
+            # Buang baris yang datanya kosong (daratan / no data)
+            df_temp = df_temp.dropna(subset=['uvvel'])
+            
+            list_df_spasial.append(df_temp)
+            ds.close()
+        except Exception as e:
+            print(f"   ⚠️ SKIP File rusak: {os.path.basename(f)} | Error: {e}")
+
+    if not list_df_spasial: return None
+
+    # Gabungkan semua data
+    df_all = pd.concat(list_df_spasial)
+    
+    # Rapikan nama kolom agar sesuai standar API kita
+    df_all = df_all.rename(columns={
+        'uvvel': 'Real_Speed_ms',
+        'uvdir': 'Arah_Derajat'
+    })
+    
+    # Format waktu ke UTC string
+    df_all['Waktu_UTC'] = df_all['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Balik arah derajat (Flowing From -> Flowing To) seperti logika di fungsi lu
+    df_all['Arah_Derajat'] = (df_all['Arah_Derajat'] + 180) % 360
+    
+    df_baru = df_all[['Waktu_UTC', 'lat', 'lon', 'Real_Speed_ms', 'Arah_Derajat']].copy()
+    df_baru['Real_Speed_ms'] = df_baru['Real_Speed_ms'].round(3)
+    df_baru['Arah_Derajat'] = df_baru['Arah_Derajat'].round(1)
+
+    # Gabung dengan CSV Spasial lama jika ada
+    if os.path.exists(output_csv):
+        print("📂 Menggabungkan dengan database Spasial historis...")
+        df_old = pd.read_csv(output_csv)
+        df_final = pd.concat([df_old, df_baru], ignore_index=True)
+        df_final = df_final.drop_duplicates(subset=['Waktu_UTC', 'lat', 'lon'], keep='last')
+    else:
+        df_final = df_baru
+
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+    df_final.to_csv(output_csv, index=False)
+    
+    print(f"✅ Database Spasial berhasil diperbarui! ({len(df_final)} titik data)")
+    return df_final
 
 if __name__ == "__main__":
+    # 1. Jalankan ekstraksi untuk grafik garis (Time-series)
     ekstrak_max_1_jam()
+    
+    # 2. Jalankan ekstraksi untuk peta (Spasial)
+    ekstrak_spasial_1_jam()
