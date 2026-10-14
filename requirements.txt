@@ -11,3 +11,6 @@ Pillow
 streamlit-autorefresh
 cloudscraper
 dotenv
+fastapi
+uvicorn
+requests

@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
     
     <style>
+        .port-data-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-top: 4px;
+        }
+        .port-metric-main {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
         /* LOADING SPINNER */
         #loader-overlay {
             position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -34,7 +47,7 @@
         
         .bottom-wrapper {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 90vw; max-width: 1000px; display: flex; flex-direction: column; gap: 8px; 
+            z-index: 1000; width: 90vw; max-width: 700px; display: flex; flex-direction: column; gap: 8px; 
             opacity: 0.25; transition: opacity 0.4s ease-in-out; pointer-events: auto; 
         }
         .bottom-wrapper:hover { opacity: 1; }
@@ -82,6 +95,7 @@
         .nav-btn, .time-display-box {
             padding: 8px 15px; color: #e2e8f0; font-weight: bold; font-size: 0.8em; display: flex; align-items: center; justify-content: center;
             transition: all 0.2s ease; cursor: pointer;
+            white-space: nowrap;
         }
         .nav-btn:hover { background: rgba(30,41,59,0.85); border-color: rgba(148,163,184,0.5); }
         .nav-btn:active { transform: scale(0.98); }
@@ -192,17 +206,13 @@
                     <h2 class="port-title">PELABUHAN KETAPANG</h2>
                     <div class="status-badge" id="badge-ketapang"><div class="status-dot"></div><span id="status-text-ketapang">AMAN</span></div>
                 </div>
-                <div class="data-columns">
-                    <div class="data-col">
-                        <div class="col-title">Waktu Terpilih (<span id="time-curr-ketapang">-</span>)</div>
-                        <div class="speed-val"><span id="speed-curr-ketapang">-</span><span class="speed-unit">m/s</span></div>
-                        <div class="speed-detail"><span id="knot-curr-ketapang">-</span> Knot &bull; Arah: <strong id="dir-curr-ketapang">-</strong></div>
+                <div class="col-title">Waktu Terpilih (<span id="time-curr-ketapang">-</span>)</div>
+                <div class="port-data-row">
+                    <div class="port-metric-main">
+                        <div class="speed-val" style="margin-bottom: 0;"><span id="speed-curr-ketapang">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail" style="font-size: 0.85em;">(<span id="knot-curr-ketapang">-</span> Knot)</div>
                     </div>
-                    <div class="data-col">
-                        <div class="col-title">Maksimal - 12 Jam</div>
-                        <div class="speed-val"><span id="speed-max-ketapang">-</span><span class="speed-unit">m/s</span></div>
-                        <div class="speed-detail"><span id="knot-max-ketapang">-</span> Knot &bull; Arah: <strong id="dir-max-ketapang">-</strong> (<span id="time-max-ketapang">-</span>)</div>
-                    </div>
+                    <div class="speed-detail" style="font-size: 0.9em;">Arah: <strong id="dir-curr-ketapang" style="font-size: 1.1em; color: #38bdf8;">-</strong></div>
                 </div>
             </div>
 
@@ -212,17 +222,13 @@
                     <h2 class="port-title">PELABUHAN GILIMANUK</h2>
                     <div class="status-badge" id="badge-gilimanuk"><div class="status-dot"></div><span id="status-text-gilimanuk">AMAN</span></div>
                 </div>
-                <div class="data-columns">
-                    <div class="data-col">
-                        <div class="col-title">Waktu Terpilih (<span id="time-curr-gilimanuk">-</span>)</div>
-                        <div class="speed-val"><span id="speed-curr-gilimanuk">-</span><span class="speed-unit">m/s</span></div>
-                        <div class="speed-detail"><span id="knot-curr-gilimanuk">-</span> Knot &bull; Arah: <strong id="dir-curr-gilimanuk">-</strong></div>
+                <div class="col-title">Waktu Terpilih (<span id="time-curr-gilimanuk">-</span>)</div>
+                <div class="port-data-row">
+                    <div class="port-metric-main">
+                        <div class="speed-val" style="margin-bottom: 0;"><span id="speed-curr-gilimanuk">-</span><span class="speed-unit">m/s</span></div>
+                        <div class="speed-detail" style="font-size: 0.85em;">(<span id="knot-curr-gilimanuk">-</span> Knot)</div>
                     </div>
-                    <div class="data-col">
-                        <div class="col-title">Maksimal - 12 Jam</div>
-                        <div class="speed-val"><span id="speed-max-gilimanuk">-</span><span class="speed-unit">m/s</span></div>
-                        <div class="speed-detail"><span id="knot-max-gilimanuk">-</span> Knot &bull; Arah: <strong id="dir-max-gilimanuk">-</strong> (<span id="time-max-gilimanuk">-</span>)</div>
-                    </div>
+                    <div class="speed-detail" style="font-size: 0.9em;">Arah: <strong id="dir-curr-gilimanuk" style="font-size: 1.1em; color: #38bdf8;">-</strong></div>
                 </div>
             </div>
         </div>
@@ -271,19 +277,16 @@
             
             const currSpeed = parseFloat(data.current.speed_ms || 0);
             const statusCurr = getStatus(currSpeed);
+            
+            // Update UI
             document.getElementById(`status-text-${prefix}`).innerText = statusCurr.text;
             document.getElementById(`badge-${prefix}`).style.backgroundColor = statusCurr.color;
             document.getElementById(`speed-curr-${prefix}`).innerText = currSpeed.toFixed(2);
             document.getElementById(`knot-curr-${prefix}`).innerText = msToKnot(currSpeed);
             document.getElementById(`dir-curr-${prefix}`).innerText = data.current.direction || '-';
-            if(data.current.time_wib) document.getElementById(`time-curr-${prefix}`).innerText = formatWaktuPort(data.current.time_wib, isGilimanuk);
-
-            if(data.peak) {
-                const maxSpeed = parseFloat(data.peak.speed_ms || 0);
-                document.getElementById(`speed-max-${prefix}`).innerText = maxSpeed.toFixed(2);
-                document.getElementById(`knot-max-${prefix}`).innerText = msToKnot(maxSpeed);
-                document.getElementById(`dir-max-${prefix}`).innerText = data.peak.direction || '-';
-                if(data.peak.time_wib) document.getElementById(`time-max-${prefix}`).innerText = formatWaktuPort(data.peak.time_wib, isGilimanuk);
+            
+            if(data.current.time_wib) {
+                document.getElementById(`time-curr-${prefix}`).innerText = formatWaktuPort(data.current.time_wib, isGilimanuk);
             }
         }
 
@@ -397,7 +400,7 @@
                 // Tampilkan Peta Angin
                 velocityLayer = L.velocityLayer({
                     displayValues: true, displayOptions: { velocityType: 'Arus', displayPosition: 'topleft', displayEmptyString: 'KOSONG' },
-                    data: gridData, maxVelocity: 4.0, velocityScale: 0.035, particleAge: 120, particleMultiplier: 0.001, colorScale: ['#ffffff']
+                    data: gridData, maxVelocity: 4.0, velocityScale: 0.035, particleAge: 50, particleMultiplier: 0.001, colorScale: ['#ffffff']
                 }).addTo(map);
 
                 // Tampilkan Background Warna
@@ -455,7 +458,7 @@
                 .then(data => {
                     // MUNCULKAN GRAFIK HANYA JIKA DATA VALID
                     document.getElementById('chart-panel').style.display = 'flex';
-                    document.getElementById('chart-title').innerText = `Titik: ${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`;
+                    document.getElementById('chart-title').innerText = `Koordinat: ${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`;
                     
                     const ctx = document.getElementById('timeSeriesChart').getContext('2d');
                     if (currentChart) currentChart.destroy(); 

@@ -276,7 +276,7 @@ def get_spatial_grid(time_str: str = Query(None)):
 
     lo1, lo2 = float(df_hour['lon'].min()), float(df_hour['lon'].max())
     la1, la2 = float(df_hour['lat'].max()), float(df_hour['lat'].min()) 
-    nx, ny = GRID_NX, GRID_NY
+    nx, ny = 200, 200
     grid_lon, grid_lat = np.linspace(lo1, lo2, nx), np.linspace(la1, la2, ny) 
     dx, dy = (lo2 - lo1) / (nx - 1), (la1 - la2) / (ny - 1) 
     
@@ -357,13 +357,13 @@ def get_map_background(time_str: str = Query(None)):
     
     # 3. Render sebagai gambar "Heatmap" dengan blur alami (bicubic)
     ax.imshow(Z_bg, extent=[lon_min, lon_max, lat_min, lat_max], origin='lower', 
-              cmap=cmap_custom, vmin=0, vmax=4.0, alpha=0.9, interpolation='bicubic')
+              cmap=cmap_custom, vmin=0, vmax=4.0, alpha=0.9, interpolation='bicubic', aspect='auto')
     # =========================================================
     
     buf = io.BytesIO()
     # DPI bisa dibiarkan di 150 atau 300. Karena datanya sudah berupa raster (gambar), 
     # file size-nya akan otomatis lebih kecil dan enteng dirender server.
-    plt.savefig(buf, format='png', transparent=True, dpi=300, bbox_inches='tight', pad_inches=0)
+    plt.savefig(buf, format='png', transparent=True, dpi=300)
     buf.seek(0); plt.close(fig)
     
     result = {"bounds": [[lat_min, lon_min], [lat_max, lon_max]], "image": base64.b64encode(buf.getvalue()).decode('utf-8')}
@@ -411,6 +411,13 @@ def get_forecast_12h(filename: str = None):
         waktu_list = df_trend['datetime_wib'].dt.strftime('%H:%M').tolist()
         kecepatan_list = [round(float(x), 2) if pd.notna(x) else 0.0 for x in df_trend['predicted_v_max']]
         
+        arah_titik_list = df_trend['arah_derajat'].apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else "Selatan").tolist()
+        
+        max_idx = np.argmax(kecepatan_list) if kecepatan_list else 0
+        peak_speed = kecepatan_list[max_idx] if kecepatan_list else 0.0
+        peak_time = waktu_list[max_idx] if waktu_list else "-"
+        dom_dir = pd.Series(arah_titik_list).mode()[0] if arah_titik_list else "-"
+        
         anotasi_blok = []
         for i in range(0, len(df_trend), 3):
             chunk = df_trend.iloc[i:i+3]
@@ -422,7 +429,11 @@ def get_forecast_12h(filename: str = None):
             
             anotasi_blok.append({"xMin": waktu_list[i], "xMax": waktu_list[min(i+3, len(waktu_list)-1)], "xCenter": waktu_list[min(i+1, len(waktu_list)-1)], "max_v": max_v, "arah": arah_dom})
             
-        return {"waktu": waktu_list, "kecepatan": kecepatan_list, "anotasi_blok": anotasi_blok, "title_range": title_range}
+        return {
+            "waktu": waktu_list, "kecepatan": kecepatan_list, "arah_titik": arah_titik_list,
+            "anotasi_blok": anotasi_blok, "title_range": title_range,
+            "summary": {"peak_speed": peak_speed, "peak_time": peak_time, "dom_dir": dom_dir}
+        }
     except Exception as e:
         print("Error Forecast:", e)
         return {"waktu": [], "title_range": ""}
@@ -433,7 +444,6 @@ def get_validation_12h(filename: str = None):
         files = get_clean_files()
         if not files: return {"waktu": [], "title_range": ""}
         
-        # 1. Bersihkan nama file dari token sebelum dicocokkan
         target_idx = next((i for i, f in enumerate(files) if os.path.basename(f).split("?")[0] == filename), 0)
         valid_idx = target_idx + 1 
         if valid_idx >= len(files): return {"waktu": [], "title_range": "(Baserun Sebelumnya Tidak Tersedia)"}
@@ -450,44 +460,49 @@ def get_validation_12h(filename: str = None):
         df_trend = df_shift.loc[idx_target].sort_values('datetime_wib').reset_index(drop=True)
         title_range = format_rentang_waktu(df_trend['datetime_wib'])
         
-        # 2. Fetch file verifikasi dari url atau lokal
         path_verif = get_verif_csv_url()
         try:
-            # Gunakan token untuk menembus GitHub Private
-            url_fetch = f"{path_verif}?t={int(time.time())}" if str(path_verif).startswith("http") else path_verif
             opsi_akses = {"Authorization": f"token {GITHUB_TOKEN}"} if str(path_verif).startswith("http") else None
             df_rr = pd.read_csv(path_verif, storage_options=opsi_akses)
             df_rr['waktu_utc'] = pd.to_datetime(df_rr['Waktu_UTC'])
             
-            # 3. Pastikan kolom Jumlah_Data ikut di-merge jika ada
             kolom_obs = ['waktu_utc', 'Real_Max_Speed_ms', 'Arah_Derajat']
-            if 'Jumlah_Data' in df_rr.columns:
-                kolom_obs.append('Jumlah_Data')
+            if 'Jumlah_Data' in df_rr.columns: kolom_obs.append('Jumlah_Data')
                 
-            df_merge = pd.merge(df_trend[['datetime', 'datetime_wib', 'predicted_v_max']], df_rr[kolom_obs], left_on='datetime', right_on='waktu_utc', how='left')
+            df_merge = pd.merge(df_trend[['datetime', 'datetime_wib', 'predicted_v_max', 'arah_derajat']], df_rr[kolom_obs], left_on='datetime', right_on='waktu_utc', how='left')
         except Exception as e:
             print(f"Warning/Error baca Verif CSV: {e}")
-            df_merge = df_trend[['datetime', 'datetime_wib', 'predicted_v_max']].copy()
+            df_merge = df_trend[['datetime', 'datetime_wib', 'predicted_v_max', 'arah_derajat']].copy()
             df_merge['Real_Max_Speed_ms'], df_merge['Arah_Derajat'], df_merge['Jumlah_Data'] = np.nan, np.nan, 0
             
         waktu_list = df_merge['datetime_wib'].dt.strftime('%H:%M').tolist()
         prediksi_list = [round(float(x), 2) if pd.notna(x) else 0.0 for x in df_merge['predicted_v_max']]
         observasi_list = [round(float(x), 2) if pd.notna(x) else None for x in df_merge['Real_Max_Speed_ms']]
         
-        # 4. Ekstrak list jumlah data (default 0 kalau datanya kosong/NaN)
+        arah_pred_list = df_merge['arah_derajat'].apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else "Selatan").tolist()
+        arah_obs_list = df_merge['Arah_Derajat'].apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else ("Selatan" if pd.notna(d) else "-")).tolist()
+        
         jml_data_list = [int(x) if pd.notna(x) else 0 for x in df_merge.get('Jumlah_Data', pd.Series([0]*len(df_merge)))]
         
         anotasi_blok = []
         for i in range(0, len(df_merge), 3):
             chunk = df_merge.iloc[i:i+3]
             if chunk.empty: continue
-            obs_valid = chunk['Real_Max_Speed_ms'].dropna()
+            
+            # ATURAN KOMPROMI BARU
+            total_data = chunk['Jumlah_Data'].sum() if 'Jumlah_Data' in chunk.columns else 0
+            if total_data > 9:
+                chunk_tersaring = chunk
+            else:
+                chunk_tersaring = chunk[chunk['Jumlah_Data'] > 3]
+            
+            obs_valid = chunk_tersaring['Real_Max_Speed_ms'].dropna()
             max_v = float(obs_valid.max()) if not obs_valid.empty else None
             
             arah_dom = "-"
-            arah_valid = chunk['Arah_Derajat'].dropna()
+            arah_valid = chunk_tersaring['Arah_Derajat'].dropna()
             if not arah_valid.empty:
-                kat_arah = arah_valid.apply(lambda d: "Utara" if (d >= 270 or d < 90) else "Selatan")
+                kat_arah = arah_valid.apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else "Selatan")
                 if not kat_arah.mode().empty:
                     arah_asli = kat_arah.mode()[0]
                     arah_dom = "Selatan" if arah_asli == "Utara" else ("Utara" if arah_asli == "Selatan" else "-")
@@ -500,14 +515,10 @@ def get_validation_12h(filename: str = None):
                 "arah": arah_dom
             })
             
-        # 5. Kirim tambahan jumlah_data ke Frontend
         return {
-            "waktu": waktu_list, 
-            "prediksi": prediksi_list, 
-            "observasi": observasi_list, 
-            "jumlah_data": jml_data_list,
-            "anotasi_blok": anotasi_blok, 
-            "title_range": title_range
+            "waktu": waktu_list, "prediksi": prediksi_list, "observasi": observasi_list, 
+            "arah_pred_titik": arah_pred_list, "arah_obs_titik": arah_obs_list,
+            "jumlah_data": jml_data_list, "anotasi_blok": anotasi_blok, "title_range": title_range
         }
     except Exception as e:
         print("Error Validation:", e)
@@ -628,7 +639,7 @@ def get_rmse_spatial(filename: str = None):
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0); plt.margins(0,0)
         
         cmap_dir = LinearSegmentedColormap.from_list("custom_dir", ['#4ade80', '#facc15', '#ef4444'])
-        ax_d.tripcolor(triang, rmse_dir_vals, shading='gouraud', cmap=cmap_dir, vmin=0, vmax=45.0, alpha=0.85, edgecolors='face', linewidths=0.1)
+        ax_d.tripcolor(triang, rmse_dir_vals, shading='gouraud', cmap=cmap_dir, vmin=0, vmax=90.0, alpha=0.85, edgecolors='face', linewidths=0.1)
         
         buf_d = io.BytesIO()
         plt.savefig(buf_d, format='png', transparent=True, dpi=150, bbox_inches='tight', pad_inches=0)

@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <title>MARLIN - Mode Forecaster</title>
     
+    <!-- Pustaka Grafik -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     
+    <!-- Pustaka Peta -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <!-- TAMBAHKAN BARIS INI: Plugin Heatmap untuk visualisasi mulus -->
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     
     <style>
@@ -21,7 +23,6 @@
             color: #e2e8f0;
         }
 
-        /* TEMA KACA (GLASSMORPHISM) */
         .glass-panel {
             background: linear-gradient(135deg, rgba(15,23,42,0.7) 0%, rgba(2,6,23,0.8) 100%);
             border: 1px solid rgba(148,163,184,0.2);
@@ -33,7 +34,6 @@
             position: relative;
         }
 
-        /* HEADER NAVBAR */
         .navbar {
             display: flex; justify-content: space-between; align-items: center;
             padding: 12px 30px; border-bottom: 1px solid rgba(148,163,184,0.1);
@@ -47,7 +47,6 @@
         
         .nav-right { display: flex; align-items: center; gap: 15px; }
         
-        /* DROPDOWN BASERUN */
         .baserun-select {
             background: rgba(15,23,42,0.9); color: #38bdf8;
             border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px;
@@ -63,20 +62,19 @@
         }
         .back-btn:hover { background: #1e293b; color: white; border-color: #94a3b8; }
 
-        /* GRID LAYOUT UTAMA */
         .container {
             display: grid;
             grid-template-columns: 1fr 1fr; 
             gap: 20px; padding: 20px 30px;
         }
+        
+        /* CLASS BARU BUAT BIKIN GRAFIK MELEBAR */
+        .full-width-panel { grid-column: span 2; }
 
         h2 { margin-top: 0; font-size: 1.05em; color: #f8fafc; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 10px; margin-bottom: 15px; }
         
-        /* PETA SPASIAL KOSONG (TANPA SATELIT) */
         .map-container { flex-grow: 1; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid rgba(148,163,184,0.2); }
-        /*.leaflet-container { background: #0f172a !important; } /* Warna dasar peta polos */
         
-        /* OVERLAY METRIK RMSE DI ATAS PETA */
         .rmse-overlay {
             position: absolute; top: 15px; right: 15px; z-index: 1000;
             background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(148,163,184,0.3);
@@ -90,11 +88,23 @@
         
         .badge-good { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
         .badge-warn { background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234,179,8,0.3); }
+
+        /* LEGENDA PETA RMSE */
+        .map-legend {
+            position: absolute; bottom: 15px; left: 15px; z-index: 1000;
+            background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(148,163,184,0.3);
+            backdrop-filter: blur(5px); border-radius: 8px; padding: 10px 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 160px; pointer-events: none;
+        }
+        .map-legend .legend-title { font-size: 0.7em; color: #cbd5e1; font-weight: bold; margin-bottom: 6px; text-align: center; text-transform: uppercase;}
+        .map-legend .legend-gradient { height: 8px; border-radius: 4px; width: 100%; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
+        .map-legend .speed-grad { background: linear-gradient(to right, #38bdf8, #4ade80, #facc15, #ef4444); } 
+        .map-legend .dir-grad { background: linear-gradient(to right, #4ade80, #facc15, #ef4444); } 
+        .map-legend .legend-labels { display: flex; justify-content: space-between; font-size: 0.65em; color: #94a3b8; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <!-- NAVBAR -->
     <div class="navbar">
         <div class="nav-left">
             <img src="Logo_BMKG.png" alt="BMKG">
@@ -103,44 +113,58 @@
             </div>
         </div>
         <div class="nav-right">
-            <select class="baserun-select" id="baserun-dropdown">
-                <option value="1">prediksi_spasial_20261013_0000.csv (Terbaru)</option>
-                <option value="2">prediksi_spasial_20261012_1200.csv</option>
-                <option value="3">prediksi_spasial_20261012_0000.csv</option>
-            </select>
-            <a href="index.html" class="back-btn">Kembali</a>
+            <select class="baserun-select" id="baserun-dropdown"></select>
+            <a href="index.html" class="back-btn">⬅ Kembali ke Radar</a>
         </div>
     </div>
 
     <!-- KONTEN UTAMA -->
     <div class="container">
         
-        <!-- ================= BARIS 1: GRAFIK TIME SERIES ================= -->
-        
-        <div class="glass-panel" style="height: 380px;">
-            <h2 id="forecast-title">📈 Prakiraan Operasional</h2>
+        <!-- BARIS 1: GRAFIK PRAKIRAAN -->
+        <div class="glass-panel full-width-panel" style="height: 420px;">
+            <h2 id="forecast-title" style="margin-bottom: 5px;">📈 Prakiraan Operasional</h2>
+            <!-- PARAGRAF NARASI -->
+            <p id="forecast-summary" style="color: #cbd5e1; font-size: 0.9em; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 10px;">
+                Memuat kesimpulan data...
+            </p>
             <div style="position: relative; flex-grow: 1; width: 100%;">
+                <div id="no-data-forecast" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.85); backdrop-filter: blur(3px); z-index: 10; flex-direction: column; justify-content: center; align-items: center; border-radius: 8px;">
+                    <span style="font-size: 2.5em;">⚠️</span><span style="color: #f87171; font-weight: bold; margin-top: 10px; font-size: 1.1em;">Data Prediksi Tidak Tersedia</span>
+                </div>
                 <canvas id="forecastChart"></canvas>
             </div>
         </div>
 
-        <div class="glass-panel" style="height: 380px;">
+        <!-- BARIS 2: GRAFIK VALIDASI -->
+        <div class="glass-panel full-width-panel" style="height: 420px;">
             <h2 id="validation-title">✅ Validasi Model vs HF Radar</h2>
             <div style="position: relative; flex-grow: 1; width: 100%;">
+                <div id="no-data-validation" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.85); backdrop-filter: blur(3px); z-index: 10; flex-direction: column; justify-content: center; align-items: center; border-radius: 8px;">
+                    <span style="font-size: 2.5em;">⚠️</span><span style="color: #f87171; font-weight: bold; margin-top: 10px; font-size: 1.1em;">Data Prediksi Tidak Tersedia</span>
+                </div>
                 <canvas id="validationChart"></canvas>
             </div>
         </div>
 
-        <!-- ================= BARIS 2: VALIDASI SPASIAL (PETA DUMMY) ================= -->
-
+        <!-- BARIS 3: PETA RMSE -->
         <div class="glass-panel" style="height: 450px;">
             <h2>🎯 Validasi Spasial: RMSE Kecepatan Arus</h2>
             <div class="map-container">
                 <div id="map-rmse-speed" style="width: 100%; height: 100%;"></div>
+                
+                <!-- Kotak Nilai Kanan Atas -->
                 <div class="rmse-overlay">
                     <div class="title">Rata-Rata Spasial</div>
                     <div class="value"><span id="rmse-speed-val">-</span> <span class="unit">m/s</span></div>
                     <div class="badge badge-good" id="badge-speed">-</div>
+                </div>
+
+                <!-- LEGENDA KIRI BAWAH -->
+                <div class="map-legend">
+                    <div class="legend-title">Batas Error (m/s)</div>
+                    <div class="legend-gradient speed-grad"></div>
+                    <div class="legend-labels"><span>0</span><span>0.2</span><span>0.4+</span></div>
                 </div>
             </div>
         </div>
@@ -149,10 +173,19 @@
             <h2>🧭 Validasi Spasial: RMSE Arah Arus</h2>
             <div class="map-container">
                 <div id="map-rmse-dir" style="width: 100%; height: 100%;"></div>
+                
+                <!-- Kotak Nilai Kanan Atas -->
                 <div class="rmse-overlay">
                     <div class="title">Rata-Rata Spasial</div>
                     <div class="value"><span id="rmse-dir-val">-</span> <span class="unit">Derajat</span></div>
                     <div class="badge badge-warn" id="badge-dir">-</div>
+                </div>
+
+                <!-- LEGENDA KIRI BAWAH -->
+                <div class="map-legend">
+                    <div class="legend-title">Batas Error (Derajat)</div>
+                    <div class="legend-gradient dir-grad"></div>
+                    <div class="legend-labels"><span>0</span><span>22.5</span><span>45+</span></div>
                 </div>
             </div>
         </div>
@@ -160,11 +193,15 @@
     </div>
 
     <script>
+        // PASTIKAN URL INI SESUAI DENGAN CODESPACES LU
         const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
+        
+        // Registrasi plugin label grafik
+        Chart.register(ChartDataLabels);
+
         let forecastChartObj = null;
         let validationChartObj = null;
 
-// FUNGSI 1: LOAD BASERUNS 
         async function loadBaseruns() {
             try {
                 let response = await fetch(`${BASE_API_URL}/api/baseruns`);
@@ -179,27 +216,21 @@
 
                 fileList.forEach((file, index) => {
                     let option = document.createElement('option');
-                    // Karena dari Python udah distandarkan, kita panggil object-nya aman
                     option.value = file.filename;
                     option.text = index === 0 ? file.label + " (Terbaru)" : file.label;
                     dropdown.appendChild(option);
                 });
 
-                // Load grafik menggunakan nama file index pertama
                 loadForecastData(fileList[0].filename);
-                
-                dropdown.addEventListener('change', function() { 
-                    loadForecastData(this.value); 
-                });
-            } catch (err) {
-                console.error("Gagal meload daftar baserun:", err);
-            }
+                dropdown.addEventListener('change', function() { loadForecastData(this.value); });
+            } catch (err) { console.error("Gagal meload daftar baserun:", err); }
         }
 
         // FUNGSI 2: LOAD GRAFIK PRAKIRAAN
         async function loadForecastData(filename) {
             try {
-                loadValidationData(filename); // Jangan lupa panggil fungsi sebelah
+                loadValidationData(filename); 
+                loadSpatialData(filename);
 
                 let response = await fetch(`${BASE_API_URL}/api/forecast-12h?filename=${filename}`);
                 if (!response.ok) throw new Error("API Forecast gagal");
@@ -209,33 +240,54 @@
                     document.getElementById('forecast-title').innerText = `📈 Prakiraan Operasional ${data.title_range}`;
                 }
 
-                if (data.waktu.length === 0) return;
+                if (!data.waktu || data.waktu.length === 0) {
+                    document.getElementById('no-data-forecast').style.display = 'flex';
+                    document.getElementById('forecast-summary').innerText = "-";
+                    return;
+                } else {
+                    document.getElementById('no-data-forecast').style.display = 'none';
+                }
+
+                document.getElementById('forecast-summary').innerHTML = `Kecepatan arus laut diprediksi mencapai puncaknya pada <b>${data.summary.peak_time} WIB</b> dengan kecepatan maksimum <b>${data.summary.peak_speed.toFixed(2)} m/s</b>. Secara umum, pergerakan arus dominan menuju ke arah <b>${data.summary.dom_dir.toUpperCase()}</b>.`;
 
                 let dinamicAnnotations = {};
-                let yMaxGlobal = Math.max(...data.kecepatan) + 0.5;
+                let yMaxGlobal = Math.max(...data.kecepatan) + 0.8; 
 
                 data.anotasi_blok.forEach((blok, index) => {
-                    // Logika index shift
                     let startIndex = index * 3;
                     let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
-                    
                     let boxMin = startIndex - 0.5;
                     let boxMax = endIndex + 0.5;
                     let boxCenter = (startIndex + endIndex) / 2;
-
                     let bgColor = (index % 2 === 0) ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0)';
                     
-                    dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
+                    dinamicAnnotations[`box${index}`] = { 
+                        type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 
+                    };
                     dinamicAnnotations[`lbl${index}`] = {
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
                         content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Arah: ${blok.arah}`], 
-                        color: '#94a3b8', font: {size: 10}, textAlign: 'center'
+                        color: '#f8fafc', textAlign: 'center',
+                        // REVISI 1: Baris 1 Bold, Baris 2 Normal
+                        font: [{size: 12, weight: 'bold'}, {size: 11, weight: 'normal'}]
                     };
                 });
+
+                // REVISI 2: Label ukuran tetap tapi font normal (tidak bold)
+                let dataLabelsConfig = {
+                    display: true, align: 'top', offset: 8, color: '#f8fafc', font: { size: 12, weight: 'normal' },
+                    formatter: function(value, context) {
+                        if (!data.arah_titik) return value.toFixed(2);
+                        let dir = data.arah_titik[context.dataIndex];
+                        let panah = dir === "Utara" ? "↑ U" : "↓ S";
+                        return [value.toFixed(2), panah]; 
+                    }
+                };
 
                 if(forecastChartObj !== null) {
                     forecastChartObj.data.labels = data.waktu;
                     forecastChartObj.data.datasets[0].data = data.kecepatan;
+                    forecastChartObj.data.datasets[0].datalabels = dataLabelsConfig;
                     forecastChartObj.options.scales.y.suggestedMax = yMaxGlobal;
                     forecastChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
                     forecastChartObj.update(); 
@@ -248,12 +300,13 @@
                             datasets: [{
                                 label: 'Kecepatan Model (m/s)', data: data.kecepatan,
                                 borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                                borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#0ea5e9', pointRadius: 4
+                                borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#0ea5e9', pointRadius: 4,
+                                datalabels: dataLabelsConfig
                             }]
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: false,
-                            animation: { duration: 800 }, 
+                            responsive: true, maintainAspectRatio: false, animation: { duration: 800 }, 
+                            layout: { padding: { top: 20 } }, 
                             plugins: { legend: { display: false }, annotation: { annotations: dinamicAnnotations } },
                             scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false }, offset: true }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
                         }
@@ -262,116 +315,143 @@
             } catch (err) { console.error("Gagal meload grafik prakiraan:", err); }
         }
 
-// FUNGSI 3: LOAD GRAFIK VALIDASI
+        // FUNGSI 3: LOAD GRAFIK VALIDASI
         async function loadValidationData(filename) {
             try {
                 let response = await fetch(`${BASE_API_URL}/api/validation-12h?filename=${filename}`);
                 if (!response.ok) throw new Error("API Validation gagal");
                 let data = await response.json();
 
-                if(data.title_range) {
-                    document.getElementById('validation-title').innerText = `✅ Validasi Model vs HF Radar ${data.title_range}`;
+                if(data.title_range) document.getElementById('validation-title').innerText = `✅ Validasi Model vs HF Radar ${data.title_range}`;
+
+                if (!data.waktu || data.waktu.length === 0) {
+                    document.getElementById('no-data-validation').style.display = 'flex';
+                    return;
+                } else {
+                    document.getElementById('no-data-validation').style.display = 'none';
                 }
 
-                if (data.waktu.length === 0) return;
-
-                // 1. FILTER TITIK PER JAM: Kalau jumlah data <= 3 (50% dari 6), jadikan null biar grafiknya putus
-                let observasiTersaring = data.observasi.map((obs, i) => {
-                    return (data.jumlah_data && data.jumlah_data[i] > 3) ? obs : null;
-                });
-
-                let dinamicAnnotations = {};
-                let maxPred = Math.max(...data.prediksi);
-                let maxObs = Math.max(...observasiTersaring.filter(n => n !== null && !isNaN(n)));
-                let yMaxGlobal = Math.max(maxPred, maxObs) + 0.5;
-                if(!isFinite(yMaxGlobal) || isNaN(yMaxGlobal)) yMaxGlobal = 3.0; 
-
+                let observasiTersaring = new Array(data.observasi.length).fill(null);
                 data.anotasi_blok.forEach((blok, index) => {
-                    // Logika background kotak penuh
                     let startIndex = index * 3;
                     let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
                     
+                    let totalDataTimestep = 0;
+                    if (data.jumlah_data) {
+                        for (let i = startIndex; i <= endIndex; i++) totalDataTimestep += data.jumlah_data[i] || 0;
+                    }
+
+                    if (totalDataTimestep > 9) {
+                        for (let i = startIndex; i <= endIndex; i++) observasiTersaring[i] = data.observasi[i];
+                    } else {
+                        for (let i = startIndex; i <= endIndex; i++) {
+                            if (data.jumlah_data && data.jumlah_data[i] > 3) observasiTersaring[i] = data.observasi[i];
+                        }
+                    }
+                });
+
+                let maxPred = Math.max(...data.prediksi);
+                let maxObs = Math.max(...observasiTersaring.filter(n => n !== null && !isNaN(n)));
+                let yMaxGlobal = Math.max(maxPred, maxObs) + 0.8; 
+                if(!isFinite(yMaxGlobal) || isNaN(yMaxGlobal)) yMaxGlobal = 3.0; 
+
+                let dinamicAnnotations = {};
+                data.anotasi_blok.forEach((blok, index) => {
+                    let startIndex = index * 3;
+                    let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
                     let boxMin = startIndex - 0.5;
                     let boxMax = endIndex + 0.5;
                     let boxCenter = (startIndex + endIndex) / 2;
                     let bgColor = (index % 2 === 0) ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0)';
 
-                    // 2. HITUNG TOTAL DATA PER TIMESTEP (3 JAM)
                     let totalDataTimestep = 0;
                     if (data.jumlah_data) {
-                        for (let i = startIndex; i <= endIndex; i++) {
-                            totalDataTimestep += data.jumlah_data[i] || 0;
-                        }
+                        for (let i = startIndex; i <= endIndex; i++) totalDataTimestep += data.jumlah_data[i] || 0;
                     }
 
-                    // 3. LOGIKA LABEL: Jika total data > 9 (50% dari 18 maksimal), maka valid
-                    let teksObs = "";
-                    let teksArah = "";
+                    let teksObs = ""; let teksArah = "";
                     if (totalDataTimestep > 9) {
                         teksObs = blok.max_v !== null ? `Obs: ${blok.max_v.toFixed(2)} m/s` : "Data Kosong";
                         teksArah = `Arah: ${blok.arah}`;
                     } else {
-                        teksObs = "Data Tidak Valid";
-                        teksArah = "";
+                        teksObs = "Data Tidak Valid"; teksArah = "";
                     }
                     
                     dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
-                        content: [teksObs, teksArah], color: '#94a3b8', font: {size: 10}, textAlign: 'center'
+                        content: teksArah ? [teksObs, teksArah] : [teksObs], color: '#f8fafc', textAlign: 'center',
+                        // REVISI 1: Baris 1 Bold, Baris 2 Normal
+                        font: teksArah ? [{size: 12, weight: 'bold'}, {size: 11, weight: 'normal'}] : [{size: 12, weight: 'normal'}]
                     };
                 });
 
                 if(validationChartObj !== null) {
-                    // Update data secara dinamis
                     validationChartObj.data.labels = data.waktu;
                     validationChartObj.data.datasets[0].data = data.prediksi;
-                    // Masukkan data observasi yang sudah di-filter
                     validationChartObj.data.datasets[1].data = observasiTersaring; 
                     validationChartObj.options.scales.y.suggestedMax = yMaxGlobal;
                     validationChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
                     validationChartObj.update(); 
                 } else {
-                    // Bikin baru saat pertama kali diload
                     const ctxValidation = document.getElementById('validationChart').getContext('2d');
                     validationChartObj = new Chart(ctxValidation, {
                         type: 'line',
                         data: {
                             labels: data.waktu,
                             datasets: [
-                                { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 0 },
-                                // Masukkan data observasi yang sudah di-filter
-                                { label: 'Observasi Radar', data: observasiTersaring, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true }
+                                { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#0ea5e9', pointHoverRadius: 6 },
+                                { label: 'Observasi Radar', data: observasiTersaring, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true, pointHoverRadius: 6 }
                             ]
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: false,
-                            animation: { duration: 800 }, 
-                            plugins: { legend: { display: true, position: 'bottom', labels: { color: '#cbd5e1', font: {size: 11}, boxWidth: 15 } }, annotation: { annotations: dinamicAnnotations } },
-                            scales: { 
-                                x: { 
-                                    ticks: { color: '#94a3b8' }, 
-                                    grid: { display: false },
-                                    offset: true // Menambahkan ruang agar kotak background tidak terpotong
-                                }, 
-                                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } 
-                            }
+                            responsive: true, maintainAspectRatio: false, animation: { duration: 800 }, 
+                            layout: { padding: { top: 20, bottom: 20 } }, 
+                            plugins: { 
+                                legend: { display: true, position: 'bottom', labels: { color: '#cbd5e1', font: {size: 11}, boxWidth: 15 } }, 
+                                annotation: { annotations: dinamicAnnotations },
+                                // REVISI 3: Matikan label permanen, ganti dengan Tooltip Interaktif
+                                datalabels: { display: false },
+                                tooltip: {
+                                    mode: 'index', intersect: false,
+                                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                                    titleColor: '#38bdf8', bodyColor: '#f8fafc',
+                                    borderColor: 'rgba(148,163,184,0.3)', borderWidth: 1, padding: 12,
+                                    bodyFont: { size: 12 }, titleFont: { size: 13, weight: 'bold' },
+                                    callbacks: {
+                                        label: function(context) {
+                                            let datasetLabel = context.dataset.label || '';
+                                            let val = context.raw;
+                                            if (val === null) return `${datasetLabel} : - (Data < 50%)`;
+                                            
+                                            let dir = "";
+                                            if (context.datasetIndex === 0) {
+                                                dir = data.arah_pred_titik ? data.arah_pred_titik[context.dataIndex] : "-";
+                                            } else {
+                                                dir = data.arah_obs_titik ? data.arah_obs_titik[context.dataIndex] : "-";
+                                            }
+                                            return `${datasetLabel} : ${val.toFixed(2)} m/s (Arah: ${dir})`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false }, offset: true }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
                         }
                     });
                 }
             } catch (err) { console.error("Gagal meload grafik validasi:", err); }
         }
 
-        // FUNGSI 4: PETA SPASIAL SUNGGUHAN
+        // PETA SPASIAL
         let mapSpeed, mapDir;
         let heatLayerSpeed, heatLayerDir;
 
         function initMaps() {
-            // Inisialisasi peta kosong
-            mapSpeed = L.map('map-rmse-speed', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.130, 114.435], 11);
+            // Titik tengah digeser ke [-8.100, 114.400] dan ZOOM DINAIIKAN JADI 12
+            mapSpeed = L.map('map-rmse-speed', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.200, 114.420], 12);
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}').addTo(mapSpeed);
             
-            mapDir = L.map('map-rmse-dir', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.130, 114.435], 11);
+            mapDir = L.map('map-rmse-dir', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.200, 114.420], 12);
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}').addTo(mapDir);
         }
 
@@ -380,7 +460,6 @@
                 let response = await fetch(`${BASE_API_URL}/api/rmse-spatial?filename=${filename}`);
                 let data = await response.json();
 
-                // Bersihkan layer gambar lama
                 if(heatLayerSpeed) mapSpeed.removeLayer(heatLayerSpeed);
                 if(heatLayerDir) mapDir.removeLayer(heatLayerDir);
 
@@ -390,38 +469,26 @@
                     return;
                 }
 
-                // Tempel Gambar yang digenerate oleh Python
                 let urlSpeed = 'data:image/png;base64,' + data.img_speed;
                 heatLayerSpeed = L.imageOverlay(urlSpeed, data.bounds, { opacity: 0.85 }).addTo(mapSpeed);
                 
                 let urlDir = 'data:image/png;base64,' + data.img_dir;
                 heatLayerDir = L.imageOverlay(urlDir, data.bounds, { opacity: 0.85 }).addTo(mapDir);
 
-                // Update Text Angka
                 document.getElementById('rmse-speed-val').innerText = data.avg_speed.toFixed(2);
                 document.getElementById('rmse-dir-val').innerText = data.avg_dir.toFixed(1);
 
-                // Logika Badge Kecepatan
                 let badgeSpeed = document.getElementById('badge-speed');
-                if(data.avg_speed <= 0.3) { badgeSpeed.className = "badge badge-good"; badgeSpeed.innerText = "Sangat Akurat"; }
-                else if(data.avg_speed <= 0.6) { badgeSpeed.className = "badge badge-warn"; badgeSpeed.innerText = "Batas Toleransi"; }
+                if(data.avg_speed <= 0.4) { badgeSpeed.className = "badge badge-good"; badgeSpeed.innerText = "Sangat Akurat"; }
+                else if(data.avg_speed <= 0.5) { badgeSpeed.className = "badge badge-warn"; badgeSpeed.innerText = "Batas Toleransi"; }
                 else { badgeSpeed.className = "badge"; badgeSpeed.style.background = "rgba(239,68,68,0.2)"; badgeSpeed.style.color = "#ef4444"; badgeSpeed.innerText = "Kurang Akurat"; }
 
-                // Logika Badge Arah
                 let badgeDir = document.getElementById('badge-dir');
-                if(data.avg_dir <= 15) { badgeDir.className = "badge badge-good"; badgeDir.innerText = "Sangat Akurat"; }
-                else if(data.avg_dir <= 30) { badgeDir.className = "badge badge-warn"; badgeDir.innerText = "Batas Toleransi"; }
+                if(data.avg_dir <= 30) { badgeDir.className = "badge badge-good"; badgeDir.innerText = "Sangat Akurat"; }
+                else if(data.avg_dir <= 45) { badgeDir.className = "badge badge-warn"; badgeDir.innerText = "Batas Toleransi"; }
                 else { badgeDir.className = "badge"; badgeDir.style.background = "rgba(239,68,68,0.2)"; badgeDir.style.color = "#ef4444"; badgeDir.innerText = "Kurang Akurat"; }
 
             } catch (err) { console.error("Gagal load Spasial:", err); }
-        }
-
-        // PANGGILAN OTOMATIS SAAT BASERUN DIGANTI
-        // Kita modif loadForecastData lu (di bagian paling atasnya) biar manggil loadSpatialData
-        const originalLoadForecastData = loadForecastData;
-        loadForecastData = async function(filename) {
-            loadSpatialData(filename); // Sisipkan panggilan fungsi spasial di sini
-            originalLoadForecastData(filename);
         }
 
         // INIT
