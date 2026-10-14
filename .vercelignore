@@ -1,0 +1,18 @@
+# 1. BLOKIR SEMUA DATA & MODEL BERAT (Sapu Jagat)
+*.csv
+*.nc
+*.h5
+*.hdf5
+*.joblib
+*.pkl
+*.npy
+*.npz
+
+# 2. BLOKIR JUPYTER NOTEBOOK & CACHE
+*.ipynb
+__pycache__/
+.ipynb_checkpoints/
+
+# 3. KECUALIKAN SCRIPT YANG GAK DIPAKAI API (Opsional)
+verification*.py
+reconstruction*.py
