@@ -1,4 +1,8 @@
-# 1. BLOKIR SEMUA DATA & MODEL BERAT (Sapu Jagat)
+# 1. HAPUS HISTORI GIT (Sangat Menghemat Puluhan MB)
+.git/
+.github/
+
+# 2. BLOKIR DATA & MODEL BERAT (Sapu Jagat)
 *.csv
 *.nc
 *.h5
@@ -8,11 +12,12 @@
 *.npy
 *.npz
 
-# 2. BLOKIR JUPYTER NOTEBOOK & CACHE
+# 3. BLOKIR CACHE & JUPYTER
 *.ipynb
 __pycache__/
 .ipynb_checkpoints/
+*.pyc
 
-# 3. KECUALIKAN SCRIPT YANG GAK DIPAKAI API (Opsional)
+# 4. KECUALIKAN SCRIPT LAIN
 verification*.py
 reconstruction*.py
