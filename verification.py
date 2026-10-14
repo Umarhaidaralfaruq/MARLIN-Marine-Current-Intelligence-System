@@ -164,7 +164,7 @@ def ekstrak_max_1_jam():
 
     df_1jam['Waktu_UTC'] = df_1jam['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
-    df_baru = df_1jam[['Waktu_UTC', 'Real_Max_Speed_ms', 'Arah_Derajat', 'Kualitas_Data']].copy()
+    df_baru = df_1jam[['Waktu_UTC', 'Real_Max_Speed_ms', 'Arah_Derajat', 'Kualitas_Data', 'Jumlah_Data']].copy()
     df_baru['Real_Max_Speed_ms'] = df_baru['Real_Max_Speed_ms'].round(2)
     df_baru['Arah_Derajat'] = df_baru['Arah_Derajat'].round(1)
 
