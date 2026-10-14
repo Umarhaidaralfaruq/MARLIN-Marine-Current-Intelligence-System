@@ -235,19 +235,13 @@ def ekstrak_spasial_1_jam():
             ds = xr.open_dataset(f)
             area_ds = ds
             
-            # Konversi arah derajat dan kecepatan ke Vektor U dan V (Sesuai kaidah sains)
-            rad = np.deg2rad(area_ds['uvdir'])
-            u_vec = area_ds['uvvel'] * np.sin(rad)
-            v_vec = area_ds['uvvel'] * np.cos(rad)
-            
-            area_ds['u_vec'] = u_vec
-            area_ds['v_vec'] = v_vec
-            
-            # Resample langsung komponen U dan V nya
-            ds_1h = area_ds[['u_vec', 'v_vec']].resample(time='1H').mean(skipna=True)
+            # KITA BUANG SEMUA HITUNGAN SIN/COS. 
+            # Asumsi nama variabel di NetCDF lu adalah 'u' dan 'v' (sesuaikan kalau beda)
+            # Langsung resample komponen U dan V bawaan radarnya:
+            ds_1h = area_ds[['u', 'v']].resample(time='1H').mean(skipna=True)
             
             # Konversi ke Pandas
-            df_temp = ds_1h.to_dataframe().reset_index().dropna(subset=['u_vec', 'v_vec'])
+            df_temp = ds_1h.to_dataframe().reset_index().dropna(subset=['u', 'v'])
             list_df_spasial.append(df_temp)
             ds.close()
         except Exception as e:
@@ -257,9 +251,10 @@ def ekstrak_spasial_1_jam():
 
     df_all = pd.concat(list_df_spasial)
     
+    # Rapikan nama kolomnya
     df_all = df_all.rename(columns={
-        'u_vec': 'U_obs',
-        'v_vec': 'V_obs'
+        'u': 'U_obs',
+        'v': 'V_obs'
     })
     
     df_all['Waktu_UTC'] = df_all['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
