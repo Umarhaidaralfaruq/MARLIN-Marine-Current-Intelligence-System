@@ -19,6 +19,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import requests
 import time
 import math
+from scipy.spatial import cKDTree
 
 # Mengambil semua variabel konfigurasi dari config.py (termasuk GITHUB_OWNER dkk)
 from config import *
@@ -538,78 +539,98 @@ def get_rmse_spatial(filename: str = None):
         waktu_unik = sorted(df_area['datetime_wib'].unique())[:13]
         df_shift = df_area[df_area['datetime_wib'].isin(waktu_unik)].copy()
         
-        df_shift['lat_r'] = df_shift['lat'].round(3)
-        df_shift['lon_r'] = df_shift['lon'].round(3)
-        df_obs['lat_r'] = df_obs['lat'].round(3)
-        df_obs['lon_r'] = df_obs['lon'].round(3)
-        
-        df_merged = pd.merge(df_shift, df_obs, left_on=['datetime', 'lat_r', 'lon_r'], right_on=['waktu_utc', 'lat_r', 'lon_r'], how='inner')
-        if df_merged.empty: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
-            
-        # FUNGSI ERROR PERSIS DARI reconstruction.py
+        # =========================================================
+        # TRIK PAMUNGKAS: Spatial Match dengan cKDTree
+        # =========================================================
         def circular_error(pred, true):
             diff = np.abs(pred - true) % 360
             return np.where(diff > 180, 360 - diff, diff)
 
-        grouped = df_merged.groupby(['lat_x', 'lon_x'])
-        
         lat_list, lon_list, speed_err_list, dir_err_list = [], [], [], []
         total_speed_rmse, total_dir_rmse, count = 0, 0, 0
         
-        for (lat, lon), group in grouped:
-            pred_speed = group['predicted_v_max'].values
-            true_speed = group['Real_Speed_ms'].values
-            pred_dir = group['arah_derajat'].values
-            true_dir = group['Arah_Derajat'].values
+        # Loop per jam untuk mencocokkan data prediksi dan observasi
+        for t in df_shift['datetime'].unique():
+            df_p_t = df_shift[df_shift['datetime'] == t]
+            df_o_t = df_obs[df_obs['waktu_utc'] == t]
             
-            # 1. RMSE Kecepatan
-            speed_err_sq = np.mean((pred_speed - true_speed) ** 2)
-            rmse_speed = float(np.sqrt(speed_err_sq)) if pd.notna(speed_err_sq) else 0
+            if df_p_t.empty or df_o_t.empty: continue
             
-            # 2. RMSE Arah Arus (Pakai circular_error)
-            dir_err_sq = np.mean(circular_error(pred_dir, true_dir) ** 2)
-            rmse_dir = float(np.sqrt(dir_err_sq)) if pd.notna(dir_err_sq) else 0
+            # Buat pohon pencarian dari koordinat observasi
+            tree = cKDTree(df_o_t[['lat', 'lon']].values)
+            # Cari titik observasi terdekat untuk setiap titik prediksi
+            distances, indices = tree.query(df_p_t[['lat', 'lon']].values)
             
-            lat_list.append(lat); lon_list.append(lon)
-            speed_err_list.append(rmse_speed); dir_err_list.append(rmse_dir)
-            total_speed_rmse += rmse_speed; total_dir_rmse += rmse_dir; count += 1
+            # Batas toleransi jarak (misal max meleset ~1.5 km atau 0.015 derajat)
+            valid_mask = distances < 0.015
             
+            p_valid = df_p_t.iloc[valid_mask]
+            o_valid = df_o_t.iloc[indices[valid_mask]]
+            
+            if p_valid.empty: continue
+                
+            pred_speed = p_valid['predicted_v_max'].values
+            true_speed = o_valid['Real_Speed_ms'].values
+            pred_dir = p_valid['arah_derajat'].values
+            true_dir = o_valid['Arah_Derajat'].values
+            
+            # Hitung error titik-titik tersebut
+            se = (pred_speed - true_speed) ** 2
+            de = circular_error(pred_dir, true_dir) ** 2
+            
+            for i in range(len(p_valid)):
+                lat_list.append(p_valid.iloc[i]['lat'])
+                lon_list.append(p_valid.iloc[i]['lon'])
+                speed_err_list.append(se[i])
+                dir_err_list.append(de[i])
+                
+        if not lat_list: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
+
+        # Rata-ratakan error per titik spasial (Aggregate)
+        df_err = pd.DataFrame({'lat': lat_list, 'lon': lon_list, 'se': speed_err_list, 'de': dir_err_list})
+        df_err_agg = df_err.groupby(['lat', 'lon']).mean().reset_index()
+        
+        rmse_speed_vals = np.sqrt(df_err_agg['se'].values)
+        rmse_dir_vals = np.sqrt(df_err_agg['de'].values)
+        
+        # Hitung rata-rata global
+        avg_s = np.mean(rmse_speed_vals)
+        avg_d = np.mean(rmse_dir_vals)
+        
         # =========================================================
-        # PROSES GAMBAR RASTER (SEPERTI PETA UTAMA)
+        # PROSES GAMBAR RASTER
         # =========================================================
         lon_min, lon_max = float(df_shift['lon'].min()), float(df_shift['lon'].max())
         lat_min, lat_max = float(df_shift['lat'].min()), float(df_shift['lat'].max())
         
-        triang = tri.Triangulation(lon_list, lat_list)
+        triang = tri.Triangulation(df_err_agg['lon'].values, df_err_agg['lat'].values)
         x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
         batas_resolusi = BATAS_RESOLUSI if 'BATAS_RESOLUSI' in globals() else 0.015
         mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
         triang.set_mask(mask)
         
-        # 1. Gambar Heatmap Kecepatan (Biru -> Hijau -> Kuning -> Merah)
+        # 1. Gambar Heatmap Kecepatan 
         fig_s, ax_s = plt.subplots(figsize=(6, 6))
         ax_s.axis('off'); ax_s.set_xlim(lon_min, lon_max); ax_s.set_ylim(lat_min, lat_max)
         fig_s.patch.set_alpha(0.0); ax_s.patch.set_alpha(0.0)
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0); plt.margins(0,0)
         
         cmap_speed = LinearSegmentedColormap.from_list("custom_speed", ['#38bdf8', '#4ade80', '#facc15', '#ef4444'])
-        # Vmax diset 1.0 m/s untuk batas merah RMSE Kecepatan
-        ax_s.tricontourf(triang, speed_err_list, levels=np.linspace(0, 1.0, 150), cmap=cmap_speed, vmin=0, vmax=1.0, extend='max', alpha=0.85)
+        ax_s.tripcolor(triang, rmse_speed_vals, shading='gouraud', cmap=cmap_speed, vmin=0, vmax=1.0, alpha=0.85, edgecolors='face', linewidths=0.1)
         
         buf_s = io.BytesIO()
         plt.savefig(buf_s, format='png', transparent=True, dpi=150, bbox_inches='tight', pad_inches=0)
         img_speed = base64.b64encode(buf_s.getvalue()).decode('utf-8')
         plt.close(fig_s)
         
-        # 2. Gambar Heatmap Arah (Hijau -> Kuning -> Merah)
+        # 2. Gambar Heatmap Arah 
         fig_d, ax_d = plt.subplots(figsize=(6, 6))
         ax_d.axis('off'); ax_d.set_xlim(lon_min, lon_max); ax_d.set_ylim(lat_min, lat_max)
         fig_d.patch.set_alpha(0.0); ax_d.patch.set_alpha(0.0)
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0); plt.margins(0,0)
         
         cmap_dir = LinearSegmentedColormap.from_list("custom_dir", ['#4ade80', '#facc15', '#ef4444'])
-        # Vmax diset 45 Derajat untuk batas merah RMSE Arah
-        ax_d.tricontourf(triang, dir_err_list, levels=np.linspace(0, 45.0, 150), cmap=cmap_dir, vmin=0, vmax=45.0, extend='max', alpha=0.85)
+        ax_d.tripcolor(triang, rmse_dir_vals, shading='gouraud', cmap=cmap_dir, vmin=0, vmax=45.0, alpha=0.85, edgecolors='face', linewidths=0.1)
         
         buf_d = io.BytesIO()
         plt.savefig(buf_d, format='png', transparent=True, dpi=150, bbox_inches='tight', pad_inches=0)
@@ -620,8 +641,8 @@ def get_rmse_spatial(filename: str = None):
             "img_speed": img_speed,
             "img_dir": img_dir,
             "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
-            "avg_speed": round(total_speed_rmse / count, 2) if count > 0 else 0,
-            "avg_dir": round(total_dir_rmse / count, 1) if count > 0 else 0
+            "avg_speed": round(float(avg_s), 2),
+            "avg_dir": round(float(avg_d), 1)
         }
     except Exception as e: 
         print(f"Error spasial: {e}")
