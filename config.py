@@ -20,7 +20,10 @@ HF_RADAR_DIR = Path(r"D:\10 HF Radar NetCDF4")
 LOGBOOK_DIR = Path(r"D:\ProgramKantor\Penyeberangan_Ketapang-Gilimanuk\2_Logbook_HFRadar_Ketapang-Gilimanuk")
 
 for folder in [DATA_DIR, ARTEFAK_DIR, PREDIKSI_DIR, VALIDASI_DIR, PREDIKSI_DIR / "Arsip_Prediksi", PREDIKSI_DIR / "Plot Spasial"]:
-    folder.mkdir(parents=True, exist_ok=True) 
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 # =============================================================================
 # 2. PENGATURAN PATH FILE SPESIFIK
