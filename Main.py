@@ -35,8 +35,8 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-def add_cors_header(request, call_next):
-    response = call_next(request)
+async def add_cors_header(request, call_next):
+    response = await call_next(request)  # Wajib tambah await di sini!
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
