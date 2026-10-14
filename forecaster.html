@@ -108,7 +108,7 @@
                 <option value="2">prediksi_spasial_20261012_1200.csv</option>
                 <option value="3">prediksi_spasial_20261012_0000.csv</option>
             </select>
-            <a href="index.html" class="back-btn">⬅ Kembali ke Radar</a>
+            <a href="index.html" class="back-btn">Kembali</a>
         </div>
     </div>
 
@@ -139,8 +139,8 @@
                 <div id="map-rmse-speed" style="width: 100%; height: 100%;"></div>
                 <div class="rmse-overlay">
                     <div class="title">Rata-Rata Spasial</div>
-                    <div class="value">0.24 <span class="unit">m/s</span></div>
-                    <div class="badge badge-good">Sangat Akurat</div>
+                    <div class="value"><span id="rmse-speed-val">-</span> <span class="unit">m/s</span></div>
+                    <div class="badge badge-good" id="badge-speed">-</div>
                 </div>
             </div>
         </div>
@@ -151,8 +151,8 @@
                 <div id="map-rmse-dir" style="width: 100%; height: 100%;"></div>
                 <div class="rmse-overlay">
                     <div class="title">Rata-Rata Spasial</div>
-                    <div class="value">12.5 <span class="unit">Derajat</span></div>
-                    <div class="badge badge-warn">Batas Toleransi</div>
+                    <div class="value"><span id="rmse-dir-val">-</span> <span class="unit">Derajat</span></div>
+                    <div class="badge badge-warn" id="badge-dir">-</div>
                 </div>
             </div>
         </div>
@@ -228,7 +228,7 @@
                     dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
-                        content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Dom: ${blok.arah}`], 
+                        content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Arah: ${blok.arah}`], 
                         color: '#94a3b8', font: {size: 10}, textAlign: 'center'
                     };
                 });
@@ -262,7 +262,7 @@
             } catch (err) { console.error("Gagal meload grafik prakiraan:", err); }
         }
 
-        // FUNGSI 3: LOAD GRAFIK VALIDASI
+// FUNGSI 3: LOAD GRAFIK VALIDASI
         async function loadValidationData(filename) {
             try {
                 let response = await fetch(`${BASE_API_URL}/api/validation-12h?filename=${filename}`);
@@ -275,39 +275,64 @@
 
                 if (data.waktu.length === 0) return;
 
+                // 1. FILTER TITIK PER JAM: Kalau jumlah data <= 3 (50% dari 6), jadikan null biar grafiknya putus
+                let observasiTersaring = data.observasi.map((obs, i) => {
+                    return (data.jumlah_data && data.jumlah_data[i] > 3) ? obs : null;
+                });
+
                 let dinamicAnnotations = {};
                 let maxPred = Math.max(...data.prediksi);
-                let maxObs = Math.max(...data.observasi.filter(n => n !== null && !isNaN(n)));
+                let maxObs = Math.max(...observasiTersaring.filter(n => n !== null && !isNaN(n)));
                 let yMaxGlobal = Math.max(maxPred, maxObs) + 0.5;
                 if(!isFinite(yMaxGlobal) || isNaN(yMaxGlobal)) yMaxGlobal = 3.0; 
 
                 data.anotasi_blok.forEach((blok, index) => {
-                    // Terapkan logika index shift yang sama persis di sini!
+                    // Logika background kotak penuh
                     let startIndex = index * 3;
                     let endIndex = Math.min(startIndex + 2, data.waktu.length - 1);
                     
                     let boxMin = startIndex - 0.5;
                     let boxMax = endIndex + 0.5;
                     let boxCenter = (startIndex + endIndex) / 2;
-
                     let bgColor = (index % 2 === 0) ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0)';
-                    let teksObs = blok.max_v !== null ? `Obs: ${blok.max_v.toFixed(2)} m/s` : "Data Kosong";
+
+                    // 2. HITUNG TOTAL DATA PER TIMESTEP (3 JAM)
+                    let totalDataTimestep = 0;
+                    if (data.jumlah_data) {
+                        for (let i = startIndex; i <= endIndex; i++) {
+                            totalDataTimestep += data.jumlah_data[i] || 0;
+                        }
+                    }
+
+                    // 3. LOGIKA LABEL: Jika total data > 9 (50% dari 18 maksimal), maka valid
+                    let teksObs = "";
+                    let teksArah = "";
+                    if (totalDataTimestep > 9) {
+                        teksObs = blok.max_v !== null ? `Obs: ${blok.max_v.toFixed(2)} m/s` : "Data Kosong";
+                        teksArah = `Arah: ${blok.arah}`;
+                    } else {
+                        teksObs = "Data Tidak Valid";
+                        teksArah = "";
+                    }
                     
                     dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
-                        content: [teksObs, `Dom: ${blok.arah}`], color: '#94a3b8', font: {size: 10}, textAlign: 'center'
+                        content: [teksObs, teksArah], color: '#94a3b8', font: {size: 10}, textAlign: 'center'
                     };
                 });
-                
+
                 if(validationChartObj !== null) {
+                    // Update data secara dinamis
                     validationChartObj.data.labels = data.waktu;
                     validationChartObj.data.datasets[0].data = data.prediksi;
-                    validationChartObj.data.datasets[1].data = data.observasi;
+                    // Masukkan data observasi yang sudah di-filter
+                    validationChartObj.data.datasets[1].data = observasiTersaring; 
                     validationChartObj.options.scales.y.suggestedMax = yMaxGlobal;
                     validationChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
                     validationChartObj.update(); 
                 } else {
+                    // Bikin baru saat pertama kali diload
                     const ctxValidation = document.getElementById('validationChart').getContext('2d');
                     validationChartObj = new Chart(ctxValidation, {
                         type: 'line',
@@ -315,52 +340,93 @@
                             labels: data.waktu,
                             datasets: [
                                 { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 0 },
-                                { label: 'Observasi Radar', data: data.observasi, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true }
+                                // Masukkan data observasi yang sudah di-filter
+                                { label: 'Observasi Radar', data: observasiTersaring, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true }
                             ]
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
                             animation: { duration: 800 }, 
                             plugins: { legend: { display: true, position: 'bottom', labels: { color: '#cbd5e1', font: {size: 11}, boxWidth: 15 } }, annotation: { annotations: dinamicAnnotations } },
-                            scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false }, offset: true }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } }
+                            scales: { 
+                                x: { 
+                                    ticks: { color: '#94a3b8' }, 
+                                    grid: { display: false },
+                                    offset: true // Menambahkan ruang agar kotak background tidak terpotong
+                                }, 
+                                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' }, suggestedMin: 0, suggestedMax: yMaxGlobal } 
+                            }
                         }
                     });
                 }
             } catch (err) { console.error("Gagal meload grafik validasi:", err); }
         }
 
-        // FUNGSI 4: PETA SPASIAL
-        function createDummyHeatmap(mapId, isDirectionMap) {
-            let map = L.map(mapId, { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.130, 114.435], 11);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}').addTo(map);
+        // FUNGSI 4: PETA SPASIAL SUNGGUHAN
+        let mapSpeed, mapDir;
+        let heatLayerSpeed, heatLayerDir;
+
+        function initMaps() {
+            // Inisialisasi peta kosong
+            mapSpeed = L.map('map-rmse-speed', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.130, 114.435], 11);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}').addTo(mapSpeed);
             
-            let heatPoints = [];
-            let latStart = -8.02; let lonStart = 114.37; let step = 0.015; 
-            for(let i=0; i<20; i++) {
-                for(let j=0; j<12; j++) {
-                    if( (i>2 && i<15 && j>2 && j<8) || (i>8 && i<12 && j>1 && j<9) ) {
-                        let lat = latStart - (i*step) + (Math.random() * 0.01);
-                        let lon = lonStart + (j*step) + (Math.random() * 0.01);
-                        let intensity = 0.2; 
-                        let d1 = Math.sqrt(Math.pow(lat - (-8.14), 2) + Math.pow(lon - 114.40), 2); 
-                        if(d1 < 0.05) intensity += (0.05 - d1) * 15;
-                        if(isDirectionMap) {
-                            let d2 = Math.sqrt(Math.pow(lat - (-8.08), 2) + Math.pow(lon - 114.43), 2);
-                            if(d2 < 0.04) intensity += (0.04 - d2) * 20;
-                        }
-                        intensity = Math.min(1.0, intensity);
-                        heatPoints.push([lat, lon, intensity]);
-                    }
+            mapDir = L.map('map-rmse-dir', { zoomControl: false, dragging: true, scrollWheelZoom: false, attributionControl: false }).setView([-8.130, 114.435], 11);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}').addTo(mapDir);
+        }
+
+        async function loadSpatialData(filename) {
+            try {
+                let response = await fetch(`${BASE_API_URL}/api/rmse-spatial?filename=${filename}`);
+                let data = await response.json();
+
+                // Bersihkan layer gambar lama
+                if(heatLayerSpeed) mapSpeed.removeLayer(heatLayerSpeed);
+                if(heatLayerDir) mapDir.removeLayer(heatLayerDir);
+
+                if (!data.img_speed) {
+                    document.getElementById('rmse-speed-val').innerText = "-";
+                    document.getElementById('rmse-dir-val').innerText = "-";
+                    return;
                 }
-            }
-            let gradientConfig = isDirectionMap ? {0.2: '#4ade80', 0.5: '#facc15', 0.8: '#f87171'} : {0.2: '#38bdf8', 0.5: '#4ade80', 0.8: '#facc15'}; 
-            L.heatLayer(heatPoints, { radius: 40, blur: 30, maxZoom: 11, max: 1.0, gradient: gradientConfig }).addTo(map);
+
+                // Tempel Gambar yang digenerate oleh Python
+                let urlSpeed = 'data:image/png;base64,' + data.img_speed;
+                heatLayerSpeed = L.imageOverlay(urlSpeed, data.bounds, { opacity: 0.85 }).addTo(mapSpeed);
+                
+                let urlDir = 'data:image/png;base64,' + data.img_dir;
+                heatLayerDir = L.imageOverlay(urlDir, data.bounds, { opacity: 0.85 }).addTo(mapDir);
+
+                // Update Text Angka
+                document.getElementById('rmse-speed-val').innerText = data.avg_speed.toFixed(2);
+                document.getElementById('rmse-dir-val').innerText = data.avg_dir.toFixed(1);
+
+                // Logika Badge Kecepatan
+                let badgeSpeed = document.getElementById('badge-speed');
+                if(data.avg_speed <= 0.3) { badgeSpeed.className = "badge badge-good"; badgeSpeed.innerText = "Sangat Akurat"; }
+                else if(data.avg_speed <= 0.6) { badgeSpeed.className = "badge badge-warn"; badgeSpeed.innerText = "Batas Toleransi"; }
+                else { badgeSpeed.className = "badge"; badgeSpeed.style.background = "rgba(239,68,68,0.2)"; badgeSpeed.style.color = "#ef4444"; badgeSpeed.innerText = "Kurang Akurat"; }
+
+                // Logika Badge Arah
+                let badgeDir = document.getElementById('badge-dir');
+                if(data.avg_dir <= 15) { badgeDir.className = "badge badge-good"; badgeDir.innerText = "Sangat Akurat"; }
+                else if(data.avg_dir <= 30) { badgeDir.className = "badge badge-warn"; badgeDir.innerText = "Batas Toleransi"; }
+                else { badgeDir.className = "badge"; badgeDir.style.background = "rgba(239,68,68,0.2)"; badgeDir.style.color = "#ef4444"; badgeDir.innerText = "Kurang Akurat"; }
+
+            } catch (err) { console.error("Gagal load Spasial:", err); }
+        }
+
+        // PANGGILAN OTOMATIS SAAT BASERUN DIGANTI
+        // Kita modif loadForecastData lu (di bagian paling atasnya) biar manggil loadSpatialData
+        const originalLoadForecastData = loadForecastData;
+        loadForecastData = async function(filename) {
+            loadSpatialData(filename); // Sisipkan panggilan fungsi spasial di sini
+            originalLoadForecastData(filename);
         }
 
         // INIT
-        createDummyHeatmap('map-rmse-speed', false);
-        createDummyHeatmap('map-rmse-dir', true);
-        loadBaseruns(); // Menjalankan fetch API
+        initMaps();
+        loadBaseruns();
 
     </script>
 </body>

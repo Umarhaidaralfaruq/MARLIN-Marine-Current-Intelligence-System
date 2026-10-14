@@ -107,6 +107,16 @@ def get_verif_csv_url():
         print(f"⚠️ Error ambil path verif: {e}")
         return f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/Hasil_Validasi/Validasi_Real_Max_12H.csv"
 
+def get_verif_spatial_csv_url():
+    """Dapatkan URL Raw untuk file observasi Spasial"""
+    try:
+        verif_path = PATHS.get("Verif_Spasial", "Hasil_Validasi/Validasi_Spasial_1H.csv")
+        if os.path.exists(verif_path): return verif_path
+        clean_path = verif_path.lstrip('/')
+        return f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
+    except:
+        return f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/Hasil_Validasi/Validasi_Spasial_1H.csv"
+
 # Cache sederhana untuk memori Pandas Dataframe
 data_cache = {}
 
@@ -151,7 +161,10 @@ def derajat_ke_utara_selatan(deg):
 def format_rentang_waktu(waktu_series):
     if waktu_series.empty: return ""
     dt_start = waktu_series.iloc[0]
-    dt_end = waktu_series.iloc[-1]
+    
+    # TAMBAHAN: Geser waktu akhir +1 jam HANYA untuk narasi teks
+    dt_end = waktu_series.iloc[-1] + pd.Timedelta(hours=1) 
+
     bulan = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'Mei', 6:'Jun', 7:'Jul', 8:'Agu', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Des'}
     tgl_start = f"{dt_start.day:02d} {bulan[dt_start.month]} {dt_start.year}"
     tgl_end = f"{dt_end.day:02d} {bulan[dt_end.month]} {dt_end.year}"
@@ -181,6 +194,16 @@ def get_baseruns_list():
         baseruns_data.append({"filename": filename, "label": label, "path": f})
         
     return {"status": "success", "data": baseruns_data}
+
+@app.get("/api/available-times")
+def get_available_times():
+    """Mengembalikan daftar semua waktu yang tersedia di file terbaru"""
+    files = get_clean_files()
+    if not files: return {"waktu": []}
+    df_spatial = load_data(files[0])
+    # Ambil list waktu unik yang urut
+    waktu_unik = sorted(df_spatial['datetime_wib'].dt.strftime('%Y-%m-%d %H:%M').unique())
+    return {"waktu": waktu_unik}
 
 @app.get("/api/summary")
 def get_summary(pelabuhan: str = Query(..., description="ketapang atau gilimanuk"), time_str: str = Query(None)):
@@ -409,6 +432,7 @@ def get_validation_12h(filename: str = None):
         files = get_clean_files()
         if not files: return {"waktu": [], "title_range": ""}
         
+        # 1. Bersihkan nama file dari token sebelum dicocokkan
         target_idx = next((i for i, f in enumerate(files) if os.path.basename(f).split("?")[0] == filename), 0)
         valid_idx = target_idx + 1 
         if valid_idx >= len(files): return {"waktu": [], "title_range": "(Baserun Sebelumnya Tidak Tersedia)"}
@@ -425,21 +449,31 @@ def get_validation_12h(filename: str = None):
         df_trend = df_shift.loc[idx_target].sort_values('datetime_wib').reset_index(drop=True)
         title_range = format_rentang_waktu(df_trend['datetime_wib'])
         
-        # Fetch file verifikasi dari url atau lokal
+        # 2. Fetch file verifikasi dari url atau lokal
         path_verif = get_verif_csv_url()
         try:
-            # Tambahkan kunci token agar bisa tembus repo private
+            # Gunakan token untuk menembus GitHub Private
             opsi_akses = {"Authorization": f"token {GITHUB_TOKEN}"} if str(path_verif).startswith("http") else None
             df_rr = pd.read_csv(path_verif, storage_options=opsi_akses)
             df_rr['waktu_utc'] = pd.to_datetime(df_rr['Waktu_UTC'])
-            df_merge = pd.merge(df_trend[['datetime', 'datetime_wib', 'predicted_v_max']], df_rr[['waktu_utc', 'Real_Max_Speed_ms', 'Arah_Derajat']], left_on='datetime', right_on='waktu_utc', how='left')
-        except:
+            
+            # 3. Pastikan kolom Jumlah_Data ikut di-merge jika ada
+            kolom_obs = ['waktu_utc', 'Real_Max_Speed_ms', 'Arah_Derajat']
+            if 'Jumlah_Data' in df_rr.columns:
+                kolom_obs.append('Jumlah_Data')
+                
+            df_merge = pd.merge(df_trend[['datetime', 'datetime_wib', 'predicted_v_max']], df_rr[kolom_obs], left_on='datetime', right_on='waktu_utc', how='left')
+        except Exception as e:
+            print(f"Warning/Error baca Verif CSV: {e}")
             df_merge = df_trend[['datetime', 'datetime_wib', 'predicted_v_max']].copy()
-            df_merge['Real_Max_Speed_ms'], df_merge['Arah_Derajat'] = np.nan, np.nan
+            df_merge['Real_Max_Speed_ms'], df_merge['Arah_Derajat'], df_merge['Jumlah_Data'] = np.nan, np.nan, 0
             
         waktu_list = df_merge['datetime_wib'].dt.strftime('%H:%M').tolist()
         prediksi_list = [round(float(x), 2) if pd.notna(x) else 0.0 for x in df_merge['predicted_v_max']]
         observasi_list = [round(float(x), 2) if pd.notna(x) else None for x in df_merge['Real_Max_Speed_ms']]
+        
+        # 4. Ekstrak list jumlah data (default 0 kalau datanya kosong/NaN)
+        jml_data_list = [int(x) if pd.notna(x) else 0 for x in df_merge.get('Jumlah_Data', pd.Series([0]*len(df_merge)))]
         
         anotasi_blok = []
         for i in range(0, len(df_merge), 3):
@@ -456,9 +490,23 @@ def get_validation_12h(filename: str = None):
                     arah_asli = kat_arah.mode()[0]
                     arah_dom = "Selatan" if arah_asli == "Utara" else ("Utara" if arah_asli == "Selatan" else "-")
             
-            anotasi_blok.append({"xMin": waktu_list[i], "xMax": waktu_list[min(i+3, len(waktu_list)-1)], "xCenter": waktu_list[min(i+1, len(waktu_list)-1)], "max_v": max_v, "arah": arah_dom})
+            anotasi_blok.append({
+                "xMin": waktu_list[i], 
+                "xMax": waktu_list[min(i+3, len(waktu_list)-1)], 
+                "xCenter": waktu_list[min(i+1, len(waktu_list)-1)], 
+                "max_v": max_v, 
+                "arah": arah_dom
+            })
             
-        return {"waktu": waktu_list, "prediksi": prediksi_list, "observasi": observasi_list, "anotasi_blok": anotasi_blok, "title_range": title_range}
+        # 5. Kirim tambahan jumlah_data ke Frontend
+        return {
+            "waktu": waktu_list, 
+            "prediksi": prediksi_list, 
+            "observasi": observasi_list, 
+            "jumlah_data": jml_data_list,
+            "anotasi_blok": anotasi_blok, 
+            "title_range": title_range
+        }
     except Exception as e:
         print("Error Validation:", e)
         return {"waktu": [], "title_range": ""}
@@ -467,50 +515,103 @@ def get_validation_12h(filename: str = None):
 def get_rmse_spatial(filename: str = None):
     try:
         files = get_clean_files()
-        if not files: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
+        if not files: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
         
         target_idx = next((i for i, f in enumerate(files) if os.path.basename(f).split("?")[0] == filename), 0)
         valid_idx = target_idx + 1
-        if valid_idx >= len(files): return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
+        if valid_idx >= len(files): return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
         
         target_file = files[valid_idx]
         df_pred = load_data(target_file)
         
-        path_verif = get_verif_csv_url()
+        path_verif = get_verif_spatial_csv_url()
         try:
-            # Tambahkan kunci token agar bisa tembus repo private
             opsi_akses = {"Authorization": f"token {GITHUB_TOKEN}"} if str(path_verif).startswith("http") else None
             df_obs = pd.read_csv(path_verif, storage_options=opsi_akses)
             df_obs['waktu_utc'] = pd.to_datetime(df_obs['Waktu_UTC'])
-        except: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
+        except Exception as e: 
+            print(f"Gagal narik data spasial: {e}")
+            return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
         
         df_area = df_pred[(df_pred['lat'] >= -8.2) & (df_pred['lat'] <= -8.0) & (df_pred['lon'] >= 114.3) & (df_pred['lon'] <= 114.5)]
-        last_hour = df_area['datetime'].max().hour
-        start_hour_utc, end_hour_utc = (12, 24) if last_hour < 12 else (0, 12)
-        df_shift = df_area[(df_area['datetime'].dt.hour >= start_hour_utc) & (df_area['datetime'].dt.hour < end_hour_utc)]
         
-        df_merged = pd.merge(df_shift, df_obs[['waktu_utc', 'Real_Max_Speed_ms', 'Arah_Derajat']], left_on='datetime', right_on='waktu_utc', how='inner')
-        if df_merged.empty: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
+        waktu_unik = sorted(df_area['datetime_wib'].unique())[:13]
+        df_shift = df_area[df_area['datetime_wib'].isin(waktu_unik)].copy()
+        
+        df_shift['lat_r'] = df_shift['lat'].round(3)
+        df_shift['lon_r'] = df_shift['lon'].round(3)
+        df_obs['lat_r'] = df_obs['lat'].round(3)
+        df_obs['lon_r'] = df_obs['lon'].round(3)
+        
+        df_merged = pd.merge(df_shift, df_obs, left_on=['datetime', 'lat_r', 'lon_r'], right_on=['waktu_utc', 'lat_r', 'lon_r'], how='inner')
+        if df_merged.empty: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
             
-        grouped = df_merged.groupby(['lat', 'lon'])
-        speed_heatmap, dir_heatmap = [], []
+        grouped = df_merged.groupby(['lat_x', 'lon_x'])
+        
+        lat_list, lon_list, speed_err_list, dir_err_list = [], [], [], []
         total_speed_rmse, total_dir_rmse, count = 0, 0, 0
         
         for (lat, lon), group in grouped:
-            speed_err_sq = ((group['predicted_v_max'] - group['Real_Max_Speed_ms']) ** 2).mean()
+            speed_err_sq = ((group['predicted_v_max'] - group['Real_Speed_ms']) ** 2).mean()
             rmse_speed = float(np.sqrt(speed_err_sq)) if pd.notna(speed_err_sq) else 0
             
             diff = (group['arah_derajat'] - group['Arah_Derajat'] + 180) % 360 - 180
             dir_err_sq = (diff ** 2).mean()
             rmse_dir = float(np.sqrt(dir_err_sq)) if pd.notna(dir_err_sq) else 0
             
-            speed_heatmap.append([lat, lon, min(rmse_speed / 0.6, 1.0)])
-            dir_heatmap.append([lat, lon, min(rmse_dir / 30.0, 1.0)])
+            lat_list.append(lat); lon_list.append(lon)
+            speed_err_list.append(rmse_speed); dir_err_list.append(rmse_dir)
             total_speed_rmse += rmse_speed; total_dir_rmse += rmse_dir; count += 1
             
+        # =========================================================
+        # PROSES GAMBAR RASTER (SEPERTI PETA UTAMA)
+        # =========================================================
+        lon_min, lon_max = float(df_shift['lon'].min()), float(df_shift['lon'].max())
+        lat_min, lat_max = float(df_shift['lat'].min()), float(df_shift['lat'].max())
+        
+        triang = tri.Triangulation(lon_list, lat_list)
+        x_tri, y_tri = triang.x[triang.triangles], triang.y[triang.triangles]
+        batas_resolusi = BATAS_RESOLUSI if 'BATAS_RESOLUSI' in globals() else 0.015
+        mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
+        triang.set_mask(mask)
+        
+        # 1. Gambar Heatmap Kecepatan (Biru -> Hijau -> Kuning -> Merah)
+        fig_s, ax_s = plt.subplots(figsize=(6, 6))
+        ax_s.axis('off'); ax_s.set_xlim(lon_min, lon_max); ax_s.set_ylim(lat_min, lat_max)
+        fig_s.patch.set_alpha(0.0); ax_s.patch.set_alpha(0.0)
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0); plt.margins(0,0)
+        
+        cmap_speed = LinearSegmentedColormap.from_list("custom_speed", ['#38bdf8', '#4ade80', '#facc15', '#ef4444'])
+        # Vmax diset 1.0 m/s untuk batas merah RMSE Kecepatan
+        ax_s.tricontourf(triang, speed_err_list, levels=np.linspace(0, 1.0, 150), cmap=cmap_speed, vmin=0, vmax=1.0, extend='max', alpha=0.85)
+        
+        buf_s = io.BytesIO()
+        plt.savefig(buf_s, format='png', transparent=True, dpi=150, bbox_inches='tight', pad_inches=0)
+        img_speed = base64.b64encode(buf_s.getvalue()).decode('utf-8')
+        plt.close(fig_s)
+        
+        # 2. Gambar Heatmap Arah (Hijau -> Kuning -> Merah)
+        fig_d, ax_d = plt.subplots(figsize=(6, 6))
+        ax_d.axis('off'); ax_d.set_xlim(lon_min, lon_max); ax_d.set_ylim(lat_min, lat_max)
+        fig_d.patch.set_alpha(0.0); ax_d.patch.set_alpha(0.0)
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0); plt.margins(0,0)
+        
+        cmap_dir = LinearSegmentedColormap.from_list("custom_dir", ['#4ade80', '#facc15', '#ef4444'])
+        # Vmax diset 45 Derajat untuk batas merah RMSE Arah
+        ax_d.tricontourf(triang, dir_err_list, levels=np.linspace(0, 45.0, 150), cmap=cmap_dir, vmin=0, vmax=45.0, extend='max', alpha=0.85)
+        
+        buf_d = io.BytesIO()
+        plt.savefig(buf_d, format='png', transparent=True, dpi=150, bbox_inches='tight', pad_inches=0)
+        img_dir = base64.b64encode(buf_d.getvalue()).decode('utf-8')
+        plt.close(fig_d)
+            
         return {
-            "speed_heatmap": speed_heatmap, "dir_heatmap": dir_heatmap,
+            "img_speed": img_speed,
+            "img_dir": img_dir,
+            "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
             "avg_speed": round(total_speed_rmse / count, 2) if count > 0 else 0,
             "avg_dir": round(total_dir_rmse / count, 1) if count > 0 else 0
         }
-    except Exception: return {"speed_heatmap": [], "dir_heatmap": [], "avg_speed": 0, "avg_dir": 0}
+    except Exception as e: 
+        print(f"Error spasial: {e}")
+        return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}

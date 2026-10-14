@@ -179,9 +179,8 @@
 
     <!-- === KANAN ATAS: TOMBOL MODE FORECASTER === -->
     <div class="ui-top-right">
-        <!-- Ganti href dengan URL Streamlit app.py lo (biasanya port 8501) -->
         <a href="forecaster.html" class="forecaster-btn" title="Buka Mode Analisis & Validasi">
-            🔬 MODE FORECASTER
+            FORECASTER MODE
         </a>
     </div>
 
@@ -229,7 +228,7 @@
         </div>
 
         <div class="time-nav-panel">
-            <div class="glass-theme nav-btn nav-btn-prev" onclick="gantiWaktu(-1)">⬅️ Waktu Sebelumnya</div>
+            <div class="glass-theme nav-btn nav-btn-prev" onclick="gantiWaktu(-1)">⬅️ Sebelumnya</div>
             <div class="glass-theme nav-btn nav-btn-reset" onclick="gantiWaktu(0)" title="Kembali ke waktu saat ini">🔄</div>
             <div class="glass-theme time-display-box"><span>⏱️</span> <div id="time-display-text">Memuat...</div></div>
             <div class="glass-theme nav-btn nav-btn-next" onclick="gantiWaktu(1)">Selanjutnya ➡️</div>
@@ -297,26 +296,88 @@
             return `${d} ${bulan[m-1]} ${y} • ${parts[1]} WIB`;
         }
 
-        function tambahJam(timeStr, jumlahJam) {
-            let parts = timeStr.split(' '); let dateParts = parts[0].split('-'); let timeParts = parts[1].split(':');
-            let dateObj = new Date(dateParts[0], dateParts[1]-1, dateParts[2], timeParts[0], timeParts[1]);
-            dateObj.setHours(dateObj.getHours() + jumlahJam);
-            let yy = dateObj.getFullYear(); let mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-            let dd = String(dateObj.getDate()).padStart(2, '0'); let hh = String(dateObj.getHours()).padStart(2, '0'); let mnt = String(dateObj.getMinutes()).padStart(2, '0');
-            return `${yy}-${mm}-${dd} ${hh}:${mnt}`;
+        let waktuList = [];
+        let currentWaktuIdx = 0;
+
+        // Tarik daftar waktu dari API saat web dibuka
+        fetch(`${BASE_API_URL}/api/available-times`)
+            .then(res => res.json())
+            .then(data => { 
+                waktuList = data.waktu; 
+                // Jika waktu peta sudah diset, sinkronkan indeks tombolnya
+                if (waktuAktifPeta && waktuList.length > 0) {
+                    currentWaktuIdx = waktuList.indexOf(waktuAktifPeta);
+                    updateNavButtons();
+                }
+            });
+
+        // Fungsi khusus mengatur tampilan Tombol
+// Fungsi khusus mengatur tampilan Tombol
+        function updateNavButtons() {
+            // JANGAN JALAN JIKA DAFTAR WAKTU BELUM ADA ATAU WAKTU PETA BELUM DI-SET
+            if (waktuList.length === 0 || !waktuAktifPeta) return;
+            
+            // Selalu pastikan indeks tombol sinkron dengan waktu yang tampil di peta
+            currentWaktuIdx = waktuList.indexOf(waktuAktifPeta);
+            
+            const btnPrev = document.querySelector('.nav-btn-prev');
+            const btnNext = document.querySelector('.nav-btn-next');
+            
+            // Cek batas Kiri (Mundur)
+            if (currentWaktuIdx <= 0) {
+                btnPrev.innerText = "⛔ Data Belum Tersedia";
+                btnPrev.style.opacity = "0.4"; 
+                btnPrev.style.pointerEvents = "none";
+            } else {
+                btnPrev.innerText = "⬅️ Sebelumnya";
+                btnPrev.style.opacity = "1"; 
+                btnPrev.style.pointerEvents = "auto";
+            }
+
+            // Cek batas Kanan (Maju)
+            if (currentWaktuIdx >= waktuList.length - 1) {
+                btnNext.innerText = "⛔ Data Belum Tersedia";
+                btnNext.style.opacity = "0.4"; 
+                btnNext.style.pointerEvents = "none";
+            } else {
+                btnNext.innerText = "Selanjutnya ➡️";
+                btnNext.style.opacity = "1"; 
+                btnNext.style.pointerEvents = "auto";
+            }
+        }
+
+        // Fungsi Ganti Waktu versi baru (berdasarkan indeks Array, bukan hitung jam manual)
+        function gantiWaktu(arah) {
+            if (waktuList.length === 0) return; 
+            
+            // Pastikan posisi indeks saat ini benar
+            currentWaktuIdx = waktuList.indexOf(waktuAktifPeta);
+            if (currentWaktuIdx === -1) currentWaktuIdx = 0;
+
+            if (arah === 0) {
+                // Tombol Reset (Balik ke waktu server awal)
+                currentWaktuIdx = waktuList.indexOf(waktuAsliServer);
+            } else {
+                currentWaktuIdx += arah;
+            }
+
+            // Keamanan tambahan biar index gak bablas
+            if (currentWaktuIdx < 0) currentWaktuIdx = 0;
+            if (currentWaktuIdx >= waktuList.length) currentWaktuIdx = waktuList.length - 1;
+
+            // Eksekusi perubahan
+            waktuAktifPeta = waktuList[currentWaktuIdx];
+            document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
+            
+            loadMapData(waktuAktifPeta); 
+            fetchSummaryData(waktuAktifPeta);
+            updateNavButtons(); // Update wujud tombolnya!
         }
 
         function fetchSummaryData(timeStr = null) {
             let param = timeStr ? `&time_str=${timeStr}` : '';
             fetch(`${BASE_API_URL}/api/summary?pelabuhan=ketapang${param}`).then(res => res.json()).then(data => updatePortCard('ketapang', data));
             fetch(`${BASE_API_URL}/api/summary?pelabuhan=gilimanuk${param}`).then(res => res.json()).then(data => updatePortCard('gilimanuk', data));
-        }
-
-        function gantiWaktu(arah) {
-            if (!waktuAktifPeta || !waktuAsliServer) return;
-            waktuAktifPeta = (arah === 0) ? waktuAsliServer : tambahJam(waktuAktifPeta, arah);
-            document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
-            loadMapData(waktuAktifPeta); fetchSummaryData(waktuAktifPeta); 
         }
 
         let velocityLayer; let backgroundLayer;
@@ -358,7 +419,11 @@
                 if(waktuSaatIni) {
                     waktuAsliServer = waktuSaatIni; waktuAktifPeta = waktuSaatIni;
                     document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
-                    loadMapData(waktuAktifPeta); fetchSummaryData(waktuAktifPeta);
+                    loadMapData(waktuAktifPeta); 
+                    fetchSummaryData(waktuAktifPeta);
+                    
+                    // TAMBAHKAN BARIS INI:
+                    updateNavButtons(); 
                 }
             });
 
