@@ -440,7 +440,7 @@ def get_validation_12h(filename: str = None):
              
         target_file = files[valid_idx]
         df_pred = load_data(target_file)
-        df_area = df_pred[(df_pred['lat'] >= -8.2) & (df_pred['lat'] <= -8.0) & (df_pred['lon'] >= 114.3) & (df_pred['lon'] <= 114.5)]
+        df_area = df_pred.copy()
         
         last_hour = df_area['datetime'].max().hour
         start_hour_utc, end_hour_utc = (12, 24) if last_hour < 12 else (0, 12)
@@ -539,44 +539,49 @@ def get_rmse_spatial(filename: str = None):
         waktu_unik = sorted(df_area['datetime_wib'].unique())[:13]
         df_shift = df_area[df_area['datetime_wib'].isin(waktu_unik)].copy()
         
-        # =========================================================
-        # TRIK PAMUNGKAS: Spatial Match dengan cKDTree
-        # =========================================================
+        # Fungsi Error Circular persis dari reconstruction.py
         def circular_error(pred, true):
             diff = np.abs(pred - true) % 360
             return np.where(diff > 180, 360 - diff, diff)
 
         lat_list, lon_list, speed_err_list, dir_err_list = [], [], [], []
-        total_speed_rmse, total_dir_rmse, count = 0, 0, 0
         
-        # Loop per jam untuk mencocokkan data prediksi dan observasi
+        # Loop per jam untuk matching dengan cKDTree
         for t in df_shift['datetime'].unique():
             df_p_t = df_shift[df_shift['datetime'] == t]
             df_o_t = df_obs[df_obs['waktu_utc'] == t]
             
             if df_p_t.empty or df_o_t.empty: continue
             
-            # Buat pohon pencarian dari koordinat observasi
+            # Carian spasial (Cegah peta terpotong)
             tree = cKDTree(df_o_t[['lat', 'lon']].values)
-            # Cari titik observasi terdekat untuk setiap titik prediksi
             distances, indices = tree.query(df_p_t[['lat', 'lon']].values)
-            
-            # Batas toleransi jarak (misal max meleset ~1.5 km atau 0.015 derajat)
             valid_mask = distances < 0.015
             
             p_valid = df_p_t.iloc[valid_mask]
             o_valid = df_o_t.iloc[indices[valid_mask]]
             
             if p_valid.empty: continue
-                
-            pred_speed = p_valid['predicted_v_max'].values
-            true_speed = o_valid['Real_Speed_ms'].values
-            pred_dir = p_valid['arah_derajat'].values
-            true_dir = o_valid['Arah_Derajat'].values
             
-            # Hitung error titik-titik tersebut
-            se = (pred_speed - true_speed) ** 2
-            de = circular_error(pred_dir, true_dir) ** 2
+            # =======================================================
+            # PERHITUNGAN FISIKA SINKRON DENGAN RECONSTRUCTION.PY
+            # =======================================================
+            pred_u = p_valid['predicted_u'].values
+            pred_v = p_valid['predicted_v'].values
+            true_u = o_valid['U_obs'].values
+            true_v = o_valid['V_obs'].values
+            
+            # 1. Hitung Speed
+            speed_pred = np.sqrt(pred_u**2 + pred_v**2)
+            speed_true = np.sqrt(true_u**2 + true_v**2)
+            
+            # 2. Hitung Direction (Tanpa diputar 180 derajat)
+            dir_pred = np.degrees(np.arctan2(pred_u, pred_v)) % 360
+            dir_true = np.degrees(np.arctan2(true_u, true_v)) % 360
+            
+            # Hitung Error Titik
+            se = (speed_pred - speed_true) ** 2
+            de = circular_error(dir_pred, dir_true) ** 2
             
             for i in range(len(p_valid)):
                 lat_list.append(p_valid.iloc[i]['lat'])
@@ -586,20 +591,17 @@ def get_rmse_spatial(filename: str = None):
                 
         if not lat_list: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
 
-        # Rata-ratakan error per titik spasial (Aggregate)
+        # Aggregate Mean untuk menggambar Peta
         df_err = pd.DataFrame({'lat': lat_list, 'lon': lon_list, 'se': speed_err_list, 'de': dir_err_list})
         df_err_agg = df_err.groupby(['lat', 'lon']).mean().reset_index()
         
         rmse_speed_vals = np.sqrt(df_err_agg['se'].values)
         rmse_dir_vals = np.sqrt(df_err_agg['de'].values)
         
-        # Hitung rata-rata global
         avg_s = np.mean(rmse_speed_vals)
         avg_d = np.mean(rmse_dir_vals)
         
-        # =========================================================
         # PROSES GAMBAR RASTER
-        # =========================================================
         lon_min, lon_max = float(df_shift['lon'].min()), float(df_shift['lon'].max())
         lat_min, lat_max = float(df_shift['lat'].min()), float(df_shift['lat'].max())
         
@@ -609,7 +611,7 @@ def get_rmse_spatial(filename: str = None):
         mask = np.any([np.sqrt((x_tri[:, i] - x_tri[:, (i+1)%3])**2 + (y_tri[:, i] - y_tri[:, (i+1)%3])**2) > batas_resolusi for i in range(3)], axis=0)
         triang.set_mask(mask)
         
-        # 1. Gambar Heatmap Kecepatan 
+        # Gambar Heatmap Kecepatan 
         fig_s, ax_s = plt.subplots(figsize=(6, 6))
         ax_s.axis('off'); ax_s.set_xlim(lon_min, lon_max); ax_s.set_ylim(lat_min, lat_max)
         fig_s.patch.set_alpha(0.0); ax_s.patch.set_alpha(0.0)
@@ -623,7 +625,7 @@ def get_rmse_spatial(filename: str = None):
         img_speed = base64.b64encode(buf_s.getvalue()).decode('utf-8')
         plt.close(fig_s)
         
-        # 2. Gambar Heatmap Arah 
+        # Gambar Heatmap Arah 
         fig_d, ax_d = plt.subplots(figsize=(6, 6))
         ax_d.axis('off'); ax_d.set_xlim(lon_min, lon_max); ax_d.set_ylim(lat_min, lat_max)
         fig_d.patch.set_alpha(0.0); ax_d.patch.set_alpha(0.0)
