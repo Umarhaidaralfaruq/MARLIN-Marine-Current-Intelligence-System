@@ -210,12 +210,10 @@ def ekstrak_spasial_1_jam():
     print("🗺️ MEMULAI VALIDASI SPASIAL: EKSTRAKSI GRID (1 JAM)")
     print("="*70)
     
-    # Ambil path dari config
     output_csv = PATHS.get("Verif_Spasial", "Hasil_Validasi/Validasi_Spasial_1H.csv")
     file_terbaru = PATHS["nc_file_arus"]
     all_files = []
     
-    # Mode Incremental
     if not os.path.exists(output_csv):
         print("🚀 [MODE AWAL] Tarik semua file untuk Spasial...")
         all_files.extend(sorted(glob.glob(str(PATHS["hf_radar_pattern"]))))
@@ -227,28 +225,39 @@ def ekstrak_spasial_1_jam():
 
     if not all_files: return None
 
-    # Batas area
-    lat_min, lat_max = -8.209161, -8.137236
-    lon_min, lon_max = 114.387089, 114.438983
+    # 1. PERBAIKAN BATAS KOORDINAT: Disamakan dengan area prediksi di main.py
+    lat_min, lat_max = -8.200, -8.000
+    lon_min, lon_max = 114.300, 114.500
     
     list_df_spasial = []
     
-    print("⏱️ Mengekstrak titik koordinat (lat, lon) per jam...")
+    print("⏱️ Mengekstrak dan merata-ratakan vektor secara saintifik per jam...")
     for f in all_files:
         if not os.path.exists(f): continue
         try:
             ds = xr.open_dataset(f)
             area_ds = ds.sel(lat=slice(lat_min, lat_max), lon=slice(lon_min, lon_max))
             
-            # Resample langsung ke 1 Jam menggunakan rata-rata (mean)
-            ds_1h = area_ds[['uvvel', 'uvdir']].resample(time='1H').mean(skipna=True)
+            # 2. PERBAIKAN MATEMATIKA ARAH: Konversi derajat ke Vektor U dan V (Radian)
+            rad = np.deg2rad(area_ds['uvdir'])
+            u_vec = area_ds['uvvel'] * np.sin(rad)
+            v_vec = area_ds['uvvel'] * np.cos(rad)
             
-            # Ubah format ke Dataframe Pandas (otomatis punya kolom time, lat, lon, uvvel, uvdir)
-            df_temp = ds_1h.to_dataframe().reset_index()
+            area_ds['u_vec'] = u_vec
+            area_ds['v_vec'] = v_vec
             
-            # Buang baris yang datanya kosong (daratan / no data)
-            df_temp = df_temp.dropna(subset=['uvvel'])
+            # Resample Kecepatan, U, dan V (Bukan derajatnya)
+            ds_1h = area_ds[['uvvel', 'u_vec', 'v_vec']].resample(time='1H').mean(skipna=True)
             
+            # Kembalikan Vektor rata-rata menjadi Derajat Arah
+            avg_dir_rad = np.arctan2(ds_1h['u_vec'], ds_1h['v_vec'])
+            avg_dir_deg = np.rad2deg(avg_dir_rad)
+            avg_dir_deg = (avg_dir_deg + 360) % 360 # Pastikan 0-360
+            
+            ds_1h['uvdir_avg'] = avg_dir_deg
+            
+            # Konversi ke Pandas
+            df_temp = ds_1h.to_dataframe().reset_index().dropna(subset=['uvvel'])
             list_df_spasial.append(df_temp)
             ds.close()
         except Exception as e:
@@ -256,26 +265,23 @@ def ekstrak_spasial_1_jam():
 
     if not list_df_spasial: return None
 
-    # Gabungkan semua data
     df_all = pd.concat(list_df_spasial)
     
-    # Rapikan nama kolom agar sesuai standar API kita
+    # Rapikan nama kolom
     df_all = df_all.rename(columns={
         'uvvel': 'Real_Speed_ms',
-        'uvdir': 'Arah_Derajat'
+        'uvdir_avg': 'Arah_Derajat'
     })
     
-    # Format waktu ke UTC string
     df_all['Waktu_UTC'] = df_all['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
-    # Balik arah derajat (Flowing From -> Flowing To) seperti logika di fungsi lu
+    # Balik arah derajat (Sama dengan script original)
     df_all['Arah_Derajat'] = (df_all['Arah_Derajat'] + 180) % 360
     
     df_baru = df_all[['Waktu_UTC', 'lat', 'lon', 'Real_Speed_ms', 'Arah_Derajat']].copy()
     df_baru['Real_Speed_ms'] = df_baru['Real_Speed_ms'].round(3)
     df_baru['Arah_Derajat'] = df_baru['Arah_Derajat'].round(1)
 
-    # Gabung dengan CSV Spasial lama jika ada
     if os.path.exists(output_csv):
         print("📂 Menggabungkan dengan database Spasial historis...")
         df_old = pd.read_csv(output_csv)

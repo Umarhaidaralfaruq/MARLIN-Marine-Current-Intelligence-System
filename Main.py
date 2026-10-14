@@ -546,17 +546,28 @@ def get_rmse_spatial(filename: str = None):
         df_merged = pd.merge(df_shift, df_obs, left_on=['datetime', 'lat_r', 'lon_r'], right_on=['waktu_utc', 'lat_r', 'lon_r'], how='inner')
         if df_merged.empty: return {"img_speed": "", "img_dir": "", "avg_speed": 0, "avg_dir": 0, "bounds": []}
             
+        # FUNGSI ERROR PERSIS DARI reconstruction.py
+        def circular_error(pred, true):
+            diff = np.abs(pred - true) % 360
+            return np.where(diff > 180, 360 - diff, diff)
+
         grouped = df_merged.groupby(['lat_x', 'lon_x'])
         
         lat_list, lon_list, speed_err_list, dir_err_list = [], [], [], []
         total_speed_rmse, total_dir_rmse, count = 0, 0, 0
         
         for (lat, lon), group in grouped:
-            speed_err_sq = ((group['predicted_v_max'] - group['Real_Speed_ms']) ** 2).mean()
+            pred_speed = group['predicted_v_max'].values
+            true_speed = group['Real_Speed_ms'].values
+            pred_dir = group['arah_derajat'].values
+            true_dir = group['Arah_Derajat'].values
+            
+            # 1. RMSE Kecepatan
+            speed_err_sq = np.mean((pred_speed - true_speed) ** 2)
             rmse_speed = float(np.sqrt(speed_err_sq)) if pd.notna(speed_err_sq) else 0
             
-            diff = (group['arah_derajat'] - group['Arah_Derajat'] + 180) % 360 - 180
-            dir_err_sq = (diff ** 2).mean()
+            # 2. RMSE Arah Arus (Pakai circular_error)
+            dir_err_sq = np.mean(circular_error(pred_dir, true_dir) ** 2)
             rmse_dir = float(np.sqrt(dir_err_sq)) if pd.notna(dir_err_sq) else 0
             
             lat_list.append(lat); lon_list.append(lon)
