@@ -28,11 +28,20 @@ app = FastAPI(title="MARLIN API", description="API Backend Cloud Native (GitHub 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+def add_cors_header(request, call_next):
+    response = call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # ---------------------------------------------------------
 # FUNGSI HELPER GITHUB (MENGGANTIKAN BACA FILE LOKAL)
