@@ -120,15 +120,18 @@
 
     <!-- KONTEN UTAMA -->
     <div class="container">
-        
-        <!-- BARIS 1: GRAFIK PRAKIRAAN -->
+            
+        <!-- BARIS 2: GRAFIK VALIDASI -->
         <div class="glass-panel full-width-panel" style="height: 420px;">
-            <h2 id="forecast-title" style="margin-bottom: 5px;">📈 Prakiraan Operasional</h2>
-            <!-- PARAGRAF NARASI -->
-            <p id="forecast-summary" style="color: #cbd5e1; font-size: 0.9em; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 10px;">
-                Memuat kesimpulan data...
+            <h2 id="validation-title" style="margin-bottom: 5px;">✅ Validasi Model vs HF Radar</h2>
+            
+            <!-- PARAGRAF NARASI VALIDASI (TAMBAHKAN INI) -->
+            <p id="validation-summary" style="color: #cbd5e1; font-size: 0.9em; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(148,163,184,0.2); padding-bottom: 10px;">
+                Memuat kesimpulan data observasi...
             </p>
+
             <div style="position: relative; flex-grow: 1; width: 100%;">
+                <!-- ... (kode no-data-validation dan canvas validationChart tetap di sini) ... -->
                 <div id="no-data-forecast" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.85); backdrop-filter: blur(3px); z-index: 10; flex-direction: column; justify-content: center; align-items: center; border-radius: 8px;">
                     <span style="font-size: 2.5em;">⚠️</span><span style="color: #f87171; font-weight: bold; margin-top: 10px; font-size: 1.1em;">Data Prediksi Tidak Tersedia</span>
                 </div>
@@ -425,6 +428,53 @@
                     };
                 });
 
+                // ==========================================
+                // 3. PEMBUATAN KESIMPULAN NARASI VALIDASI
+                // ==========================================
+                let validObsSpeeds = [];
+                let validObsDirs = [];
+                let peakObsSpeed = -1;
+                let peakObsTime = "-";
+
+                // Kumpulkan seluruh data observasi yang valid di chart ini
+                for (let i = 0; i < observasiTersaring.length; i++) {
+                    let val = observasiTersaring[i];
+                    if (val !== null && val !== undefined && !isNaN(val)) {
+                        validObsSpeeds.push(val);
+                        if (data.arah_obs_titik && data.arah_obs_titik[i]) {
+                            validObsDirs.push(data.arah_obs_titik[i]);
+                        }
+                        // Cari yang paling tinggi untuk jam puncak
+                        if (val > peakObsSpeed) {
+                            peakObsSpeed = val;
+                            peakObsTime = data.waktu[i];
+                        }
+                    }
+                }
+
+                let elValSummary = document.getElementById('validation-summary');
+                
+                if (validObsSpeeds.length > 0) {
+                    // Cari arah dominan (modus) dari seluruh data yang valid
+                    let dirCountGlobal = {};
+                    let maxCountGlobal = 0;
+                    let domDirGlobal = "-";
+                    
+                    validObsDirs.forEach(d => {
+                        dirCountGlobal[d] = (dirCountGlobal[d] || 0) + 1;
+                        if (dirCountGlobal[d] > maxCountGlobal) {
+                            maxCountGlobal = dirCountGlobal[d];
+                            domDirGlobal = d;
+                        }
+                    });
+
+                    // Cetak ke layar
+                    elValSummary.innerHTML = `Kecepatan arus laut observasi tercatat mencapai puncaknya pada <b>${peakObsTime} WIB</b> dengan kecepatan maksimum <b>${peakObsSpeed.toFixed(2)} m/s</b>. Secara umum, pergerakan arus dominan menuju ke arah <b>${domDirGlobal.toUpperCase()}</b>.`;
+                } else {
+                    // Jika semua data radar rusak/kurang dari syarat
+                    elValSummary.innerHTML = `<span style="color: #f87171;">Tidak ada data observasi valid yang memenuhi syarat (Minimal 50%) pada periode ini.</span>`;
+                }
+                // ==========================================                
                 if(validationChartObj !== null) {
                     validationChartObj.data.labels = data.waktu;
                     validationChartObj.data.datasets[0].data = data.prediksi;
