@@ -331,6 +331,7 @@
                     document.getElementById('no-data-validation').style.display = 'none';
                 }
 
+                // 1. PENYARINGAN TITIK PER JAM (Penyelamatan Titik)
                 let observasiTersaring = new Array(data.observasi.length).fill(null);
                 data.anotasi_blok.forEach((blok, index) => {
                     let startIndex = index * 3;
@@ -341,11 +342,13 @@
                         for (let i = startIndex; i <= endIndex; i++) totalDataTimestep += data.jumlah_data[i] || 0;
                     }
 
-                    if (totalDataTimestep > 9) {
+                    // Syarat Timeframe 3 Jam (>= 9)
+                    if (totalDataTimestep >= 9) {
                         for (let i = startIndex; i <= endIndex; i++) observasiTersaring[i] = data.observasi[i];
                     } else {
+                        // Syarat Penyelamatan Per Jam (>= 3)
                         for (let i = startIndex; i <= endIndex; i++) {
-                            if (data.jumlah_data && data.jumlah_data[i] > 3) observasiTersaring[i] = data.observasi[i];
+                            if (data.jumlah_data && data.jumlah_data[i] >= 3) observasiTersaring[i] = data.observasi[i];
                         }
                     }
                 });
@@ -355,6 +358,7 @@
                 let yMaxGlobal = Math.max(maxPred, maxObs) + 0.8; 
                 if(!isFinite(yMaxGlobal) || isNaN(yMaxGlobal)) yMaxGlobal = 3.0; 
 
+                // 2. PEMBUATAN LABEL TIMEFRAME (Kesimpulan dari 3 Titik)
                 let dinamicAnnotations = {};
                 data.anotasi_blok.forEach((blok, index) => {
                     let startIndex = index * 3;
@@ -369,19 +373,54 @@
                         for (let i = startIndex; i <= endIndex; i++) totalDataTimestep += data.jumlah_data[i] || 0;
                     }
 
-                    let teksObs = ""; let teksArah = "";
-                    if (totalDataTimestep > 9) {
-                        teksObs = blok.max_v !== null ? `Obs: ${blok.max_v.toFixed(2)} m/s` : "Data Kosong";
-                        teksArah = `Arah: ${blok.arah}`;
-                    } else {
-                        teksObs = "Data Tidak Valid"; teksArah = "";
+                    let teksObs = ""; 
+                    let teksArah = "";
+
+                    // CEK KELULUSAN TIMEFRAME 3 JAM (>= 9)
+                    if (totalDataTimestep >= 9) {
+                        let validSpeeds = [];
+                        let validDirs = [];
+
+                        for (let i = startIndex; i <= endIndex; i++) {
+                            if (observasiTersaring[i] !== null && observasiTersaring[i] !== undefined && !isNaN(observasiTersaring[i])) {
+                                validSpeeds.push(observasiTersaring[i]);
+                                if (data.arah_obs_titik && data.arah_obs_titik[i]) {
+                                    validDirs.push(data.arah_obs_titik[i]);
+                                }
+                            }
+                        }
+
+                        if (validSpeeds.length > 0) {
+                            let maxSpeedBlock = Math.max(...validSpeeds);
+                            
+                            let dirCount = {};
+                            let maxCount = 0;
+                            let dominantDir = "-";
+                            validDirs.forEach(d => {
+                                dirCount[d] = (dirCount[d] || 0) + 1;
+                                if (dirCount[d] > maxCount) {
+                                    maxCount = dirCount[d];
+                                    dominantDir = d;
+                                }
+                            });
+
+                            teksObs = `Obs: ${maxSpeedBlock.toFixed(2)} m/s`;
+                            teksArah = `Arah: ${dominantDir}`;
+                        } else {
+                            teksObs = "Data Kosong"; 
+                            teksArah = "";
+                        }
+                    } 
+                    // JIKA TIDAK LULUS (Total < 9)
+                    else {
+                        teksObs = "Data Tidak Valid"; 
+                        teksArah = "";
                     }
                     
                     dinamicAnnotations[`box${index}`] = { type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 };
                     dinamicAnnotations[`lbl${index}`] = {
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
                         content: teksArah ? [teksObs, teksArah] : [teksObs], color: '#f8fafc', textAlign: 'center',
-                        // REVISI 1: Baris 1 Bold, Baris 2 Normal
                         font: teksArah ? [{size: 12, weight: 'bold'}, {size: 11, weight: 'normal'}] : [{size: 12, weight: 'normal'}]
                     };
                 });
