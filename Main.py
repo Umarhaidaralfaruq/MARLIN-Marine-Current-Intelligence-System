@@ -597,8 +597,8 @@ def get_rmse_spatial(filename: str = None):
             speed_true = np.sqrt(true_u**2 + true_v**2)
             
             # 2. Hitung Arah persis seperti di reconstruction.py
-            dir_pred = np.degrees(np.arctan2(pred_u, pred_v)) % 360
-            dir_true = np.degrees(np.arctan2(true_u, true_v)) % 360
+            dir_pred = (90 - np.degrees(np.arctan2(pred_v, pred_u))) % 360
+            dir_true = (90 - np.degrees(np.arctan2(true_v, true_u))) % 360
             
             se = (speed_pred - speed_true) ** 2
             de = circular_error(dir_pred, dir_true) ** 2
