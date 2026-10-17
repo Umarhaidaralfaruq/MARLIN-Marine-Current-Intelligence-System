@@ -167,7 +167,7 @@ def main_operational_forecast():
         
         speed = np.sqrt(u_absolute**2 + v_absolute**2)
         speed = np.clip(speed, a_min=0.0, a_max=SPATIAL_CONFIG['max_physical_speed'])
-        direction = np.degrees(np.arctan2(u_absolute, v_absolute)) % 360
+        direction = (90 - np.degrees(np.arctan2(v_absolute, u_absolute))) % 360
         
         if h_idx in range(HORIZON):
             def to_2d(data_1d):
