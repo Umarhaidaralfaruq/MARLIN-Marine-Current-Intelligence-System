@@ -89,24 +89,36 @@ def ekstrak_max_1_jam():
             df_temp = pd.DataFrame({'time': waktu_list, 'Real_Max_Speed_ms': p95_10m_list})
             df_temp = df_temp.set_index('time')
             
-            uvdir_vals = area_ds_arah['uvdir'].compute().values
-            uvdir_flat = uvdir_vals.reshape(uvdir_vals.shape[0], -1)
+            # --- BEST PRACTICE: Rata-rata Vektor U dan V (Spasial) ---
+            u_vals = area_ds_arah['u'].compute().values
+            v_vals = area_ds_arah['v'].compute().values
             
-            modes_10m = []
-            for t_idx in range(uvdir_flat.shape[0]):
-                arr_clean = uvdir_flat[t_idx][~np.isnan(uvdir_flat[t_idx])]
-                if len(arr_clean) > 0:
-                    # 1. Hitung rata-rata sirkular derajat asli
-                    val_asli = float(circmean(arr_clean, high=360, low=0))
-                    # 2. Balik arahnya 180 derajat (Flowing From -> Flowing To)
-                    val_dibalik = (val_asli + 180) % 360
-                    val = val_dibalik
-                else:
-                    val = np.nan
-                modes_10m.append(val)
+            u_flat = u_vals.reshape(u_vals.shape[0], -1)
+            v_flat = v_vals.reshape(v_vals.shape[0], -1)
+            
+            u_10m_list = []
+            v_10m_list = []
+            
+            for t_idx in range(u_flat.shape[0]):
+                u_arr = u_flat[t_idx]
+                v_arr = v_flat[t_idx]
                 
-            df_temp['Arah_Derajat'] = modes_10m
+                # Filter grid yang valid
+                valid_mask = ~np.isnan(u_arr) & ~np.isnan(v_arr)
+                
+                if np.any(valid_mask):
+                    # Ambil nilai rata-rata u dan v di seluruh area grid (spasial)
+                    u_10m_list.append(float(np.mean(u_arr[valid_mask])))
+                    v_10m_list.append(float(np.mean(v_arr[valid_mask])))
+                else:
+                    u_10m_list.append(np.nan)
+                    v_10m_list.append(np.nan)
+                    
+            # Simpan komponen U dan V rata-rata ke dalam dataframe sementara
+            df_temp['U_mean'] = u_10m_list
+            df_temp['V_mean'] = v_10m_list
             list_df_10m.append(df_temp)
+            # --------------------------------------------------------
             
             ds.close()
         except Exception as e:
@@ -117,27 +129,25 @@ def ekstrak_max_1_jam():
         return None
 
     # =========================================================================
-    # 3. GABUNGKAN & RESAMPLE KE RESOLUSI 1 JAM
+    # 3. GABUNGKAN & RESAMPLE KE RESOLUSI 1 JAM (VECTOR AVERAGING)
     # =========================================================================
     print("🔗 Menggabungkan dan meresample data ke resolusi 1 Jam...")
     df_all = pd.concat(list_df_10m)
     df_all = df_all[~df_all.index.duplicated(keep='last')].sort_index()
     
-    # PERUBAHAN: Fungsi agregasi dari mode ke circular mean
-    # Fungsi agregasi ke 1 Jam (Tidak perlu ditambah 180 lagi di sini)
-    def get_circular_mean(x):
-        x = x.dropna()
-        if len(x) > 0:
-            return float(circmean(x, high=360, low=0))
-        return np.nan
-
+    # Resample rata-rata untuk U dan V
     df_1jam = df_all.resample('1H').agg(
         Real_Max_Speed_ms=('Real_Max_Speed_ms', 'max'),
-        Arah_Derajat=('Arah_Derajat', get_circular_mean), # Panggil fungsi baru
+        U_mean=('U_mean', 'mean'),  # Rata-rata temporal U
+        V_mean=('V_mean', 'mean'),  # Rata-rata temporal V
         Jumlah_Data=('Real_Max_Speed_ms', 'count')
     ).reset_index()
     
     df_1jam = df_1jam[df_1jam['Jumlah_Data'] > 0]
+    
+    # Hitung Arah Derajat menggunakan U dan V yang sudah dirata-rata 1 Jam
+    derajat_math = np.arctan2(df_1jam['V_mean'], df_1jam['U_mean']) * (180 / np.pi)
+    df_1jam['Arah_Derajat'] = (90 - derajat_math) % 360
 
     # =========================================================================
     # 4. FILTERING KELOMPOK TIMEFRAME (MENGGUNAKAN config.py)
