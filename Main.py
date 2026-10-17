@@ -513,8 +513,8 @@ def get_validation_12h(filename: str = None):
             if not arah_valid.empty:
                 kat_arah = arah_valid.apply(lambda d: "Utara" if (pd.notna(d) and (d >= 270 or d < 90)) else "Selatan")
                 if not kat_arah.mode().empty:
-                    arah_asli = kat_arah.mode()[0]
-                    arah_dom = "Selatan" if arah_asli == "Utara" else ("Utara" if arah_asli == "Selatan" else "-")
+                    # LANGSUNG GUNAKAN NILAI ASLINYA
+                    arah_dom = kat_arah.mode()[0]
             
             anotasi_blok.append({
                 "xMin": waktu_list[i], 
