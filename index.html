@@ -2,7 +2,8 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>MARLIN UI - Fullscreen Dashboard</title>
+    <title>MARLIN - Marine - Marine Current Intelligence System</title>
+    <link rel="icon" href="Logo_BMKG.png" type="image/png">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.css" />
@@ -247,8 +248,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Library Grafik -->
 
     <script>
-        const BASE_API_URL = 'https://marlin-marine-current-intelligence-system-231i-git-main-marlin9.vercel.app';
-        //const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
+        //const BASE_API_URL = 'https://marlin-marine-current-intelligence-system-231i-git-main-marlin9.vercel.app';
+        const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
 
         var map = L.map('map', { zoomControl: false }).setView([-8.200, 114.420], 13); 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
