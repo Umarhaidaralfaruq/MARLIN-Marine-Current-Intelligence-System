@@ -199,8 +199,8 @@
 
     <script>
         // PASTIKAN URL INI SESUAI DENGAN CODESPACES LU
-        const BASE_API_URL = 'https://marlin-marine-current-intelligence-system-231i-git-main-marlin9.vercel.app';
-        //const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev';
+        //const BASE_API_URL = 'https://marlin-marine-current-intelligence-system-231i-git-main-marlin9.vercel.app';
+        const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev';
         
         // Registrasi plugin label grafik
         Chart.register(ChartDataLabels);
@@ -481,19 +481,22 @@
                 if(validationChartObj !== null) {
                     validationChartObj.data.labels = data.waktu;
                     validationChartObj.data.datasets[0].data = data.prediksi;
+                    validationChartObj.data.datasets[0].arah = data.arah_pred_titik; // Tambahan
                     validationChartObj.data.datasets[1].data = observasiTersaring; 
+                    validationChartObj.data.datasets[1].arah = data.arah_obs_titik; // Tambahan
                     validationChartObj.options.scales.y.suggestedMax = yMaxGlobal;
                     validationChartObj.options.plugins.annotation.annotations = dinamicAnnotations;
                     validationChartObj.update(); 
-                } else {
+                } 
+                else {
                     const ctxValidation = document.getElementById('validationChart').getContext('2d');
                     validationChartObj = new Chart(ctxValidation, {
                         type: 'line',
                         data: {
                             labels: data.waktu,
                             datasets: [
-                                { label: 'Prediksi Model', data: data.prediksi, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#0ea5e9', pointHoverRadius: 6 },
-                                { label: 'Observasi Radar', data: observasiTersaring, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true, pointHoverRadius: 6 }
+                                { label: 'Prediksi Model', data: data.prediksi, arah: data.arah_pred_titik, borderColor: '#38bdf8', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#0ea5e9', pointHoverRadius: 6 },
+                                { label: 'Observasi Radar', data: observasiTersaring, arah: data.arah_obs_titik, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: '#e11d48', pointRadius: 4, spanGaps: true, pointHoverRadius: 6 }
                             ]
                         },
                         options: {
@@ -515,13 +518,9 @@
                                             let datasetLabel = context.dataset.label || '';
                                             let val = context.raw;
                                             if (val === null) return `${datasetLabel} : - (Data < 50%)`;
-                                            
-                                            let dir = "";
-                                            if (context.datasetIndex === 0) {
-                                                dir = data.arah_pred_titik ? data.arah_pred_titik[context.dataIndex] : "-";
-                                            } else {
-                                                dir = data.arah_obs_titik ? data.arah_obs_titik[context.dataIndex] : "-";
-                                            }
+
+                                            let dir = context.dataset.arah ? context.dataset.arah[context.dataIndex] : "-";
+    
                                             return `${datasetLabel} : ${val.toFixed(2)} m/s (Arah: ${dir})`;
                                         }
                                     }
