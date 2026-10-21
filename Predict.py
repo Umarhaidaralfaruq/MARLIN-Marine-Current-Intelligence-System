@@ -29,10 +29,15 @@ def load_production_artifacts(comp):
     return pca, scaler, model
 
 
-def get_latest_data_for_comp(comp):
+def get_latest_data_for_comp(comp, target_time=None):
     df_full = pd.read_csv(PATHS['data_gabung']).dropna(subset=['datetime'])
     df_full['datetime'] = pd.to_datetime(df_full['datetime'])
     df_full = df_full.sort_values('datetime').reset_index(drop=True)
+
+    # Potong dataframe jika ada target waktu (custom limit)
+    if target_time is not None:
+        target_dt = pd.to_datetime(target_time)
+        df_full = df_full[df_full['datetime'] <= target_dt].reset_index(drop=True)
 
     buffer_rows = 24 * 7
     df_buffer = (
@@ -40,7 +45,7 @@ def get_latest_data_for_comp(comp):
         if len(df_full) >= buffer_rows
         else df_full.copy()
     )
-
+    
     # Pertahankan nama PC ASLI seperti saat training.
     if SPATIAL_MODE == 'EOF':
         pc_cols = [
@@ -100,7 +105,7 @@ def main_operational_forecast():
 
     for comp in components_to_run:
         pca, scaler, model = load_production_artifacts(comp)
-        df_buffer = get_latest_data_for_comp(comp)
+        df_buffer = get_latest_data_for_comp(comp, target_time='2026-10-21 11:00:00')
         latest_timestamp = df_buffer['datetime'].max()
         
         df_proc = build_features(df_buffer)
