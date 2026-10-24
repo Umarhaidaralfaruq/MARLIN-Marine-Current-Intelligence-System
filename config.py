@@ -97,7 +97,7 @@ MODEL_CONFIG = {
     'input_window': 24,
     'output_window': 24, 
     'min_seq_len': 48,    
-    'min_segmen_len': 48, 
+    'min_segmen_len': 24, 
     'max_save_nan': 6,     
     'ocean_threshold': 0.2,
     'interp_method': 'polynomial', # Opsi: 'polynomial', 'linear'
