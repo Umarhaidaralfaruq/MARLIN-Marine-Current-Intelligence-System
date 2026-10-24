@@ -22,7 +22,7 @@ def apply_segmentation_datetime(df):
     df['Segment_ID'] = df['break_seg'].cumsum() + 1
     
     seg_len = df.groupby('Segment_ID').size()
-    valid_seg = seg_len[seg_len >= MODEL_CONFIG['min_seq_len']].index
+    valid_seg = seg_len[seg_len >= MODEL_CONFIG['min_segmen_len']].index
     
     df_final = df[df['Segment_ID'].isin(valid_seg)].copy()
     df_final['Segment_ID'] = df_final.groupby('Segment_ID').ngroup() + 1
