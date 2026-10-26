@@ -133,7 +133,7 @@ FEATURE_TOGGLES = {
 # 7. PANEL KONTROL SPATIAL PREPROCESSING
 # =============================================================================
 SPATIAL_CONFIG = {
-    'RESAMPLE_METHOD': 'max_amplitude',  # Opsi: 'max_amplitude', 'mean'
+    'RESAMPLE_METHOD': 'mean',  # Opsi: 'max_amplitude', 'mean'
     'RESAMPLE_FREQ': '1H',
     'min_spatial_percent_from_avg': 0.5,     # Batas minimal 50% dari rata-rata titik valid
     'min_temporal_records': 3,
