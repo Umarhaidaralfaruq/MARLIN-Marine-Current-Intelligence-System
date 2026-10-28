@@ -217,8 +217,14 @@ def run_data_preparation():
     # ---------------------------------------------------------------------------
     # 3. PROSES SPASIAL & CLEANING (FIXED)
     # ---------------------------------------------------------------------------
-    # Cek apakah ini mode operasional (dengan melihat apakah model PCA sudah ada)
-    is_operational = os.path.exists(PATHS['meof_pca_model'])
+    # CEK MODE: Sesuaikan nama file dengan SPATIAL_MODE yang aktif
+    mode_spasial = MODEL_CONFIG.get('spatial_mode', 'EOF').upper()
+    if mode_spasial == 'MEOF':
+        pca_check_path = str(PATHS['meof_pca_model']).replace('_model.joblib', '_meof_model.joblib')
+    else:
+        pca_check_path = str(PATHS['meof_pca_model']).replace('_model.joblib', '_u_model.joblib')
+        
+    is_operational = os.path.exists(pca_check_path)
     
     if is_operational:
         print("🚀 [MODE OPERASIONAL] 4. Memuat Ocean Mask & Rata-rata Historis...")
