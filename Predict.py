@@ -115,9 +115,24 @@ def main_operational_forecast():
         input_cols = [c for c in df_proc.columns if c not in ['datetime', 'Segment_ID']]
         scale_cols = target_cols + [c for c in input_cols if c not in target_cols]
         
-        df_input_window = df_proc.iloc[-LOOKBACK:].copy().reset_index(drop=True)
+        # --- PERBAIKAN: CEK SEGMENTASI & LIMIT INTERPOLASI ---
+        latest_segment = df_proc['Segment_ID'].iloc[-1]
+        df_latest_seg = df_proc[df_proc['Segment_ID'] == latest_segment]
+
+        if len(df_latest_seg) < LOOKBACK:
+            raise ValueError(f"❌ Data kontinu tidak cukup! Butuh {LOOKBACK} jam, "
+                             f"tapi segmen radar terbaru hanya punya {len(df_latest_seg)} jam. "
+                             "Tunggu radar mengumpulkan data lebih lama.")
+
+        df_input_window = df_latest_seg.iloc[-LOOKBACK:].copy().reset_index(drop=True)
+        
         if df_input_window[scale_cols].isna().any().any():
-            df_input_window[scale_cols] = df_input_window[scale_cols].interpolate(method='linear', limit_direction='both')
+            df_input_window[scale_cols] = df_input_window[scale_cols].interpolate(
+                method='linear', 
+                limit=MODEL_CONFIG['max_save_nan'], 
+                limit_direction='both'
+            )
+        # -----------------------------------------------------
             
         df_input_window[scale_cols] = scaler.transform(df_input_window[scale_cols])
         X_prod = df_input_window[input_cols].values.reshape(1, LOOKBACK, -1)
