@@ -217,9 +217,20 @@ def run_data_preparation():
     # ---------------------------------------------------------------------------
     # 3. PROSES SPASIAL & CLEANING (FIXED)
     # ---------------------------------------------------------------------------
-    print("🏝️ 4. Menerapkan Ocean Masking...")
-    ocean_mask = (ds['u'].notnull().sum(dim='time') / len(ds.time)) > MODEL_CONFIG['ocean_threshold']
-    ds = ds.where(ocean_mask)
+    # Cek apakah ini mode operasional (dengan melihat apakah model PCA sudah ada)
+    is_operational = os.path.exists(PATHS['meof_pca_model'])
+    
+    if is_operational:
+        print("🚀 [MODE OPERASIONAL] 4. Memuat Ocean Mask & Rata-rata Historis...")
+        u_mean = xr.open_dataset(PATHS['spatial_mean_u'])['u']
+        v_mean = xr.open_dataset(PATHS['spatial_mean_v'])['v']
+        # Gunakan grid valid yang persis sama dengan saat training
+        ocean_mask = u_mean.notnull()
+        ds = ds.where(ocean_mask)
+    else:
+        print("🏝️ [MODE TRAINING] 4. Membuat Ocean Masking Baru...")
+        ocean_mask = (ds['u'].notnull().sum(dim='time') / len(ds.time)) > MODEL_CONFIG['ocean_threshold']
+        ds = ds.where(ocean_mask)
 
     print("🧹 5. Menghapus Outlier (Temporal IQR Vector-Consistent -> NaN)...")
     # 1. Hitung filter IQR temporal secara terpisah dulu untuk dapet batas masing-masing
@@ -274,20 +285,22 @@ def run_data_preparation():
     print(f"🔎 Max speed setelah clipping: {speed_final.max().item():.4f} m/s")
 
     print("📉 7. Menghitung Anomali Spasial...")
-    total_time_steps = len(ds_filled.time)
-    split_idx = int(total_time_steps * TRAIN_RATIO)
-    
-    ds_train_only = ds_filled.isel(time=slice(0, split_idx))
-    
-    u_mean = ds_train_only['u'].mean(dim='time')
-    v_mean = ds_train_only['v'].mean(dim='time')
-    
+    if not is_operational:
+        # Jika training, hitung mean historis dan simpan
+        total_time_steps = len(ds_filled.time)
+        split_idx = int(total_time_steps * TRAIN_RATIO)
+        ds_train_only = ds_filled.isel(time=slice(0, split_idx))
+        
+        u_mean = ds_train_only['u'].mean(dim='time')
+        v_mean = ds_train_only['v'].mean(dim='time')
+        
+        u_mean.to_netcdf(PATHS['spatial_mean_u'], mode='w')
+        v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
+        
+    # Anomali dihitung menggunakan mean yang sesuai (baru jika training, historis jika operasional)
     ds_anom = ds_filled.copy()
     ds_anom['u'] = ds_filled['u'] - u_mean
     ds_anom['v'] = ds_filled['v'] - v_mean
-
-    u_mean.to_netcdf(PATHS['spatial_mean_u'], mode='w')
-    v_mean.to_netcdf(PATHS['spatial_mean_v'], mode='w')
     
     print(f"🧼 8. Imputasi Akhir Vector-Consistent...")
     
