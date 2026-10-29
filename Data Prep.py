@@ -74,12 +74,13 @@ def prepare_operational_data():
             
             pca = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', f'_{comp}_model.joblib'))
             
+            # --- PERBAIKAN DIMENSIONALITY (EOF) ---
             expected_features = pca.n_features_in_
-            if X_clean.shape[1] > expected_features:
-                X_clean = X_clean[:, :expected_features]
-            elif X_clean.shape[1] < expected_features:
-                padding = np.zeros((X_clean.shape[0], expected_features - X_clean.shape[1]))
-                X_clean = np.hstack((X_clean, padding))
+            if X_clean.shape[1] != expected_features:
+                raise ValueError(f"❌ FATAL ERROR: Jumlah titik spasial operasional ({X_clean.shape[1]}) "
+                                 f"tidak cocok dengan PCA Training ({expected_features}). "
+                                 "Pastikan file spatial_mean_u.nc tidak tertukar!")
+            # --------------------------------------
             
             pc_all = pca.transform(X_clean)
             
@@ -104,12 +105,13 @@ def prepare_operational_data():
         
         pca = joblib.load(str(PATHS['meof_pca_model']).replace('_model.joblib', '_meof_model.joblib'))
         
+        # --- PERBAIKAN DIMENSIONALITY (MEOF) ---
         expected_features = pca.n_features_in_
-        if X_clean.shape[1] > expected_features:
-            X_clean = X_clean[:, :expected_features]
-        elif X_clean.shape[1] < expected_features:
-            padding = np.zeros((X_clean.shape[0], expected_features - X_clean.shape[1]))
-            X_clean = np.hstack((X_clean, padding))
+        if X_clean.shape[1] != expected_features:
+            raise ValueError(f"❌ FATAL ERROR: Jumlah titik spasial MEOF operasional ({X_clean.shape[1]}) "
+                             f"tidak cocok dengan MEOF Training ({expected_features}). "
+                             "Pastikan mask spasial U dan V konsisten!")
+        # ---------------------------------------
             
         pc_all = pca.transform(X_clean)
         
