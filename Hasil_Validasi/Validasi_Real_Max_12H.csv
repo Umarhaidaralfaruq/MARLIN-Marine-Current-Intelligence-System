@@ -7942,7 +7942,7 @@ Waktu_UTC,Real_Max_Speed_ms,Arah_Derajat,Kualitas_Data,Jumlah_Data
 2026-10-26 08:00:00,1.94,179.0,Tidak Lulus,1.0
 2026-10-26 09:00:00,1.94,173.8,Lulus,1.0
 2026-10-26 10:00:00,1.99,172.2,Tidak Lulus,3.0
-2026-10-26 11:00:00,1.77,171.3,Tidak Lulus,3.0
+2026-10-26 11:00:00,1.64,171.5,Tidak Lulus,1.0
 2026-10-26 17:00:00,0.44,33.7,Tidak Lulus,1.0
 2026-10-26 18:00:00,1.59,168.3,Tidak Lulus,6.0
 2026-10-26 19:00:00,1.62,171.0,Tidak Lulus,1.0
@@ -8014,4 +8014,5 @@ Waktu_UTC,Real_Max_Speed_ms,Arah_Derajat,Kualitas_Data,Jumlah_Data
 2026-10-29 15:00:00,1.04,206.5,Lulus,4.0
 2026-10-29 16:00:00,0.61,17.0,Lulus,6.0
 2026-10-29 17:00:00,0.66,1.9,Lulus,3.0
-2026-10-29 18:00:00,0.73,141.8,Tidak Lulus,1.0
+2026-10-29 18:00:00,0.88,159.6,Tidak Lulus,5.0
+2026-10-29 19:00:00,0.96,166.2,Tidak Lulus,1.0
