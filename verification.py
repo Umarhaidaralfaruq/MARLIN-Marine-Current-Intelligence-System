@@ -145,9 +145,8 @@ def ekstrak_max_1_jam():
     
     df_1jam = df_1jam[df_1jam['Jumlah_Data'] > 0]
     
-    # Hitung Arah Derajat menggunakan U dan V yang sudah dirata-rata 1 Jam
-    derajat_math = np.arctan2(df_1jam['V_mean'], df_1jam['U_mean']) * (180 / np.pi)
-    df_1jam['Arah_Derajat'] = (90 - derajat_math) % 360
+    # Hitung Arah Derajat menggunakan U dan V yang sudah dirata-rata 1 Jam (Standar Kompas)
+    df_1jam['Arah_Derajat'] = np.degrees(np.arctan2(df_1jam['U_mean'], df_1jam['V_mean'])) % 360
 
     # =========================================================================
     # 4. FILTERING KELOMPOK TIMEFRAME (MENGGUNAKAN config.py)
