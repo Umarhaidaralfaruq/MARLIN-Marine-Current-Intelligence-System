@@ -105,7 +105,7 @@ def main_operational_forecast():
 
     for comp in components_to_run:
         pca, scaler, model = load_production_artifacts(comp)
-        target_time='2026-11-02 10:00:00' #UTC
+        target_time='2026-11-02 22:00:00' #UTC
         df_buffer = get_latest_data_for_comp(comp, target_time)
         latest_timestamp = df_buffer['datetime'].max()
         
