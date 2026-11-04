@@ -105,7 +105,7 @@ def main_operational_forecast():
 
     for comp in components_to_run:
         pca, scaler, model = load_production_artifacts(comp)
-        # target_time='2026-10-26 23:00:00'
+        # target_time='2026-11-02 22:00:00' #UTC
         df_buffer = get_latest_data_for_comp(comp)
         latest_timestamp = df_buffer['datetime'].max()
         
@@ -188,7 +188,7 @@ def main_operational_forecast():
         
         speed = np.sqrt(u_absolute**2 + v_absolute**2)
         speed = np.clip(speed, a_min=0.0, a_max=SPATIAL_CONFIG['max_physical_speed'])
-        direction = (90 - np.degrees(np.arctan2(v_absolute, u_absolute))) % 360
+        direction = np.degrees(np.arctan2(u_absolute, v_absolute)) % 360
         
         if h_idx in range(HORIZON):
             def to_2d(data_1d):

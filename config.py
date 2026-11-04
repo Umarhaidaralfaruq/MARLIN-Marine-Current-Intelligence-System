@@ -98,7 +98,7 @@ MODEL_CONFIG = {
     'output_window': 24, 
     'min_seq_len': 48,    
     'min_segmen_len': 24, 
-    'max_save_nan': 6,     
+    'max_save_nan': 5,     
     'ocean_threshold': 0.2,
     'interp_method': 'polynomial', # Opsi: 'polynomial', 'linear'
     'interp_order': 3,
@@ -133,7 +133,7 @@ FEATURE_TOGGLES = {
 # 7. PANEL KONTROL SPATIAL PREPROCESSING
 # =============================================================================
 SPATIAL_CONFIG = {
-    'RESAMPLE_METHOD': 'mean',  # Opsi: 'max_amplitude', 'mean'
+    'RESAMPLE_METHOD': 'max_amplitude',  # Opsi: 'max_amplitude', 'mean'
     'RESAMPLE_FREQ': '1H',
     'min_spatial_percent_from_avg': 0.5,     # Batas minimal 50% dari rata-rata titik valid
     'min_temporal_records': 3,
