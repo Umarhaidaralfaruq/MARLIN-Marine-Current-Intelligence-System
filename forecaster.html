@@ -102,6 +102,35 @@
         .map-legend .speed-grad { background: linear-gradient(to right, #38bdf8, #4ade80, #facc15, #ef4444); } 
         .map-legend .dir-grad { background: linear-gradient(to right, #4ade80, #facc15, #ef4444); } 
         .map-legend .legend-labels { display: flex; justify-content: space-between; font-size: 0.65em; color: #94a3b8; margin-top: 5px; font-weight: bold; }
+
+        /* ================= UI/UX RESPONSIVE (FORECASTER) ================= */
+        @media (max-width: 992px) {
+            /* Ubah Grid 2 kolom jadi 1 kolom (atas-bawah) */
+            .container { grid-template-columns: 1fr; padding: 15px; gap: 15px; }
+            .full-width-panel { grid-column: 1; } /* Reset bentangan penuh */
+            
+            /* Timpa tinggi fix (420px/450px) agar panel bisa memanjang/memendek sesuai isi teks di HP */
+            .glass-panel { height: auto !important; min-height: 450px; padding: 15px; }
+            
+            /* Navbar jadi bersusun atas-bawah */
+            .navbar { flex-direction: column; align-items: flex-start; padding: 15px; gap: 15px; }
+            .nav-right { width: 100%; justify-content: space-between; gap: 10px; }
+            .baserun-select { flex-grow: 1; padding: 8px; font-size: 0.8em;}
+            .back-btn { font-size: 0.8em; text-align: center; white-space: nowrap;}
+            
+            /* Sesuaikan ukuran font judul dan ringkasan */
+            h2 { font-size: 0.9em; }
+            #forecast-summary, #validation-summary { font-size: 0.8em; line-height: 1.4; }
+            
+            /* Sesuaikan ukuran *overlay* RMSE dan Legenda di Peta Spasial */
+            .rmse-overlay { top: 10px; right: 10px; padding: 6px 10px; }
+            .rmse-overlay .title { font-size: 0.65em; }
+            .rmse-overlay .value { font-size: 1.4em; }
+            
+            .map-legend { bottom: 10px; left: 10px; width: 140px; padding: 8px; }
+            .map-legend .legend-title { font-size: 0.6em; }
+        }
+
     </style>
 </head>
 <body>
@@ -233,7 +262,6 @@
             } catch (err) { console.error("Gagal meload daftar baserun:", err); }
         }
 
-        // FUNGSI 2: LOAD GRAFIK PRAKIRAAN
         async function loadForecastData(filename) {
             try {
                 loadValidationData(filename); 
@@ -243,18 +271,94 @@
                 if (!response.ok) throw new Error("API Forecast gagal");
                 let data = await response.json();
 
-                if(data.title_range) {
-                    document.getElementById('forecast-title').innerText = `📈 Prakiraan Operasional ${data.title_range}`;
+                // ================= PERSIAPAN LABEL JUDUL & BADGE =================
+                let titleEl = document.getElementById('forecast-title');
+                titleEl.style.display = 'flex';
+                titleEl.style.justifyContent = 'space-between';
+                titleEl.style.alignItems = 'center';
+                
+                // Buat elemen badge secara dinamis jika belum ada
+                let badgeId = 'outdated-forecast-badge';
+                let badgeEl = document.getElementById(badgeId);
+                if (!badgeEl) {
+                    badgeEl = document.createElement('span');
+                    badgeEl.id = badgeId;
+                    badgeEl.style.fontSize = '0.7em';
+                    badgeEl.style.padding = '4px 10px';
+                    badgeEl.style.borderRadius = '6px';
+                    badgeEl.style.background = 'rgba(239,68,68,0.2)';
+                    badgeEl.style.color = '#f87171';
+                    badgeEl.style.border = '1px solid rgba(239,68,68,0.5)';
+                    badgeEl.style.fontWeight = 'bold';
+                    badgeEl.style.letterSpacing = '0.5px';
+                    badgeEl.style.display = 'none'; // Sembunyikan default
                 }
 
-                if (!data.waktu || data.waktu.length === 0) {
+                // Tulis ulang teks judul dengan format baru agar aman disisipkan label
+                let titleText = data.title_range ? `📈 Prakiraan Operasional ${data.title_range}` : `📈 Prakiraan Operasional`;
+                titleEl.innerHTML = `<span>${titleText}</span>`;
+                titleEl.appendChild(badgeEl);
+
+                // ================= LOGIKA BARU: CEK BATAS AKHIR GRAFIK =================
+                let dropdown = document.getElementById('baserun-dropdown');
+                let isLatestBaserun = (dropdown.selectedIndex === 0);
+                
+                let isDataMissing = (!data.waktu || data.waktu.length === 0);
+                let isOutdated = false;
+                
+                if (isLatestBaserun && !isDataMissing && data.title_range && data.title_range.includes('-')) {
+                    try {
+                        let endStr = data.title_range.split('-')[1].replace('WIB', '').trim(); 
+                        let parts = endStr.split(' '); 
+                        let day = parseInt(parts[0]);
+                        let monthStr = parts[1].toLowerCase().substring(0,3);
+                        let year = parseInt(parts[2]);
+                        
+                        let timeParts = parts[3].split(':');
+                        let hour = parseInt(timeParts[0]);
+                        let min = parseInt(timeParts[1]);
+
+                        let indonesianMonths = { 
+                            "jan":0, "feb":1, "mar":2, "apr":3, "mei":4, "jun":5, 
+                            "jul":6, "agt":7, "sep":8, "okt":9, "nov":10, "des":11 
+                        };
+                        let month = indonesianMonths[monthStr];
+
+                        let endTimeLimit = new Date(Date.UTC(year, month, day, hour - 7, min, 0));
+                        
+                        // Kurangi 1,5 jam (90 menit) dari waktu batas akhir
+                        let adjustedTimeLimit = new Date(endTimeLimit.getTime() - (90 * 60 * 1000));
+                        let now = new Date();
+
+                        // Jika jam riil melewati batas akhir grafik - 1.5 jam
+                        if (now > adjustedTimeLimit) {
+                            isOutdated = true;
+                        }
+                    } catch (error) {
+                        console.log("Gagal mengekstrak waktu akhir dari title_range:", error);
+                    }
+                }
+
+                // Jika datanya ada TAPI usang
+                if (isLatestBaserun && isOutdated) {
+                    badgeEl.innerHTML = '⚠️ DATA TIDAK UPDATE';
+                    badgeEl.style.display = 'inline-block';
+                } else {
+                    badgeEl.style.display = 'none';
+                }
+
+                // Jika datanya BENAR-BENAR KOSONG (dari API tidak ada array)
+                if (isDataMissing) {
                     document.getElementById('no-data-forecast').style.display = 'flex';
                     document.getElementById('forecast-summary').innerText = "-";
-                    return;
+                    if(forecastChartObj !== null) { forecastChartObj.destroy(); forecastChartObj = null; }
+                    return; // Stop render grafik karena datanya kosong
                 } else {
                     document.getElementById('no-data-forecast').style.display = 'none';
                 }
+                // ========================================================================
 
+                // Grafik tetap di-render jika data ada (sekalipun statusnya isOutdated = true)
                 document.getElementById('forecast-summary').innerHTML = `Kecepatan arus laut diprediksi mencapai puncaknya pada <b>${data.summary.peak_time} WIB</b> dengan kecepatan maksimum <b>${data.summary.peak_speed.toFixed(2)} m/s</b>. Secara umum, pergerakan arus dominan menuju ke arah <b>${data.summary.dom_dir.toUpperCase()}</b>.`;
 
                 let dinamicAnnotations = {};
@@ -275,12 +379,10 @@
                         type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
                         content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Arah: ${blok.arah}`], 
                         color: '#f8fafc', textAlign: 'center',
-                        // REVISI 1: Baris 1 Bold, Baris 2 Normal
                         font: [{size: 12, weight: 'bold'}, {size: 11, weight: 'normal'}]
                     };
                 });
 
-                // REVISI 2: Label ukuran tetap tapi font normal (tidak bold)
                 let dataLabelsConfig = {
                     display: true, align: 'top', offset: 8, color: '#f8fafc', font: { size: 12, weight: 'normal' },
                     formatter: function(value, context) {

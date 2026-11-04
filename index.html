@@ -2,6 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MARLIN - Marine Current Intelligence System</title>
     <link rel="icon" href="logo_bmkg2.png" type="image/png">
     
@@ -157,6 +158,62 @@
         /* Geser panel grafik sedikit ke bawah agar tidak menabrak tombol ini saat terbuka */
         .chart-panel { top: 60px; }
 
+        /* BADGE DATA TIDAK UPDATE */
+        .outdated-warning {
+            display: none;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #f87171;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-top: 6px;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+        }
+    
+        /* ================= UI/UX RESPONSIVE KHUSUS HP (INDEX) - VERSI ULTRA KOMPAK ================= */
+        @media (max-width: 768px) {
+            /* 1. Kembalikan bersebelahan, tapi sangat rapat */
+            .bottom-wrapper { width: 96vw; bottom: 8px; gap: 4px; opacity: 0.95 !important; }
+            .dashboard-panel { flex-direction: row; gap: 6px; } 
+            
+            /* 2. Press ukuran kartu pelabuhan */
+            .port-card { padding: 6px 8px; }
+            .port-header { padding-bottom: 4px; margin-bottom: 4px; }
+            .port-title { font-size: 0.55em; white-space: nowrap; }
+            
+            /* 3. Sembunyikan teks "AMAN/WASPADA", sisakan titik warnanya saja untuk hemat tempat di HP */
+            .status-badge span { display: none; }
+            .status-badge { padding: 3px; min-width: 6px; }
+            .status-dot { margin: 0; }
+            
+            /* 4. Tumpuk data angka ke bawah agar muat di kolom yang sempit */
+            .port-data-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+            .col-title { font-size: 0.55em; margin-bottom: 2px; }
+            .speed-val { font-size: 1.1em; margin-bottom: 0; }
+            .speed-unit { font-size: 0.5em; }
+            .speed-detail { font-size: 0.65em !important; }
+            
+            /* 5. Navigasi Waktu - Flex wrap untuk mengakomodasi teks yang panjang */
+            .time-nav-panel { flex-wrap: wrap; gap: 4px; }
+            .nav-btn { flex: 1 1 auto; padding: 6px 4px; font-size: 0.6em; }
+            .time-display-box { flex: 1 1 100%; padding: 6px 2px; font-size: 0.65em; }
+
+            /* 6. Turunkan Legenda menempel tepat di atas panel bawah */
+            .ui-right-bottom { bottom: 125px; right: 8px; }
+            .legend-card { width: 120px; padding: 6px 8px; }
+            .legend-title { font-size: 0.6em; margin-bottom: 4px; }
+            .legend-labels { font-size: 0.6em; margin-top: 2px; }
+
+            /* 7. Perkecil paksa seluruh elemen Header (Kiri Atas) & Tombol Forecaster (Kanan Atas) */
+            .ui-top-left { top: 8px; left: 8px; transform: scale(0.85); transform-origin: top left; }
+            .ui-top-right { top: 8px; right: 8px; transform: scale(0.85); transform-origin: top right; }
+            .chart-panel { width: calc(100vw - 20px); right: 10px; top: 60px; }
+        }
+
     </style>
 </head>
 <body>
@@ -164,11 +221,17 @@
     <div id="map"></div>
 
     <div class="ui-top-left">
-        <div class="glass-theme header-card">
-            <img src="logo_bmkg2.png" alt="Logo BMKG">
-            <div>
-                <h1>MARLIN</h1>
-                <p>Marine Current Intelligence System</p>
+        <div class="glass-theme header-card" style="flex-direction: column; align-items: flex-start;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <img src="logo_bmkg2.png" alt="Logo BMKG">
+                <div>
+                    <h1>MARLIN</h1>
+                    <p>Marine Current Intelligence System</p>
+                </div>
+            </div>
+            <!-- Label Data Tidak Update -->
+            <div id="outdated-badge" class="outdated-warning">
+                ⚠️ DATA TIDAK UPDATE
             </div>
         </div>
     </div>
@@ -304,20 +367,70 @@
         let waktuList = [];
         let currentWaktuIdx = 0;
 
+        // ================= CEK UPDATE DATA INDEX =================
+        function cekDataUpdateIndex() {
+            const badge = document.getElementById('outdated-badge');
+            if (!badge) return;
+            
+            // Jika array dari server sama sekali kosong
+            if (!waktuList || waktuList.length === 0) {
+                badge.style.display = 'flex';
+                return;
+            }
+
+            // Dapatkan waktu riil saat ini secara spesifik di zona WIB
+            let now = new Date();
+            let wibString = now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
+            let wibDate = new Date(wibString);
+            
+            let yyyy = wibDate.getFullYear();
+            let mm = String(wibDate.getMonth() + 1).padStart(2, '0');
+            let dd = String(wibDate.getDate()).padStart(2, '0');
+            let hh = String(wibDate.getHours()).padStart(2, '0');
+            
+            // Buat format pencarian (Hanya sampai jam, misal: "2024-11-20 09:00")
+            let searchTime = `${yyyy}-${mm}-${dd} ${hh}:00`; 
+
+            // Cek menggunakan 'some' dan 'includes' agar lebih fleksibel dari perbedaan detik
+            let isUpdated = waktuList.some(waktu => waktu.includes(searchTime));
+
+            // LOGIKA: Jika jam saat ini DITEMUKAN di file prediksi, sembunyikan label. Jika TIDAK ADA, munculkan.
+            if (isUpdated) {
+                badge.style.display = 'none';
+            } else {
+                badge.style.display = 'flex';
+            }
+            
+            // Mode Debugging (Bisa Anda cek di Inspect Element -> Console)
+            console.log(`[MARLIN DEBUG] Jam Dicari: ${searchTime} | Ditemukan di Data: ${isUpdated}`);
+        }
+
+        // ================= INISIASI WAKTU =================
         // Tarik daftar waktu dari API saat web dibuka
         fetch(`${BASE_API_URL}/api/available-times`)
             .then(res => res.json())
             .then(data => { 
                 waktuList = data.waktu; 
-                // Jika waktu peta sudah diset, sinkronkan indeks tombolnya
                 if (waktuAktifPeta && waktuList.length > 0) {
                     currentWaktuIdx = waktuList.indexOf(waktuAktifPeta);
                     updateNavButtons();
                 }
+                
+                // Panggil pengecekan pertama kali
+                cekDataUpdateIndex(); 
+                
+                // Cek ulang otomatis setiap 5 menit
+                setInterval(cekDataUpdateIndex, 300000); 
+            })
+            .catch(err => {
+                console.error("Gagal menarik available-times:", err);
+                // Jika server mati, munculkan badge
+                if(document.getElementById('outdated-badge')) {
+                    document.getElementById('outdated-badge').style.display = 'flex';
+                }
             });
 
         // Fungsi khusus mengatur tampilan Tombol
-// Fungsi khusus mengatur tampilan Tombol
         function updateNavButtons() {
             // JANGAN JALAN JIKA DAFTAR WAKTU BELUM ADA ATAU WAKTU PETA BELUM DI-SET
             if (waktuList.length === 0 || !waktuAktifPeta) return;
@@ -426,11 +539,12 @@
                     document.getElementById('time-display-text').innerText = formatWaktuDisplay(waktuAktifPeta);
                     loadMapData(waktuAktifPeta); 
                     fetchSummaryData(waktuAktifPeta);
-                    
-                    // TAMBAHKAN BARIS INI:
                     updateNavButtons(); 
                 }
             });
+
+        // TAMBAHKAN BARIS INI:
+        cekStatusUpdate(); // Memanggil pengecekan data update saat pertama kali web dibuka
 
         // ================= SENSOR KURSOR =================
         document.addEventListener('mousemove', function(e) {
@@ -495,6 +609,116 @@
         function tutupChart() {
             document.getElementById('chart-panel').style.display = 'none';
         }
+
+        // ================= CEK STATUS UPDATE DATA =================
+        async function cekStatusUpdate() {
+            const badge = document.getElementById('outdated-badge');
+            try {
+                // 1. Tarik daftar baserun terbaru seperti di forecaster.html
+                let resBaserun = await fetch(`${BASE_API_URL}/api/baseruns`);
+                let jsonBaserun = await resBaserun.json();
+                let fileList = jsonBaserun.data || [];
+                
+                // Jika tidak ada file baserun sama sekali
+                if (fileList.length === 0) {
+                    badge.style.display = 'flex';
+                    return;
+                }
+                
+                // 2. Cek isi forecast dari baserun terbaru (indeks 0)
+                let filename = fileList[0].filename;
+                let resForecast = await fetch(`${BASE_API_URL}/api/forecast-12h?filename=${filename}`);
+                let dataForecast = await resForecast.json();
+                
+                // 3. Logika dari forecaster: Jika array waktu kosong/tidak ada, berarti data tidak update
+                if (!dataForecast.waktu || dataForecast.waktu.length === 0) {
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none'; // Data aman
+                }
+            } catch (err) {
+                console.error("Gagal mengecek status update:", err);
+                // Tampilkan peringatan jika server error / gagal merespons
+                badge.style.display = 'flex';
+            }
+        }
+
+        // ================= SCRIPT AUTO-INJECT BADGE DATA TIDAK UPDATE =================
+        function cekDataUpdateIndex() {
+            // 1. Buat elemen badge secara otomatis jika belum ada di HTML
+            let badge = document.getElementById('outdated-badge');
+            if (!badge) {
+                const headerCard = document.querySelector('.header-card');
+                if (headerCard) {
+                    // Ubah layout header agar muat label di bawahnya
+                    headerCard.style.flexDirection = 'column';
+                    headerCard.style.alignItems = 'flex-start';
+                    
+                    // Bungkus logo & teks asli ke dalam satu baris
+                    const wrapper = document.createElement('div');
+                    wrapper.style.display = 'flex';
+                    wrapper.style.alignItems = 'center';
+                    wrapper.style.gap = '12px';
+                    
+                    while (headerCard.firstChild) {
+                        wrapper.appendChild(headerCard.firstChild);
+                    }
+                    headerCard.appendChild(wrapper);
+
+                    // Buat elemen label peringatan
+                    badge = document.createElement('div');
+                    badge.id = 'outdated-badge';
+                    badge.innerHTML = '⚠️ DATA TIDAK UPDATE';
+                    badge.style.background = 'rgba(239, 68, 68, 0.2)';
+                    badge.style.border = '1px solid rgba(239, 68, 68, 0.5)';
+                    badge.style.color = '#f87171';
+                    badge.style.padding = '4px 10px';
+                    badge.style.borderRadius = '6px';
+                    badge.style.fontSize = '0.75em';
+                    badge.style.fontWeight = 'bold';
+                    badge.style.marginTop = '6px';
+                    badge.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.1)';
+                    badge.style.display = 'none'; // Sembunyikan default
+                    
+                    headerCard.appendChild(badge);
+                }
+            }
+
+            if (!badge) return;
+
+            // 2. Cek Logika Waktu
+            if (!waktuList || waktuList.length === 0) {
+                badge.style.display = 'block';
+                return;
+            }
+
+            // Ambil waktu WIB dari komputer klien
+            let now = new Date();
+            let wibString = now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
+            let wibDate = new Date(wibString);
+            
+            let yyyy = wibDate.getFullYear();
+            let mm = String(wibDate.getMonth() + 1).padStart(2, '0');
+            let dd = String(wibDate.getDate()).padStart(2, '0');
+            let hh = String(wibDate.getHours()).padStart(2, '0');
+            
+            // Format jam pencarian, mengabaikan menit dan detik
+            let searchTime = `${yyyy}-${mm}-${dd} ${hh}:00`; 
+            
+            // Cek apakah jam saat ini ada di array prediksi
+            let isUpdated = waktuList.some(waktu => waktu.includes(searchTime));
+
+            if (isUpdated) {
+                badge.style.display = 'none'; // Aman
+            } else {
+                badge.style.display = 'block'; // Tidak ada data untuk jam ini
+            }
+        }
+
+        // Panggil fungsi segera setelah script dimuat, lalu ulangi setiap 3 detik 
+        // agar selalu nge-refresh logika tanpa mempedulikan delay API
+        setTimeout(cekDataUpdateIndex, 1500);
+        setInterval(cekDataUpdateIndex, 3000);
     </script>
 </body>
 <!-- LAYAR LOADING -->
