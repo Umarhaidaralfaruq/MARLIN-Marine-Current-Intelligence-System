@@ -362,7 +362,7 @@
                 document.getElementById('forecast-summary').innerHTML = `Kecepatan arus laut diprediksi mencapai puncaknya pada <b>${data.summary.peak_time} WIB</b> dengan kecepatan maksimum <b>${data.summary.peak_speed.toFixed(2)} m/s</b>. Secara umum, pergerakan arus dominan menuju ke arah <b>${data.summary.dom_dir.toUpperCase()}</b>.`;
 
                 let dinamicAnnotations = {};
-                let yMaxGlobal = Math.max(...data.kecepatan) + 0.8; 
+                let yMaxGlobal = Math.max(...data.kecepatan) + 1.5; 
 
                 data.anotasi_blok.forEach((blok, index) => {
                     let startIndex = index * 3;
@@ -376,7 +376,7 @@
                         type: 'box', xMin: boxMin, xMax: boxMax, backgroundColor: bgColor, borderWidth: 0 
                     };
                     dinamicAnnotations[`lbl${index}`] = {
-                        type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.2, 
+                        type: 'label', xValue: boxCenter, yValue: yMaxGlobal - 0.4, 
                         content: [`Maks: ${blok.max_v.toFixed(2)} m/s`, `Arah: ${blok.arah}`], 
                         color: '#f8fafc', textAlign: 'center',
                         font: [{size: 12, weight: 'bold'}, {size: 11, weight: 'normal'}]

@@ -155,6 +155,14 @@
             box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
         }
 
+        .forecaster-icon {
+            height: 18px; /* Ukuran default di layar PC */
+            width: auto;
+            border-radius: 50%; /* Memotong sudut tajam pada gambar */
+            mix-blend-mode: lighten; /* Trik agar background gelap gambar menyatu dengan tombol */
+            transition: all 0.3s ease;
+        }
+
         /* Geser panel grafik sedikit ke bawah agar tidak menabrak tombol ini saat terbuka */
         .chart-panel { top: 60px; }
 
@@ -174,44 +182,86 @@
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
         }
     
-        /* ================= UI/UX RESPONSIVE KHUSUS HP (INDEX) - VERSI ULTRA KOMPAK ================= */
-        @media (max-width: 768px) {
-            /* 1. Kembalikan bersebelahan, tapi sangat rapat */
-            .bottom-wrapper { width: 96vw; bottom: 8px; gap: 4px; opacity: 0.95 !important; }
+        /* ================= TOMBOL TOGGLE & ANIMASI PANEL ================= */
+        .toggle-btn {
+            display: none; width: 100%; padding: 6px; text-align: center;
+            font-size: 0.75em; font-weight: bold; cursor: pointer; color: #38bdf8;
+            background: rgba(15,23,42,0.8); border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 6px; margin-bottom: 6px; transition: all 0.3s ease;
+        }
+        .toggle-btn:active { transform: scale(0.98); }
+        .toggle-btn span { font-size: 0.8em; margin-left: 5px; }
+        .dashboard-panel { transition: all 0.3s ease-in-out; }
+        .dashboard-panel.collapsed { display: none !important; }
+
+        /* DEFAULT DESKTOP FULL SCREEN (Layar > 1024px) */
+        @media (min-width: 1025px) {
+            .toggle-btn { display: none !important; }
+            .dashboard-panel.collapsed { display: flex !important; }
+        }
+
+        /* ================= UI/UX RESPONSIVE KHUSUS LAYAR SEMPIT/HP (≤ 1024px) ================= */
+        @media (max-width: 1024px) {
+            /* 0. Tampilkan tombol toggle di HP/Setengah Layar & sesuaikan panel */
+            .toggle-btn { display: block; }
+            .bottom-wrapper { width: 95vw; max-width: none; bottom: 10px; gap: 4px; opacity: 0.95 !important; }
             .dashboard-panel { flex-direction: row; gap: 6px; } 
+
+            /* 1. Legenda dinaikkan drastis agar tidak tertabrak panel bawah (baik saat buka/tutup) */
+            .ui-right-bottom { bottom: 160px; right: 8px; }
+            .legend-card { width: 130px; padding: 6px 8px; }
+            .legend-title { font-size: 0.6em; margin-bottom: 4px; }
+            .legend-labels { font-size: 0.6em; margin-top: 2px; }
             
             /* 2. Press ukuran kartu pelabuhan */
             .port-card { padding: 6px 8px; }
             .port-header { padding-bottom: 4px; margin-bottom: 4px; }
             .port-title { font-size: 0.55em; white-space: nowrap; }
             
-            /* 3. Sembunyikan teks "AMAN/WASPADA", sisakan titik warnanya saja untuk hemat tempat di HP */
+            /* 3. Sembunyikan teks "AMAN/WASPADA" */
             .status-badge span { display: none; }
             .status-badge { padding: 3px; min-width: 6px; }
             .status-dot { margin: 0; }
             
-            /* 4. Tumpuk data angka ke bawah agar muat di kolom yang sempit */
+            /* 4. Tumpuk data angka ke bawah */
             .port-data-row { flex-direction: column; align-items: flex-start; gap: 2px; }
             .col-title { font-size: 0.55em; margin-bottom: 2px; }
             .speed-val { font-size: 1.1em; margin-bottom: 0; }
             .speed-unit { font-size: 0.5em; }
             .speed-detail { font-size: 0.65em !important; }
             
-            /* 5. Navigasi Waktu - Flex wrap untuk mengakomodasi teks yang panjang */
+            /* 5. Navigasi Waktu - Flex wrap */
             .time-nav-panel { flex-wrap: wrap; gap: 4px; }
-            .nav-btn { flex: 1 1 auto; padding: 6px 4px; font-size: 0.6em; }
-            .time-display-box { flex: 1 1 100%; padding: 6px 2px; font-size: 0.65em; }
+            .nav-btn { flex: 1 1 auto; padding: 6px 4px; font-size: 0.8em; }
+            .time-display-box { flex: 1 1 100%; padding: 6px 2px; font-size: 0.75em; }
 
-            /* 6. Turunkan Legenda menempel tepat di atas panel bawah */
-            .ui-right-bottom { bottom: 125px; right: 8px; }
-            .legend-card { width: 120px; padding: 6px 8px; }
-            .legend-title { font-size: 0.6em; margin-bottom: 4px; }
-            .legend-labels { font-size: 0.6em; margin-top: 2px; }
-
-            /* 7. Perkecil paksa seluruh elemen Header (Kiri Atas) & Tombol Forecaster (Kanan Atas) */
+            /* 6. Header & Tombol Forecaster (Logo Saja di HP) */
             .ui-top-left { top: 8px; left: 8px; transform: scale(0.85); transform-origin: top left; }
-            .ui-top-right { top: 8px; right: 8px; transform: scale(0.85); transform-origin: top right; }
+            .ui-top-right { top: 8px; right: 8px; transform: scale(1); transform-origin: top right; } 
+            
+            /* Sembunyikan teks, perbesar logo, dan jadikan tombol melingkar */
+            .forecaster-text { display: none; } 
+            .forecaster-icon { height: 26px; } 
+            .forecaster-btn { padding: 6px; border-radius: 50%; justify-content: center; aspect-ratio: 1/1; } 
+            
+            /* Kembalikan panel grafik ke atas sejajar karena tidak lagi menabrak */
             .chart-panel { width: calc(100vw - 20px); right: 10px; top: 60px; }
+        }
+
+        /* GAYA UNTUK TEKS LABEL KECEPATAN DI PETA */
+        .speed-label {
+            color: #ffffff;
+            font-size: 0.7em;
+            font-weight: bold;
+            text-align: center;
+            text-shadow: 
+                -1px -1px 0 #000,  
+                 1px -1px 0 #000,
+                -1px  1px 0 #000,
+                 1px  1px 0 #000;
+            pointer-events: none !important; /* Agar tidak menghalangi saat peta diklik */
+            background: transparent;
+            border: none;
         }
 
     </style>
@@ -258,12 +308,18 @@
     <!-- === KANAN ATAS: TOMBOL MODE FORECASTER === -->
     <div class="ui-top-right">
         <a href="forecaster.html" class="forecaster-btn" title="Buka Mode Analisis & Validasi">
-            FORECASTER MODE
+            <img src="radar-logo.jpg" class="forecaster-icon" alt="Radar">
+            <span class="forecaster-text">FORECASTER MODE</span>
         </a>
     </div>
 
     <div class="bottom-wrapper">
-        <div class="dashboard-panel">
+        <!-- TOMBOL TOGGLE KHUSUS HP -->
+        <button id="toggle-panel-btn" class="glass-theme toggle-btn" onclick="toggleDashboard()" style="border-color: rgba(34, 197, 94, 0.4); color: #4ade80;">
+            Tampilkan Panel Pelabuhan <span style="color:#22c55e;">▲</span>
+        </button>
+
+        <div class="dashboard-panel collapsed" id="dashboard-panel">
             <!-- KARTU KETAPANG -->
             <div class="glass-theme port-card">
                 <div class="port-header">
@@ -314,7 +370,10 @@
         const BASE_API_URL = 'https://marlin-marine-current-intelligence.vercel.app';
         //const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
 
-        var map = L.map('map', { zoomControl: false }).setView([-8.200, 114.420], 13); 
+        // Cek lebar layar: Jika <= 1024px (HP/Setengah layar), zoom = 11. Jika PC, zoom = 13.
+        var initialZoom = window.innerWidth <= 1024 ? 12 : 13; 
+
+        var map = L.map('map', { zoomControl: false }).setView([-8.200, 114.420], initialZoom); 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             attribution: '', className: 'map-tiles'
         }).addTo(map);
@@ -498,7 +557,7 @@
             fetch(`${BASE_API_URL}/api/summary?pelabuhan=gilimanuk${param}`).then(res => res.json()).then(data => updatePortCard('gilimanuk', data));
         }
 
-        let velocityLayer; let backgroundLayer;
+        let velocityLayer; let backgroundLayer; let labelLayer;
         function loadMapData(timeStr) {
             // 1. Munculkan Loading Spinner
             document.getElementById('loader-overlay').classList.add('active');
@@ -521,6 +580,7 @@
                 // Tampilkan Background Warna
                 var imageUrl = 'data:image/png;base64,' + bgData.image;
                 backgroundLayer = L.imageOverlay(imageUrl, bgData.bounds, { opacity: 0.85 }).addTo(map);
+                
             })
             .catch(err => console.error("Gagal memuat peta:", err))
             .finally(() => {
@@ -719,6 +779,25 @@
         // agar selalu nge-refresh logika tanpa mempedulikan delay API
         setTimeout(cekDataUpdateIndex, 1500);
         setInterval(cekDataUpdateIndex, 3000);
+
+        // ================= FUNGSI TOGGLE PANEL HP =================
+        function toggleDashboard() {
+            const panel = document.getElementById('dashboard-panel');
+            const btn = document.getElementById('toggle-panel-btn');
+            
+            panel.classList.toggle('collapsed');
+            
+            if (panel.classList.contains('collapsed')) {
+                btn.innerHTML = 'Tampilkan Panel Pelabuhan <span style="color:#22c55e;">▲</span>';
+                btn.style.borderColor = "rgba(34, 197, 94, 0.4)";
+                btn.style.color = "#4ade80";
+            } else {
+                btn.innerHTML = 'Sembunyikan Panel Pelabuhan <span>▼</span>';
+                btn.style.borderColor = "rgba(56, 189, 248, 0.3)";
+                btn.style.color = "#38bdf8";
+            }
+        }
+        
     </script>
 </body>
 <!-- LAYAR LOADING -->
