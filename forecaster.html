@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>MARLIN - Marine Current Intelligence System</title>
+	<!-- PWA Meta Tags -->
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#0f172a">
+	<link rel="apple-touch-icon" href="logo_bmkg2.png">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="logo_bmkg2.png" type="image/png">
     
     <!-- Pustaka Grafik -->
@@ -688,6 +694,19 @@
         // INIT
         initMaps();
         loadBaseruns();
+		
+		// PWA Service Worker Registration
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', () => {
+				navigator.serviceWorker.register('sw.js')
+					.then(registration => {
+						console.log('ServiceWorker registered with scope:', registration.scope);
+					})
+					.catch(err => {
+						console.log('ServiceWorker registration failed:', err);
+					});
+			});
+		}
 
     </script>
 </body>

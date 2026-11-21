@@ -1,0 +1,22 @@
+{
+  "name": "MARLIN - Marine Current",
+  "short_name": "MARLIN",
+  "description": "Marine Current Intelligence System BMKG",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo_bmkg2.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "logo_bmkg2.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
