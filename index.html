@@ -200,14 +200,14 @@
         .dashboard-panel { transition: all 0.3s ease-in-out; }
         .dashboard-panel.collapsed { display: none !important; }
 
-        /* DEFAULT DESKTOP FULL SCREEN (Layar > 1024px) */
-        @media (min-width: 1025px) {
+        /* DEFAULT DESKTOP FULL SCREEN (Layar > 992px) */
+		@media (min-width: 993px) {
             .toggle-btn { display: none !important; }
             .dashboard-panel.collapsed { display: flex !important; }
         }
 
-        /* ================= UI/UX RESPONSIVE KHUSUS LAYAR SEMPIT/HP (≤ 1024px) ================= */
-        @media (max-width: 1024px) {
+        /* ================= UI/UX RESPONSIVE KHUSUS LAYAR SEMPIT/HP (≤ 992px) ================= */
+		@media (max-width: 992px) {
             /* 0. Tampilkan tombol toggle di HP/Setengah Layar & sesuaikan panel */
             .toggle-btn { display: block; }
             .bottom-wrapper { width: 95vw; max-width: none; bottom: 10px; gap: 4px; opacity: 0.95 !important; }
@@ -377,7 +377,7 @@
         //const BASE_API_URL = 'https://jubilant-fishstick-p5xxxq9jx9vf7jgx-8000.app.github.dev'; 
 
         // Cek lebar layar: Jika <= 1024px (HP/Setengah layar), zoom = 11. Jika PC, zoom = 13.
-        var initialZoom = window.innerWidth <= 1024 ? 12 : 13; 
+        var initialZoom = window.innerWidth <= 992 ? 12 : 13; 
 
         var map = L.map('map', { zoomControl: false }).setView([-8.200, 114.420], initialZoom); 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
