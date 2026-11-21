@@ -1,10 +1,10 @@
-const CACHE_NAME = 'marlin-pwa-v1';
+const CACHE_NAME = 'marlin-pwa-v2'; // Ubah angka versi ini
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/forecaster.html',
-  '/logo_bmkg2.png',
-  '/radar-logo.jpg'
+  './',
+  './index.html',
+  './forecaster.html',
+  './logo_bmkg2.png',
+  './radar-logo.jpg'
 ];
 
 // Install Service Worker dan simpan file ke Cache
